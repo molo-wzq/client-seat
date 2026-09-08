@@ -13,3 +13,6 @@ data/
 
 # TS 构建增量信息
 *.tsbuildinfo
+
+# ZCode 工作区内部文件
+.zcode/
