@@ -1,0 +1,15 @@
+# 依赖与构建产物
+node_modules/
+dist/
+
+# 运行时数据(本地 JSON 存储)
+data/
+
+# 密钥与本地环境
+.env.local
+
+# 日志
+*.log
+
+# TS 构建增量信息
+*.tsbuildinfo
