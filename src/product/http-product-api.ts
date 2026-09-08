@@ -23,6 +23,16 @@ export function createHttpProductApi(baseUrl = ""): ProductApi {
       request("/materials/analyze", { method: "POST", body: JSON.stringify(input) }),
     publishMaterialCards: (materialId) =>
       request(`/materials/${encodeURIComponent(materialId)}/publish`, { method: "POST" }),
+    publishCards: (materialId, cardIds) =>
+      request(`/materials/${encodeURIComponent(materialId)}/publish`, {
+        method: "POST",
+        body: JSON.stringify({ cardIds }),
+      }),
+    updateMaterialDraft: (materialId, patch) =>
+      request(`/materials/${encodeURIComponent(materialId)}/draft`, {
+        method: "PATCH",
+        body: JSON.stringify(patch),
+      }),
     listPersonas: () => request("/personas"),
     startConversation: (personaId) =>
       request("/conversations", { method: "POST", body: JSON.stringify({ personaId }) }),

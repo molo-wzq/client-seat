@@ -10,6 +10,7 @@ import {
 import { FakeModelAdapter } from "../src/adapters/fake-model-adapter";
 import type { CopywritingPort, DialoguePort } from "../src/domain/ports";
 import { createProductCore } from "../src/domain/product-core";
+import type { MaterialDraftPatch } from "../src/domain/types";
 import { FileStorage } from "./file-store";
 import { loadEnvFile } from "./env";
 
@@ -62,7 +63,20 @@ async function handleApi(
   }
   const publishMatch = pathname.match(/^\/api\/materials\/([^/]+)\/publish$/);
   if (req.method === "POST" && publishMatch) {
-    const material = await core.publishMaterialCards(decodeURIComponent(publishMatch[1]));
+    const materialId = decodeURIComponent(publishMatch[1]);
+    const cardIds = (body as { cardIds?: unknown }).cardIds;
+    const material = Array.isArray(cardIds)
+      ? await core.publishCards(materialId, cardIds.filter((id): id is string => typeof id === "string"))
+      : await core.publishMaterialCards(materialId);
+    respondJson(res, 200, material);
+    return;
+  }
+  const draftMatch = pathname.match(/^\/api\/materials\/([^/]+)\/draft$/);
+  if (req.method === "PATCH" && draftMatch) {
+    const material = await core.updateMaterialDraft(
+      decodeURIComponent(draftMatch[1]),
+      body as MaterialDraftPatch,
+    );
     respondJson(res, 200, material);
     return;
   }

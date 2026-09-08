@@ -3,10 +3,12 @@ import type {
   Conversation,
   ConversationTurn,
   Material,
+  MaterialDraftPatch,
   StrategyCard,
   VirtualProductCard,
   VisiblePersona,
 } from "./types";
+import type { ParsedTurn } from "./transcript";
 
 /**
  * 语言模型适配器边界(spec.md 实现决策):核心领域只依赖
@@ -22,6 +24,8 @@ export interface TranscriptAnalysis {
   analysis: CaseAnalysis;
   /** 未经发布确认的卡,由领域层落库为草稿。 */
   cards: Array<Omit<StrategyCard, "status">>;
+  /** 适配器完成的说话人区分;缺省时核心层用转写解析兜底,用户可再纠正。 */
+  turns?: ParsedTurn[];
 }
 
 export interface ManagerTurnInput {

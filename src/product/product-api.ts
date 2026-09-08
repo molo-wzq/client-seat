@@ -1,4 +1,4 @@
-import type { Conversation, ConversationResult, Material, Persona } from "../domain/types";
+import type { Conversation, ConversationResult, Material, MaterialDraftPatch, Persona } from "../domain/types";
 
 /**
  * 产品缝:UI 只依赖本接口。
@@ -8,6 +8,8 @@ import type { Conversation, ConversationResult, Material, Persona } from "../dom
 export interface ProductApi {
   analyzeTranscript(input: { title?: string; transcript: string }): Promise<Material>;
   publishMaterialCards(materialId: string): Promise<Material>;
+  publishCards(materialId: string, cardIds: string[]): Promise<Material>;
+  updateMaterialDraft(materialId: string, patch: MaterialDraftPatch): Promise<Material>;
   listPersonas(): Promise<Persona[]>;
   startConversation(personaId: string): Promise<Conversation>;
   getConversation(conversationId: string): Promise<Conversation>;

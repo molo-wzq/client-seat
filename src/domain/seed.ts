@@ -5,6 +5,7 @@ import type {
   StrategyCard,
   VirtualProductCard,
 } from "./types";
+import { parseTranscriptTurns, numberTurns } from "./transcript";
 
 /** 种子内容见 ADR 0002:C01 素材与分析、SC1–SC3 策略卡、P01 画像、一张虚拟产品卡。 */
 
@@ -319,6 +320,7 @@ export function buildSeedMaterial(): Omit<Material, "id" | "createdAt"> {
   return {
     title: SEED_MATERIAL_TITLE,
     transcript: SEED_TRANSCRIPT,
+    turns: numberTurns(parseTranscriptTurns(SEED_TRANSCRIPT)),
     analysis: structuredClone(SEED_ANALYSIS),
     cards: structuredClone(SEED_CARDS),
   };

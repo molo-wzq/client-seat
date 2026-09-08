@@ -1,4 +1,5 @@
 import { buildSeedMaterial, SEED_CARDS, SEED_CARD_IDS, SEED_TRANSCRIPT } from "../domain/seed";
+import { parseTranscriptTurns } from "../domain/transcript";
 import type { CopywritingPort, DialoguePort, ManagerTurnInput, ManagerTurnOutput, TranscriptAnalysis } from "../domain/ports";
 
 /**
@@ -15,6 +16,8 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
     return {
       analysis: seed.analysis,
       cards: SEED_CARDS.map(({ status: _status, ...card }) => card),
+      // 伪实现按转写解析完成说话人区分(真实适配器由模型完成)。
+      turns: parseTranscriptTurns(transcript),
     };
   }
 

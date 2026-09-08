@@ -83,9 +83,25 @@ export interface Material {
   id: string;
   title: string;
   transcript: string;
+  /** 说话人区分后的转写轮次;序号连续(1..n),允许用户纠正说话人。 */
+  turns: MaterialTurn[];
   analysis: CaseAnalysis;
   cards: StrategyCard[];
   createdAt: string;
+}
+
+/** 转写轮次:number 与轮次区间标注(T01…)按出现顺序对应;speaker 可被用户纠正。 */
+export interface MaterialTurn {
+  number: number;
+  speaker: Speaker;
+  text: string;
+}
+
+/** 人工对素材草稿的修改:说话人纠正、分析编辑、策略卡编辑(已发布卡不可改)。 */
+export interface MaterialDraftPatch {
+  turns?: MaterialTurn[];
+  analysis?: CaseAnalysis;
+  cards?: Array<Omit<StrategyCard, "status">>;
 }
 
 export type Speaker = "customer" | "manager";

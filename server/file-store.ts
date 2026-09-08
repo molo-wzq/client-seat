@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { numberTurns, parseTranscriptTurns } from "../src/domain/transcript";
 import type { ProductStorage } from "../src/domain/ports";
 import type { Conversation, Material } from "../src/domain/types";
 
@@ -15,7 +16,9 @@ export class FileStorage implements ProductStorage {
         materials?: Material[];
         conversations?: Conversation[];
       };
-      for (const material of data.materials ?? []) this.materials.set(material.id, material);
+      for (const material of data.materials ?? []) {
+        this.materials.set(material.id, migrateMaterial(material));
+      }
       for (const conversation of data.conversations ?? [])
         this.conversations.set(conversation.id, conversation);
     }
@@ -47,4 +50,13 @@ export class FileStorage implements ProductStorage {
     };
     await fs.promises.writeFile(this.filePath, JSON.stringify(data, null, 2), "utf8");
   }
+}
+
+/** 兼容旧数据文件:缺轮次的素材按转写解析兜底(可再由用户纠正)。 */
+function migrateMaterial(material: Material): Material {
+  if (Array.isArray(material.turns)) return material;
+  return {
+    ...material,
+    turns: numberTurns(parseTranscriptTurns(material.transcript)),
+  };
 }

@@ -81,7 +81,7 @@ function formatCard(card: {
 - 停止:${card.stopConditions.join(";")}`;
 }
 
-/** 转写稿分析提示词(骨架版;issue 02 按模板继续收紧)。 */
+/** 转写稿分析提示词。 */
 export function assembleAnalystSystemPrompt(): string {
   return `你是银行电话素材分析师。用户会给你一段银行理财经理与客户的电话转写稿(可能无说话人标注)。
 你的任务:区分理财经理与客户,按固定结构提炼案例分析与可复用策略卡。
@@ -92,9 +92,11 @@ export function assembleAnalystSystemPrompt(): string {
 3. 沟通目的用动宾结构,一张卡一个目的。
 4. 区分可复用策略与该客户独有的信息;参考话术只作示例。
 5. 每张策略卡写明来源片段(轮次区间,如 "T01–T02";转写稿无轮次标注时按"第N–M句"计)。
-6. 提炼 1–4 张策略卡。
-7. 只输出 JSON 对象,结构:
+6. 提炼 1–3 张策略卡(一份案例分析通常 1–3 张,与 l1 模板一致)。
+7. 逐句区分说话人(manager=理财经理,customer=客户),保留原话,不合并、不省略。
+8. 只输出 JSON 对象,结构:
 {
+  "turns": [{ "speaker": "manager" 或 "customer", "text": "该句原话" }],
   "analysis": {
     "scenario": "场景(关系基础、触达渠道、事由)",
     "customerState": "通话开始时的客户状态(态度、处境线索、初始意愿)",

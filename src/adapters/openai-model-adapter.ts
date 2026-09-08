@@ -35,6 +35,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     const raw = parseJsonObject(content) as {
       analysis?: unknown;
       cards?: unknown;
+      turns?: unknown;
     };
     if (!isRecord(raw.analysis) || !Array.isArray(raw.cards)) {
       throw new Error("模型返回的分析缺少 analysis 或 cards 字段");
@@ -42,6 +43,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     return {
       analysis: normalizeAnalysis(raw.analysis),
       cards: raw.cards.filter(isRecord).map(normalizeCard),
+      turns: normalizeTurns(raw.turns),
     };
   }
 
@@ -135,7 +137,7 @@ function asStringArray(value: unknown): string[] {
 }
 
 /** 模型输出不可信任:缺字段、类型漂移都要归一到领域结构,未知保持未知。 */
-function normalizeAnalysis(raw: Record<string, unknown>): CaseAnalysis {
+export function normalizeAnalysis(raw: Record<string, unknown>): CaseAnalysis {
   const stages = Array.isArray(raw.stages) ? raw.stages.filter(isRecord) : [];
   return {
     scenario: asString(raw.scenario),
@@ -157,7 +159,10 @@ function normalizeAnalysis(raw: Record<string, unknown>): CaseAnalysis {
   };
 }
 
-function normalizeCard(raw: Record<string, unknown>, index?: number): Omit<StrategyCard, "status"> {
+export function normalizeCard(
+  raw: Record<string, unknown>,
+  index?: number,
+): Omit<StrategyCard, "status"> {
   const source = isRecord(raw.sourceExcerpt) ? raw.sourceExcerpt : {};
   return {
     id: asString(raw.id, `sc-${(index ?? 0) + 1}`),
@@ -179,6 +184,18 @@ function normalizeCard(raw: Record<string, unknown>, index?: number): Omit<Strat
 
 function asOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+/** 说话人区分结果归一:无法辨认说话人的轮次按客户处理,由用户在界面上纠正。 */
+function normalizeTurns(raw: unknown): Array<{ speaker: "manager" | "customer"; text: string }> {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter(isRecord)
+    .map((turn) => ({
+      speaker: turn.speaker === "manager" ? ("manager" as const) : ("customer" as const),
+      text: asString(turn.text, ""),
+    }))
+    .filter((turn) => turn.text.length > 0);
 }
 
 /** 容忍代码块围栏等包装,提取首个 JSON 对象。 */

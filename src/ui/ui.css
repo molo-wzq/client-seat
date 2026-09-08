@@ -319,3 +319,81 @@ button:disabled {
 .result-log .who {
   font-weight: 600;
 }
+
+/* 素材草稿编辑(说话人纠正、分析/卡编辑) */
+button.ghost {
+  background: #fff;
+  color: var(--accent);
+}
+
+.material-turns {
+  list-style: none;
+  margin: 0;
+  padding: 12px;
+  max-height: 320px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.material-turn {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.material-turn .turn-no {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--muted);
+  font-family: Consolas, monospace;
+}
+
+.material-turn button {
+  flex-shrink: 0;
+  padding: 1px 10px;
+  font-size: 12px;
+  border-radius: 999px;
+}
+
+.material-turn.is-customer button {
+  border-color: #7a5ea8;
+  color: #7a5ea8;
+}
+
+.material-turn .turn-text {
+  min-width: 0;
+}
+
+.save-note {
+  font-size: 13px;
+  color: #8a5a18;
+}
+
+.editor input {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.stage-editor {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 12px 0;
+  padding: 4px 14px 12px;
+}
+
+.stage-editor legend {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+  padding: 0 6px;
+}

@@ -1,11 +1,13 @@
 import { SEED_PERSONA, SEED_PRODUCT_CARD } from "./seed";
 import { randomId } from "./ports";
+import { numberTurns, parseTranscriptTurns } from "./transcript";
 import type { CopywritingPort, DialoguePort, ProductStorage } from "./ports";
 import type {
   Conversation,
   ConversationResult,
   ConversationTurn,
   Material,
+  MaterialDraftPatch,
   Persona,
   StrategyCard,
   VisiblePersona,
@@ -18,6 +20,10 @@ export interface ProductCore {
   analyzeTranscript(input: { title?: string; transcript: string }): Promise<Material>;
   /** 人工确认:把该素材的全部草稿卡发布为已发布。 */
   publishMaterialCards(materialId: string): Promise<Material>;
+  /** 人工确认:发布指定策略卡(卡是发布决定的最小单元)。 */
+  publishCards(materialId: string, cardIds: string[]): Promise<Material>;
+  /** 人工修改素材草稿:纠正说话人、编辑分析、编辑未发布的策略卡。 */
+  updateMaterialDraft(materialId: string, patch: MaterialDraftPatch): Promise<Material>;
   listPersonas(): Promise<Persona[]>;
   startConversation(personaId: string): Promise<Conversation>;
   getConversation(conversationId: string): Promise<Conversation>;
@@ -66,10 +72,16 @@ export function createProductCore(deps: {
       const text = transcript.trim();
       if (!text) throw new Error("转写稿内容为空");
 
-      const { analysis, cards } = await copywriting.analyzeTranscript(text);
+      const { analysis, cards, turns: adapterTurns } = await copywriting.analyzeTranscript(text);
       // 标题取场景首句,避免长句截断在词中间。
       const materialTitle =
         title?.trim() || analysis.scenario.split(/[。;;,,]/)[0]?.slice(0, 30) || "未命名素材";
+
+      // 说话人区分:适配器结果优先,缺省时按转写解析兜底;两者都允许用户再纠正。
+      // 轮次序号保留转写标注(T07)或顺序落号,是策略来源的追溯坐标。
+      const turns = numberTurns(
+        adapterTurns?.length ? adapterTurns : parseTranscriptTurns(text),
+      );
 
       // 卡 id 必须全局唯一(结果页按 id 追溯):模型给的 id 冲突时重新分配。
       const existingIds = new Set(
@@ -79,6 +91,7 @@ export function createProductCore(deps: {
         id: randomId(),
         title: materialTitle,
         transcript: text,
+        turns,
         analysis,
         cards: cards.map((card, index) => {
           let id = card.id && !existingIds.has(card.id) ? card.id : "";
@@ -103,9 +116,83 @@ export function createProductCore(deps: {
 
     async publishMaterialCards(materialId) {
       const material = await requireMaterial(materialId);
-      const draftCount = material.cards.filter((c) => c.status === "draft").length;
-      if (draftCount === 0) throw new Error("没有可发布的草稿策略卡");
-      material.cards = material.cards.map((c) => ({ ...c, status: "published" as const }));
+      const cardIds = material.cards.filter((c) => c.status === "draft").map((c) => c.id);
+      if (cardIds.length === 0) throw new Error("没有可发布的草稿策略卡");
+      return this.publishCards(materialId, cardIds);
+    },
+
+    async publishCards(materialId, cardIds) {
+      const material = await requireMaterial(materialId);
+      for (const cardId of cardIds) {
+        const card = material.cards.find((c) => c.id === cardId);
+        if (!card) throw new Error(`策略卡不存在:${cardId}`);
+      }
+      material.cards = material.cards.map((c) =>
+        cardIds.includes(c.id) ? { ...c, status: "published" as const } : c,
+      );
+      await storage.saveMaterial(material);
+      return material;
+    },
+
+    async updateMaterialDraft(materialId, patch) {
+      const material = await requireMaterial(materialId);
+
+      if (patch.turns) {
+        if (!Array.isArray(patch.turns) || patch.turns.length === 0) {
+          throw new Error("轮次数据不合法");
+        }
+        // 序号必须唯一且为正整数:它是对话结果回溯素材片段的坐标,不重排。
+        const seen = new Set<number>();
+        for (const turn of patch.turns) {
+          if (
+            typeof turn.number !== "number" ||
+            !Number.isInteger(turn.number) ||
+            turn.number < 1 ||
+            seen.has(turn.number)
+          ) {
+            throw new Error(`轮次序号不合法:${JSON.stringify(turn.number)}`);
+          }
+          seen.add(turn.number);
+          if (typeof turn.text !== "string" || !turn.text.trim()) {
+            throw new Error("轮次内容不能为空");
+          }
+        }
+        material.turns = patch.turns.map((turn) => ({
+          number: turn.number,
+          speaker: turn.speaker === "customer" ? ("customer" as const) : ("manager" as const),
+          text: turn.text,
+        }));
+      }
+
+      if (patch.analysis) {
+        const { analysis } = patch;
+        if (
+          typeof analysis !== "object" ||
+          analysis === null ||
+          typeof analysis.scenario !== "string" ||
+          typeof analysis.overallGoal !== "string" ||
+          !Array.isArray(analysis.stages)
+        ) {
+          throw new Error("分析数据不合法");
+        }
+        material.analysis = analysis;
+      }
+
+      if (patch.cards) {
+        if (!Array.isArray(patch.cards)) throw new Error("策略卡数据不合法");
+        for (const incoming of patch.cards) {
+          const current = material.cards.find((c) => c.id === incoming.id);
+          if (!current) throw new Error(`策略卡不存在:${incoming.id}`);
+          if (current.status === "published") {
+            throw new Error(`策略卡已发布,不可修改:${current.name}`);
+          }
+        }
+        material.cards = material.cards.map((card) => {
+          const incoming = patch.cards?.find((c) => c.id === card.id);
+          return incoming ? { ...card, ...incoming, status: "draft" as const } : card;
+        });
+      }
+
       await storage.saveMaterial(material);
       return material;
     },

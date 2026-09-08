@@ -28,7 +28,7 @@ describe("素材到模拟通话的核心闭环", () => {
     expect(screen.getAllByText("草稿")).toHaveLength(3);
 
     // 人工确认后从草稿变为已发布,进入画像步骤
-    await user.click(screen.getByRole("button", { name: "确认并发布" }));
+    await user.click(screen.getByRole("button", { name: /确认并发布/ }));
     expect(screen.getByRole("heading", { name: "创建一位生客" })).toBeInTheDocument();
     expect(await screen.findByText("代发·资金在证券")).toBeInTheDocument();
 
