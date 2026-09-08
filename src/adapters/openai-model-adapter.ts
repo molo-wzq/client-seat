@@ -28,11 +28,13 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
   constructor(private readonly config: ModelAdapterConfig) {}
 
   async analyzeTranscript(transcript: string): Promise<TranscriptAnalysis> {
-    const content = await this.chat([
+    const { content, reasoning } = await this.chat([
       { role: "system", content: assembleAnalystSystemPrompt() },
       { role: "user", content: `素材标题:${DEFAULT_MATERIAL_TITLE}\n\n转写稿:\n${transcript}` },
     ]);
-    const raw = parseJsonObject(content) as {
+    // 分析输出不直接播出,推理模型的 reasoning_content 同样可用作解析源。
+    const source = content.trim() ? content : reasoning;
+    const raw = parseJsonObject(source) as {
       analysis?: unknown;
       cards?: unknown;
       turns?: unknown;
@@ -56,16 +58,30 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     }
     messages.push({ role: "user", content: input.customerText });
 
-    const content = await this.chat(messages);
-    let raw: Partial<ManagerTurnOutput>;
+    const { content, reasoning } = await this.chat(messages);
+    if (content.trim()) return this.managerTurnFromText(content);
+    // 推理模型偶发把最终 JSON 落在 reasoning_content 而 content 为空:
+    // 能解析出结构化输出则采用;思维链文本绝不能当作对话播出。
+    if (reasoning.trim()) {
+      const raw = parseJsonObject(reasoning) as Partial<ManagerTurnOutput>;
+      return this.managerTurnFromRaw(raw);
+    }
+    throw new Error("语言模型返回为空");
+  }
+
+  private managerTurnFromText(content: string): ManagerTurnOutput {
     try {
-      raw = parseJsonObject(content) as Partial<ManagerTurnOutput>;
+      const raw = parseJsonObject(content) as Partial<ManagerTurnOutput>;
+      return this.managerTurnFromRaw(raw);
     } catch {
       // 容错:模型偶尔输出纯文本。文本本身仍是有效的经理话术,
       // 降级为无策略引用、无元数据的一轮,不让通话中断(策略追溯缺失可见)。
       console.warn("[adapter] 模型未返回 JSON,按纯对话处理:", content.slice(0, 80));
       return { reply: content.trim() };
     }
+  }
+
+  private managerTurnFromRaw(raw: Partial<ManagerTurnOutput>): ManagerTurnOutput {
     if (!raw.reply || typeof raw.reply !== "string") {
       throw new Error("模型返回缺少 reply 字段");
     }
@@ -86,7 +102,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
 
   private async chat(
     messages: Array<{ role: string; content: string }>,
-  ): Promise<string> {
+  ): Promise<{ content: string; reasoning: string }> {
     const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
       method: "POST",
       headers: {
@@ -106,18 +122,19 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
       throw new Error(`语言模型调用失败(HTTP ${response.status}):${body.slice(0, 300)}`);
     }
     const data = (await response.json()) as {
-      choices?: Array<{ message?: { content?: string }; finish_reason?: string }>;
+      choices?: Array<{ message?: { content?: string; reasoning_content?: string }; finish_reason?: string }>;
     };
     const choice = data.choices?.[0];
-    const content = choice?.message?.content;
-    if (!content) {
+    const content = choice?.message?.content ?? "";
+    const reasoning = choice?.message?.reasoning_content ?? "";
+    if (!content.trim() && !reasoning.trim()) {
       console.warn("[adapter] 语言模型返回缺少内容:", JSON.stringify(data).slice(0, 400));
       throw new Error("语言模型返回为空");
     }
     if (choice?.finish_reason === "length") {
       console.warn("[adapter] 语言模型输出因长度限制被截断,JSON 可能不完整");
     }
-    return content;
+    return { content, reasoning };
   }
 }
 
