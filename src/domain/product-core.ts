@@ -1,6 +1,6 @@
 import { SEED_PERSONA, SEED_PRODUCT_CARD } from "./seed";
 import { randomId } from "./ports";
-import { numberTurns, parseTranscriptTurns } from "./transcript";
+import { numberTurns, parseTranscriptTurns, resolveTurnRange } from "./transcript";
 import type { CopywritingPort, DialoguePort, ProductStorage } from "./ports";
 import type {
   Conversation,
@@ -94,8 +94,9 @@ export function createProductCore(deps: {
       const existingIds = new Set(
         (await storage.listMaterials()).flatMap((m) => m.cards.map((c) => c.id)),
       );
+      const materialId = randomId();
       const material = {
-        id: randomId(),
+        id: materialId,
         title: materialTitle,
         transcript: text,
         turns,
@@ -103,7 +104,7 @@ export function createProductCore(deps: {
         cards: cards.map((card, index) => {
           let id = card.id && !existingIds.has(card.id) ? card.id : "";
           if (!id) {
-            id = `${material.id.slice(0, 6)}-sc-${index + 1}`;
+            id = `${materialId.slice(0, 6)}-sc-${index + 1}`;
             while (existingIds.has(id)) id += "-alt";
           }
           existingIds.add(id);
@@ -111,8 +112,8 @@ export function createProductCore(deps: {
             ...card,
             id,
             status: "draft" as const,
-            // 卡的来源统一指向所属素材,保证结果页追溯口径一致。
-            sourceExcerpt: { ...card.sourceExcerpt, materialTitle },
+            // 来源指向所属素材(id 定位,标题供人读),保证结果页追溯口径一致。
+            sourceExcerpt: { ...card.sourceExcerpt, materialTitle, materialId },
           };
         }),
         createdAt: new Date().toISOString(),
@@ -318,6 +319,17 @@ export function createProductCore(deps: {
         .map((t) => t.currentGoal)
         .filter((g): g is string => Boolean(g && g !== "未知" && g !== "无"));
 
+      // 来源片段落为原始轮次:优先按素材 id 定位(标题可重名),旧数据回退按标题。
+      function resolveSourceTurns(source: { materialId?: string; materialTitle: string; turnRange: string } | null) {
+        if (!source) return [];
+        const material = source.materialId
+          ? materials.find((m) => m.id === source.materialId)
+          : undefined;
+        const located = material ?? materials.find((m) => m.title === source.materialTitle);
+        if (!located) return [];
+        return resolveTurnRange(source.turnRange, located.turns);
+      }
+
       return {
         conversationId: conversation.id,
         mainGoal: goals.length > 0 ? goals[goals.length - 1] : "未知",
@@ -328,12 +340,14 @@ export function createProductCore(deps: {
           .filter((t) => t.usedCardId && cardsById.has(t.usedCardId))
           .map((t) => {
             const card = cardsById.get(t.usedCardId as string);
+            const source = card!.sourceExcerpt ?? null;
             return {
               turnNumber: t.number,
               cardId: t.usedCardId as string,
               cardName: card!.name,
               keyExpression: t.text,
-              source: card!.sourceExcerpt ?? null,
+              source,
+              sourceTurns: resolveSourceTurns(source),
             };
           }),
       };

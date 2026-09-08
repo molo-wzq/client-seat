@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { FakeModelAdapter } from "./adapters/fake-model-adapter";
 import { createInProcessProductApi } from "./product/in-process-product-api";
+import { SCORING_PATTERN } from "./test/scoring-pattern";
 import { App } from "./App";
 
 /**
@@ -44,9 +45,16 @@ describe("素材到模拟通话的核心闭环", () => {
 
     await user.click(screen.getByRole("button", { name: "结束并查看结果" }));
 
-    // 第四步:结果——能看到本轮目标,并追溯到所用的已发布策略卡与原始片段
+    // 第四步:结果——解释本轮打法,可追溯到所用策略卡与原始转写片段,且不含评分元素
     expect(screen.getByRole("heading", { name: "这通电话是怎样推进的" })).toBeInTheDocument();
     expect(screen.getByText("生客开场,自报身份先给退路")).toBeInTheDocument();
     expect(screen.getByText(/T01–T02/)).toBeInTheDocument();
+    expect(screen.getByText("本轮主要目标")).toBeInTheDocument();
+    expect(screen.getByText("沟通结果")).toBeInTheDocument();
+    expect(screen.getByText("结束原因")).toBeInTheDocument();
+    // 策略路径中的关键表达来自真实对话,原始片段逐句可回溯
+    expect(screen.getAllByText(/我是咱们银行的客户经理/).length).toBeGreaterThan(0);
+    expect(screen.getByText(/只解释 AI 的打法,不评价你的客户表现/)).toBeInTheDocument();
+    expect(screen.queryByText(SCORING_PATTERN)).not.toBeInTheDocument();
   });
 });

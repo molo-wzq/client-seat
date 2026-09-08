@@ -310,6 +310,25 @@ button:disabled {
   color: var(--muted);
 }
 
+.strategy-path .source-turns {
+  margin: 6px 0 0;
+  padding: 8px 12px;
+  border-left: 3px solid var(--line);
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.strategy-path .source-turns p {
+  margin: 4px 0;
+}
+
+.strategy-path .source-turns .who {
+  color: var(--muted);
+  font-family: Consolas, monospace;
+  font-size: 12px;
+}
+
 .result-log {
   padding-left: 20px;
   font-size: 14px;

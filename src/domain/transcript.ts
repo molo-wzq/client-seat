@@ -87,3 +87,9 @@ export function parseTurnRange(turnRange: string): number[] {
   const single = text.match(/T?0*(\d+)/);
   return single ? [Number(single[1])] : [];
 }
+
+/** 按轮次区间取出素材的原始转写片段;素材缺轮次数据时返回空数组。 */
+export function resolveTurnRange(turnRange: string, turns: MaterialTurn[]): MaterialTurn[] {
+  const numbers = new Set(parseTurnRange(turnRange));
+  return turns.filter((turn) => numbers.has(turn.number));
+}

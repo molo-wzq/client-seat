@@ -7,6 +7,8 @@ export interface SourceExcerpt {
   materialTitle: string;
   /** 转写轮次区间,如 "T01–T02"。 */
   turnRange: string;
+  /** 所属素材 id:追溯定位用,避免标题重名错位;旧数据可能缺失。 */
+  materialId?: string;
 }
 
 /** 案例分析:对一段素材的整体结构化解读(结构对应 l1/case-analysis-template.md)。 */
@@ -150,5 +152,7 @@ export interface ConversationResult {
     /** 关键表达:经理本轮实际说出的话。 */
     keyExpression: string;
     source: SourceExcerpt | null;
+    /** 原始转写片段:按来源区间解析出的素材轮次;无法解析时为空。 */
+    sourceTurns: MaterialTurn[];
   }>;
 }

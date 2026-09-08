@@ -43,6 +43,22 @@ export function ResultStep({
                   来源:{entry.source.materialTitle} {entry.source.turnRange}
                 </p>
               )}
+              {entry.source && entry.sourceTurns.length === 0 && (
+                <p className="source">原始片段未能定位(素材可能已删除或轮次区间无法解析)</p>
+              )}
+              {entry.sourceTurns.length > 0 && (
+                <blockquote className="source-turns">
+                  {entry.sourceTurns.map((turn) => (
+                    <p key={turn.number}>
+                      <span className="who">
+                        T{String(turn.number).padStart(2, "0")}{" "}
+                        {turn.speaker === "manager" ? "经理" : "客户"}:
+                      </span>
+                      {turn.text}
+                    </p>
+                  ))}
+                </blockquote>
+              )}
             </li>
           ))}
         </ol>
