@@ -3,9 +3,9 @@ import type {
   Conversation,
   ConversationTurn,
   Material,
-  Persona,
   StrategyCard,
   VirtualProductCard,
+  VisiblePersona,
 } from "./types";
 
 /**
@@ -25,7 +25,8 @@ export interface TranscriptAnalysis {
 }
 
 export interface ManagerTurnInput {
-  persona: Persona;
+  /** 仅可见信息;隐藏画像不得进入对话生成。 */
+  persona: VisiblePersona;
   /** 只有已发布策略卡会进入对话输入(全量注入,检索语义保留为接口)。 */
   publishedCards: StrategyCard[];
   product: VirtualProductCard;

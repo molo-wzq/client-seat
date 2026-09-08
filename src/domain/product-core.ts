@@ -8,6 +8,7 @@ import type {
   Material,
   Persona,
   StrategyCard,
+  VisiblePersona,
 } from "./types";
 
 /** 每通电话的经理轮数上限(spec.md:提示词规则+应用层轮数上限)。 */
@@ -49,6 +50,17 @@ export function createProductCore(deps: {
     return materials.flatMap((m) => m.cards.filter((c) => c.status === "published"));
   }
 
+  function findSeedPersona(personaId: string): Persona {
+    const persona = [SEED_PERSONA].find((p) => p.id === personaId);
+    if (!persona) throw new Error(`画像不存在:${personaId}`);
+    return persona;
+  }
+
+  /** 构造对话生成可读的画像视图:隐藏信息不离开领域层。 */
+  function toVisiblePersona(persona: Persona): VisiblePersona {
+    return { id: persona.id, name: persona.name, visible: persona.visible };
+  }
+
   return {
     async analyzeTranscript({ title, transcript }) {
       const text = transcript.trim();
@@ -58,20 +70,33 @@ export function createProductCore(deps: {
       // 标题取场景首句,避免长句截断在词中间。
       const materialTitle =
         title?.trim() || analysis.scenario.split(/[。;;,,]/)[0]?.slice(0, 30) || "未命名素材";
-      const material: Material = {
+
+      // 卡 id 必须全局唯一(结果页按 id 追溯):模型给的 id 冲突时重新分配。
+      const existingIds = new Set(
+        (await storage.listMaterials()).flatMap((m) => m.cards.map((c) => c.id)),
+      );
+      const material = {
         id: randomId(),
         title: materialTitle,
         transcript: text,
         analysis,
-        cards: cards.map((card, index) => ({
-          ...card,
-          id: card.id || `sc-${index + 1}`,
-          status: "draft" as const,
-          // 卡的来源统一指向所属素材,保证结果页追溯口径一致。
-          sourceExcerpt: { ...card.sourceExcerpt, materialTitle },
-        })),
+        cards: cards.map((card, index) => {
+          let id = card.id && !existingIds.has(card.id) ? card.id : "";
+          if (!id) {
+            id = `${material.id.slice(0, 6)}-sc-${index + 1}`;
+            while (existingIds.has(id)) id += "-alt";
+          }
+          existingIds.add(id);
+          return {
+            ...card,
+            id,
+            status: "draft" as const,
+            // 卡的来源统一指向所属素材,保证结果页追溯口径一致。
+            sourceExcerpt: { ...card.sourceExcerpt, materialTitle },
+          };
+        }),
         createdAt: new Date().toISOString(),
-      };
+      } satisfies Material;
       await storage.saveMaterial(material);
       return material;
     },
@@ -91,8 +116,7 @@ export function createProductCore(deps: {
     },
 
     async startConversation(personaId) {
-      const persona = [SEED_PERSONA].find((p) => p.id === personaId);
-      if (!persona) throw new Error(`画像不存在:${personaId}`);
+      const persona = findSeedPersona(personaId);
       const conversation: Conversation = {
         id: randomId(),
         personaId,
@@ -114,8 +138,7 @@ export function createProductCore(deps: {
       const customerText = text.trim();
       if (!customerText) throw new Error("客户发言为空");
 
-      const persona = [SEED_PERSONA].find((p) => p.id === conversation.personaId);
-      if (!persona) throw new Error(`画像不存在:${conversation.personaId}`);
+      const persona = toVisiblePersona(findSeedPersona(conversation.personaId));
 
       const history = conversation.turns;
       const output = await dialogue.generateManagerTurn({
@@ -171,9 +194,12 @@ export function createProductCore(deps: {
       if (conversation.status !== "ended") throw new Error("通话尚未结束,无法生成结果");
 
       const materials = await storage.listMaterials();
+      // 结果追溯只承认已发布卡:草稿卡本就不该进入对话。
       const cardsById = new Map<string, StrategyCard>();
       for (const material of materials) {
-        for (const card of material.cards) cardsById.set(card.id, card);
+        for (const card of material.cards) {
+          if (card.status === "published") cardsById.set(card.id, card);
+        }
       }
 
       const managerTurns = conversation.turns.filter((t) => t.speaker === "manager");
@@ -188,15 +214,15 @@ export function createProductCore(deps: {
         endReason: conversation.endReason || "未知",
         turns: conversation.turns,
         strategyPath: managerTurns
-          .filter((t) => t.usedCardId)
+          .filter((t) => t.usedCardId && cardsById.has(t.usedCardId))
           .map((t) => {
             const card = cardsById.get(t.usedCardId as string);
             return {
               turnNumber: t.number,
               cardId: t.usedCardId as string,
-              cardName: card?.name || "未知策略卡",
+              cardName: card!.name,
               keyExpression: t.text,
-              source: card?.sourceExcerpt ?? null,
+              source: card!.sourceExcerpt ?? null,
             };
           }),
       };

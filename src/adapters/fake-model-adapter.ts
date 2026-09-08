@@ -1,4 +1,4 @@
-import { buildSeedMaterial, SEED_CARDS, SEED_TRANSCRIPT } from "../domain/seed";
+import { buildSeedMaterial, SEED_CARDS, SEED_CARD_IDS, SEED_TRANSCRIPT } from "../domain/seed";
 import type { CopywritingPort, DialoguePort, ManagerTurnInput, ManagerTurnOutput, TranscriptAnalysis } from "../domain/ports";
 
 /**
@@ -28,7 +28,7 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
           "您好,我是咱们银行的客户经理。您现在方便简单聊两句吗?有两件和您代发账户有关的事想跟您说一下,不耽误您太久。",
         recognizedSignal: "电话刚接通,客户应答",
         currentGoal: "让客户确认这是本行客户经理的正常服务来电,愿意继续听下去",
-        usedCardId: "sc-c01-1",
+        usedCardId: SEED_CARD_IDS.opening,
       };
     }
 
@@ -49,7 +49,7 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
       reply: "好的。想先了解一下,您平时除了炒股之外,在其他银行有没有做过灵活资金的配置?",
       recognizedSignal: "客户愿意继续沟通",
       currentGoal: "摸清客户资金的去向和打理习惯,找到可对比点",
-      usedCardId: "sc-c01-2",
+      usedCardId: SEED_CARD_IDS.discovery,
     };
   }
 }

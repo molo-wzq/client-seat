@@ -54,6 +54,13 @@ export interface Persona {
   hidden: string[];
 }
 
+/** 对话生成可读的画像视图:仅含可见信息,隐藏信息不跨过适配器边界。 */
+export interface VisiblePersona {
+  id: string;
+  name: string;
+  visible: string[];
+}
+
 /** 虚拟产品卡:产品事实唯一来源,AI 不得使用卡外信息。 */
 export interface VirtualProductCard {
   activity: {

@@ -138,6 +138,13 @@ export const SEED_ANALYSIS: CaseAnalysis = {
   ],
 };
 
+/** 种子策略卡 id(伪适配器与对话脚本引用,避免散落的字符串字面量)。 */
+export const SEED_CARD_IDS = {
+  opening: "sc-c01-1",
+  discovery: "sc-c01-2",
+  closing: "sc-c01-3",
+} as const;
+
 function seedCard(id: string, name: string, card: Omit<StrategyCard, "id" | "name" | "status">): StrategyCard {
   return { id, name, status: "draft", ...card };
 }

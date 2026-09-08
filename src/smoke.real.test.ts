@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { OpenAICompatibleModelAdapter } from "./adapters/openai-model-adapter";
+import {
+  DEFAULT_MODEL_BASE_URL,
+  DEFAULT_MODEL_NAME,
+  OpenAICompatibleModelAdapter,
+} from "./adapters/openai-model-adapter";
 import { SEED_CARDS, SEED_PERSONA, SEED_PRODUCT_CARD, SEED_TRANSCRIPT } from "./domain/seed";
 
 /**
@@ -15,8 +19,8 @@ function createAdapter(): OpenAICompatibleModelAdapter {
   if (!apiKey) throw new Error("缺少 MIMO_API_KEY,无法运行真实模型冒烟测试");
   return new OpenAICompatibleModelAdapter({
     apiKey,
-    baseUrl: env.MIMO_BASE_URL || "https://token-plan-cn.xiaomimimo.com/v1",
-    model: env.MIMO_MODEL || "mimo-v2.5",
+    baseUrl: env.MIMO_BASE_URL || DEFAULT_MODEL_BASE_URL,
+    model: env.MIMO_MODEL || DEFAULT_MODEL_NAME,
   });
 }
 
