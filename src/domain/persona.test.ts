@@ -1,19 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { FakeModelAdapter } from "../adapters/fake-model-adapter";
 import { assembleManagerSystemPrompt } from "../adapters/prompts";
 import { createInProcessProductApi } from "../product/in-process-product-api";
-import type { ManagerTurnInput, ManagerTurnOutput } from "./ports";
+import { RecordingAdapter } from "../test/recording-adapter";
 import { SEED_PERSONA, SEED_PRODUCT_CARD } from "./seed";
-
-/** 记录对话输入的伪适配器:断言隐藏信息不越适配器边界。 */
-class RecordingAdapter extends FakeModelAdapter {
-  dialogueInputs: ManagerTurnInput[] = [];
-
-  async generateManagerTurn(input: ManagerTurnInput): Promise<ManagerTurnOutput> {
-    this.dialogueInputs.push(structuredClone(input));
-    return super.generateManagerTurn(input);
-  }
-}
 
 const VISIBLE_LINE = "客户是代发工资客户,代发关系正常";
 const HIDDEN_LINE = "可动用闲钱约15万,其余资金在股市";

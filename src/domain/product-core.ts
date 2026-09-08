@@ -247,9 +247,10 @@ export function createProductCore(deps: {
       const persona = toVisiblePersona(await requirePersona(conversation.personaId));
 
       const history = conversation.turns;
+      const publishedCards = await listPublishedCards();
       const output = await dialogue.generateManagerTurn({
         persona,
-        publishedCards: await listPublishedCards(),
+        publishedCards,
         product: SEED_PRODUCT_CARD,
         history,
         customerText,
@@ -261,11 +262,15 @@ export function createProductCore(deps: {
         speaker: "customer",
         text: customerText,
       };
+      // 模型声称使用的卡必须是本轮检索到的已发布卡:检索边界落到数据上。
+      const retrievable = output.usedCardId
+        ? publishedCards.some((c) => c.id === output.usedCardId)
+        : false;
       const managerTurn: ConversationTurn = {
         number: nextNumber + 1,
         speaker: "manager",
         text: output.reply,
-        usedCardId: output.usedCardId,
+        usedCardId: retrievable ? output.usedCardId : undefined,
         recognizedSignal: output.recognizedSignal,
         currentGoal: output.currentGoal,
       };
