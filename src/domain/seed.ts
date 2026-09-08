@@ -7,7 +7,7 @@ import type {
 } from "./types";
 import { parseTranscriptTurns, numberTurns } from "./transcript";
 
-/** 种子内容见 ADR 0002:C01 素材与分析、SC1–SC3 策略卡、P01 画像、一张虚拟产品卡。 */
+/** 种子内容见 ADR 0002/0003:C01 素材与分析、SC1–SC3 策略卡、P01–P03 画像(提取自真实素材)、一张虚拟产品卡。 */
 
 export const SEED_MATERIAL_TITLE = "素材01:存量生客首次触达(拉新资金活动)";
 
@@ -276,7 +276,7 @@ export const SEED_CARDS: StrategyCard[] = [
   }),
 ];
 
-/** P01 生客画像(对应 l2/persona-01-代发炒股客户.md)。 */
+/** P01 生客画像(对应 l2/persona-01-代发炒股客户.md,提取自素材01)。 */
 export const SEED_PERSONA: Persona = {
   id: "p01-daifagua",
   name: "代发·资金在证券",
@@ -293,6 +293,47 @@ export const SEED_PERSONA: Persona = {
     "对收益高一点不太敏感;对不用马上转钱也能参加这类低门槛安排有好感",
   ],
 };
+
+/**
+ * 内置画像共 3 个,均提取自真实素材(ADR 0003 决定 3):
+ * P01←素材01、P02←素材02、P03←素材03;l2/ 目录有对应画像文档。
+ */
+
+/** P02(素材02 客户A):到期资金·稳健阿姨,存量维护·跟进触达。 */
+export const SEED_PERSONA_P02: Persona = {
+  id: "p02-daoqi-wenjian",
+  name: "到期资金·稳健阿姨",
+  visible: [
+    "某银行存量客户,年长女性,与经理已相识,此前沟通过资金到账事宜",
+    "名下15万资金明日到账,利率约2.7%;另有三年定期,偏好稳健",
+    "本周五上午十点左右会来网点办业务",
+  ],
+  hidden: [
+    "家里还有几笔三年定期陆续到期,手头想留些活钱",
+    "嘴上说不存,但听到具体利息会认真考虑",
+    "怕麻烦,希望经理替她拿主意,而不是给一堆选项",
+  ],
+};
+
+/** P03(素材03 客户B):定期到期·话少客户,存量维护·到期续存,首次电话触达。 */
+export const SEED_PERSONA_P03: Persona = {
+  id: "p03-dingqi-huashao",
+  name: "定期到期·话少客户",
+  visible: [
+    "某银行存量客户,男性,本经理为其管户经理,此前无通话记录",
+    "名下三年定期本月周六到期,到期后自动转活期",
+    "接电话话少,通常只给短句回应",
+  ],
+  hidden: [
+    "他行还有一笔资金约1月中旬到期,正在留意放哪里",
+    "总资产接近50万,对贵宾客户身份有点心动,但不愿显得贪图礼品",
+    "对利率的小幅差异不敏感,更看重省心、不用自己跑",
+    "大额资金调动习惯先和家人商量",
+  ],
+};
+
+/** 产品内置画像列表(l2/ 目录有对应文档)。 */
+export const SEED_PERSONAS: Persona[] = [SEED_PERSONA, SEED_PERSONA_P02, SEED_PERSONA_P03];
 
 /** 虚拟产品卡(对应 l2/virtual-product-card.md),产品事实唯一来源。 */
 export const SEED_PRODUCT_CARD: VirtualProductCard = {

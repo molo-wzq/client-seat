@@ -1,4 +1,4 @@
-import { SEED_PERSONA, SEED_PRODUCT_CARD } from "./seed";
+import { SEED_PERSONAS, SEED_PRODUCT_CARD } from "./seed";
 import { randomId } from "./ports";
 import { numberTurns, parseTranscriptTurns, resolveTurnRange } from "./transcript";
 import type { CopywritingPort, DialoguePort, ProductStorage } from "./ports";
@@ -60,7 +60,8 @@ export function createProductCore(deps: {
   }
 
   async function listAllPersonas(): Promise<Persona[]> {
-    return [SEED_PERSONA, ...(await storage.listPersonas())];
+    // 内置 3 画像在前(P01–P03,提取自真实素材),自定义画像按保存顺序并入。
+    return [...SEED_PERSONAS, ...(await storage.listPersonas())];
   }
 
   async function requirePersona(personaId: string): Promise<Persona> {

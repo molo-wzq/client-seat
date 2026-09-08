@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { assembleManagerSystemPrompt } from "../adapters/prompts";
 import { createInProcessProductApi } from "../product/in-process-product-api";
 import { RecordingAdapter } from "../test/recording-adapter";
-import { SEED_PERSONA, SEED_PRODUCT_CARD } from "./seed";
+import { SEED_PERSONA, SEED_PERSONAS, SEED_PRODUCT_CARD } from "./seed";
 
 const VISIBLE_LINE = "客户是代发工资客户,代发关系正常";
 const HIDDEN_LINE = "可动用闲钱约15万,其余资金在股市";
@@ -19,10 +19,16 @@ async function apiWithCustomPersona() {
 }
 
 describe("生客画像", () => {
-  it("预设画像可列出,内置种子 P01,自定义画像并入列表(预设结构支持扩充)", async () => {
+  it("内置画像 3 个(P01–P03,提取自真实素材),自定义画像并入列表", async () => {
     const { api, persona } = await apiWithCustomPersona();
     const list = await api.listPersonas();
+    expect(SEED_PERSONAS).toHaveLength(3);
+    for (const builtIn of SEED_PERSONAS) {
+      expect(list.some((p) => p.id === builtIn.id)).toBe(true);
+    }
     expect(list.some((p) => p.id === SEED_PERSONA.id)).toBe(true);
+    // 自定义画像排在全部内置画像之后
+    expect(list.at(-1)?.name).toBe("自定义生客");
     expect(list.find((p) => p.id === persona.id)?.name).toBe("自定义生客");
   });
 

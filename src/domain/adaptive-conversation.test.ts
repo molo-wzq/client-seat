@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createInProcessProductApi } from "../product/in-process-product-api";
 import { RecordingAdapter } from "../test/recording-adapter";
 import { MAX_MANAGER_TURNS } from "./product-core";
-import { SEED_CARD_IDS, SEED_PERSONA, SEED_TRANSCRIPT } from "./seed";
+import { SEED_CARD_IDS, SEED_PERSONA, SEED_PERSONAS, SEED_TRANSCRIPT } from "./seed";
 
 /** 产品卡事实签名:未了解需求前不应出现。 */
 const PRODUCT_FACTS = /立减金|参考年化|2%|3%/;
@@ -198,5 +198,30 @@ describe("策略驱动的自适应对话", () => {
         expect(turn.text).not.toContain(signature);
       }
     }
+  });
+
+  it("内置画像差异引起不同策略路径(P03 无资金线索,跳过现状了解)", async () => {
+    const { api } = await setup();
+    await api.publishMaterialCards((await api.analyzeTranscript({ transcript: SEED_TRANSCRIPT })).id);
+
+    // P02(可见含资金线索)→ 走 SC2 现状了解
+    const p02 = await api.startConversation(SEED_PERSONAS[1]!.id);
+    await api.sendCustomerTurn(p02.id, "喂");
+    await api.sendCustomerTurn(p02.id, "嗯");
+    const p02Turns = (await api.getConversation(p02.id)).turns
+      .filter((t) => t.speaker === "manager")
+      .map((t) => t.usedCardId);
+    expect(p02Turns[1]).toBe(SEED_CARD_IDS.discovery);
+
+    // P03(可见无资金线索,SC2 适用条件不满足)→ 直接以 SC3 事由争取预约
+    const p03 = await api.startConversation(SEED_PERSONAS[2]!.id);
+    await api.sendCustomerTurn(p03.id, "喂");
+    await api.sendCustomerTurn(p03.id, "嗯");
+    const p03Turns = (await api.getConversation(p03.id)).turns
+      .filter((t) => t.speaker === "manager")
+      .map((t) => t.usedCardId);
+    expect(p03Turns[1]).toBe(SEED_CARD_IDS.closing);
+
+    expect(p02Turns).not.toEqual(p03Turns);
   });
 });
