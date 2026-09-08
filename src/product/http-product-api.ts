@@ -34,6 +34,8 @@ export function createHttpProductApi(baseUrl = ""): ProductApi {
         body: JSON.stringify(patch),
       }),
     listPersonas: () => request("/personas"),
+    savePersona: (input) =>
+      request("/personas", { method: "POST", body: JSON.stringify(input) }),
     startConversation: (personaId) =>
       request("/conversations", { method: "POST", body: JSON.stringify({ personaId }) }),
     getConversation: (conversationId) =>

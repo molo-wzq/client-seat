@@ -397,3 +397,42 @@ button.ghost {
   color: var(--muted);
   padding: 0 6px;
 }
+
+/* 画像编辑 */
+.unknown-note {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.persona-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.persona-line input:first-child {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.line-hidden-toggle {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: normal;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.persona-line button {
+  flex-shrink: 0;
+  padding: 4px 10px;
+  font-size: 12px;
+}

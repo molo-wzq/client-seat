@@ -39,8 +39,13 @@ suite("真实模型冒烟", () => {
 
   it("对「喂」给出理财经理开场并引用策略卡", { timeout: 300_000 }, async () => {
     const adapter = createAdapter();
+    // 只传可见信息:隐藏画像不越适配器边界(01 评审决议)。
     const output = await adapter.generateManagerTurn({
-      persona: SEED_PERSONA,
+      persona: {
+        id: SEED_PERSONA.id,
+        name: SEED_PERSONA.name,
+        visible: SEED_PERSONA.visible,
+      },
       publishedCards: SEED_CARDS,
       product: SEED_PRODUCT_CARD,
       history: [],

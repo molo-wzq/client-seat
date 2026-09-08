@@ -84,6 +84,16 @@ async function handleApi(
     respondJson(res, 200, await core.listPersonas());
     return;
   }
+  if (req.method === "POST" && pathname === "/api/personas") {
+    const input = body as { name?: string; visible?: string[]; hidden?: string[] };
+    const persona = await core.savePersona({
+      name: input.name || "",
+      visible: Array.isArray(input.visible) ? input.visible : [],
+      hidden: Array.isArray(input.hidden) ? input.hidden : [],
+    });
+    respondJson(res, 200, persona);
+    return;
+  }
   if (req.method === "POST" && pathname === "/api/conversations") {
     const conversation = await core.startConversation((body as { personaId?: string }).personaId || "");
     respondJson(res, 200, conversation);

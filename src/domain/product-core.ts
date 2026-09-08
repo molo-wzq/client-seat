@@ -9,6 +9,7 @@ import type {
   Material,
   MaterialDraftPatch,
   Persona,
+  PersonaInput,
   StrategyCard,
   VisiblePersona,
 } from "./types";
@@ -24,6 +25,8 @@ export interface ProductCore {
   publishCards(materialId: string, cardIds: string[]): Promise<Material>;
   /** 人工修改素材草稿:纠正说话人、编辑分析、编辑未发布的策略卡。 */
   updateMaterialDraft(materialId: string, patch: MaterialDraftPatch): Promise<Material>;
+  /** 从预设或修改后的属性保存一位自定义生客;留空字段保持未知,不自动补全。 */
+  savePersona(input: PersonaInput): Promise<Persona>;
   listPersonas(): Promise<Persona[]>;
   startConversation(personaId: string): Promise<Conversation>;
   getConversation(conversationId: string): Promise<Conversation>;
@@ -56,8 +59,12 @@ export function createProductCore(deps: {
     return materials.flatMap((m) => m.cards.filter((c) => c.status === "published"));
   }
 
-  function findSeedPersona(personaId: string): Persona {
-    const persona = [SEED_PERSONA].find((p) => p.id === personaId);
+  async function listAllPersonas(): Promise<Persona[]> {
+    return [SEED_PERSONA, ...(await storage.listPersonas())];
+  }
+
+  async function requirePersona(personaId: string): Promise<Persona> {
+    const persona = (await listAllPersonas()).find((p) => p.id === personaId);
     if (!persona) throw new Error(`画像不存在:${personaId}`);
     return persona;
   }
@@ -198,12 +205,24 @@ export function createProductCore(deps: {
     },
 
     async listPersonas() {
-      // 种子画像;issue 03 扩展自定义画像时在此并入存储的画像。
-      return [SEED_PERSONA];
+      // 预设画像在前,自定义画像按保存顺序并入;新增预设只改种子数据。
+      return listAllPersonas();
+    },
+
+    async savePersona(input) {
+      const persona: Persona = {
+        id: randomId(),
+        name: input.name.trim() || "自定义生客",
+        // 只做去空格与去空行;不存在的属性保持未知,不自动补全。
+        visible: input.visible.map((line) => line.trim()).filter(Boolean),
+        hidden: input.hidden.map((line) => line.trim()).filter(Boolean),
+      };
+      await storage.savePersona(persona);
+      return persona;
     },
 
     async startConversation(personaId) {
-      const persona = findSeedPersona(personaId);
+      await requirePersona(personaId);
       const conversation: Conversation = {
         id: randomId(),
         personaId,
@@ -225,7 +244,7 @@ export function createProductCore(deps: {
       const customerText = text.trim();
       if (!customerText) throw new Error("客户发言为空");
 
-      const persona = toVisiblePersona(findSeedPersona(conversation.personaId));
+      const persona = toVisiblePersona(await requirePersona(conversation.personaId));
 
       const history = conversation.turns;
       const output = await dialogue.generateManagerTurn({

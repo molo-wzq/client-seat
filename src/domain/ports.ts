@@ -4,6 +4,8 @@ import type {
   ConversationTurn,
   Material,
   MaterialDraftPatch,
+  Persona,
+  PersonaInput,
   StrategyCard,
   VirtualProductCard,
   VisiblePersona,
@@ -63,6 +65,8 @@ export interface ProductStorage {
   getMaterial(id: string): Promise<Material | null>;
   saveConversation(conversation: Conversation): Promise<void>;
   getConversation(id: string): Promise<Conversation | null>;
+  savePersona(persona: Persona): Promise<void>;
+  listPersonas(): Promise<Persona[]>;
 }
 
 export function randomId(): string {

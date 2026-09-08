@@ -54,6 +54,13 @@ export interface Persona {
   hidden: string[];
 }
 
+/** 自定义画像输入:提交什么就保存什么,留空字段保持未知,不自动补全。 */
+export interface PersonaInput {
+  name: string;
+  visible: string[];
+  hidden: string[];
+}
+
 /** 对话生成可读的画像视图:仅含可见信息,隐藏信息不跨过适配器边界。 */
 export interface VisiblePersona {
   id: string;

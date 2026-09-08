@@ -27,7 +27,7 @@ export function assembleManagerSystemPrompt(input: Pick<
 
 ## 可见客户信息(你已知)
 
-${persona.visible.map((line) => `- ${line}`).join("\n")}
+${persona.visible.length ? persona.visible.map((line) => `- ${line}`).join("\n") : "(暂无已知资料)"}
 
 此外你对客户一无所知。客户的资金安排、态度原因等信息只能通过对话获知,不得编造或假设。
 
