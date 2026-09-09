@@ -58,3 +58,20 @@ describe("素材到模拟通话的核心闭环", () => {
     expect(screen.queryByText(SCORING_PATTERN)).not.toBeInTheDocument();
   });
 });
+
+describe("快速开始", () => {
+  it("跳过素材流程直接进对话,并可立即开始一轮对练", async () => {
+    const user = userEvent.setup();
+    const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+
+    render(<App api={api} />);
+    await user.click(screen.getByRole("button", { name: "快速开始一通对话" }));
+
+    // 直接进入对话步;种子策略卡已由产品缝兜底发布
+    expect(await screen.findByRole("heading", { name: "模拟通话" })).toBeInTheDocument();
+    const reply = screen.getByLabelText("客户回复");
+    await user.type(reply, "喂");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    expect(await screen.findByText(/我是咱们银行的客户经理/)).toBeInTheDocument();
+  });
+});

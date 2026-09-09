@@ -2,7 +2,9 @@ import { useState } from "react";
 import { SEED_TRANSCRIPT } from "../domain/seed";
 import type { CaseAnalysis, Material, MaterialTurn, StrategyCard } from "../domain/types";
 import type { ProductApi } from "../product/product-api";
+import { BusyHint } from "./BusyHint";
 import { AnalysisEditor, CardEditor, TurnsEditor } from "./MaterialEditors";
+import { useBusyTask } from "./use-busy-task";
 
 const STATUS_TEXT: Record<Material["cards"][number]["status"], string> = {
   draft: "草稿",
@@ -18,22 +20,9 @@ export function MaterialStep({
 }) {
   const [transcript, setTranscript] = useState(SEED_TRANSCRIPT);
   const [material, setMaterial] = useState<Material | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, busyHint, error, run } = useBusyTask("正在保存…");
   const [editingAnalysis, setEditingAnalysis] = useState(false);
   const [editingCardId, setEditingCardId] = useState<string | null>(null);
-
-  async function run(action: () => Promise<void>) {
-    setBusy(true);
-    setError(null);
-    try {
-      await action();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function saveTurns(turns: MaterialTurn[]) {
     if (!material) return;
@@ -62,14 +51,14 @@ export function MaterialStep({
     if (!material) return;
     await run(async () => {
       onPublished(await api.publishMaterialCards(material.id));
-    });
+    }, "正在发布策略卡…");
   }
 
   async function publishCard(cardId: string) {
     if (!material) return;
     await run(async () => {
       setMaterial(await api.publishCards(material.id, [cardId]));
-    });
+    }, "正在发布策略卡…");
   }
 
   const draftCount = material?.cards.filter((c) => c.status === "draft").length ?? 0;
@@ -90,10 +79,19 @@ export function MaterialStep({
         placeholder="粘贴电话转写稿,每行一句,如「T01 经理:……」"
       />
       <div className="actions">
-        <button onClick={() => run(() => api.analyzeTranscript({ transcript }).then(setMaterial))} disabled={busy || !transcript.trim()}>
+        <button
+          onClick={() =>
+            run(
+              () => api.analyzeTranscript({ transcript }).then(setMaterial),
+              "正在分析转写稿,约需 10–20 秒…",
+            )
+          }
+          disabled={busy || !transcript.trim()}
+        >
           {busy ? "分析中…" : "生成策略卡"}
         </button>
       </div>
+      {busy && <BusyHint text={busyHint} />}
       {error && (
         <p role="alert" className="error">
           {error}

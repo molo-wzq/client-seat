@@ -76,6 +76,11 @@ body {
   font-size: 14px;
 }
 
+.hint-inline {
+  color: var(--muted);
+  font-size: 13px;
+}
+
 label {
   display: block;
   font-size: 14px;
@@ -118,6 +123,31 @@ button:disabled {
 .error {
   color: var(--warn);
   font-size: 14px;
+}
+
+.busy-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  border: 2px solid var(--line);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .ended-note {

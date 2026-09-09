@@ -38,6 +38,7 @@ export function createHttpProductApi(baseUrl = ""): ProductApi {
       request("/personas", { method: "POST", body: JSON.stringify(input) }),
     startConversation: (personaId) =>
       request("/conversations", { method: "POST", body: JSON.stringify({ personaId }) }),
+    quickStart: () => request("/quickstart", { method: "POST" }),
     getConversation: (conversationId) =>
       request(`/conversations/${encodeURIComponent(conversationId)}`),
     sendCustomerTurn: (conversationId, text) =>

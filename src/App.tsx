@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ConversationResult, Material } from "./domain/types";
 import type { ProductApi } from "./product/product-api";
+import { BusyHint } from "./ui/BusyHint";
 import { MaterialStep } from "./ui/MaterialStep";
 import { PersonaStep } from "./ui/PersonaStep";
 import { CallStep } from "./ui/CallStep";
@@ -20,6 +21,22 @@ export function App({ api }: { api: ProductApi }) {
   const [material, setMaterial] = useState<Material | null>(null);
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [result, setResult] = useState<ConversationResult | null>(null);
+  const [quickBusy, setQuickBusy] = useState(false);
+  const [quickError, setQuickError] = useState<string | null>(null);
+
+  async function quickStart() {
+    setQuickBusy(true);
+    setQuickError(null);
+    try {
+      const conversation = await api.quickStart();
+      setConversationId(conversation.id);
+      setStep("call");
+    } catch (e) {
+      setQuickError((e as Error).message);
+    } finally {
+      setQuickBusy(false);
+    }
+  }
 
   function restart() {
     setStep("material");
@@ -47,6 +64,18 @@ export function App({ api }: { api: ProductApi }) {
           </span>
         ))}
       </nav>
+      <div className="actions">
+        <button className="ghost" onClick={quickStart} disabled={quickBusy}>
+          快速开始一通对话
+        </button>
+        <span className="hint-inline">跳过素材流程,用内置生客与种子策略直接开练</span>
+      </div>
+      {quickBusy && <BusyHint text="正在准备对话…" />}
+      {quickError && (
+        <p role="alert" className="error">
+          {quickError}
+        </p>
+      )}
 
       {step === "material" && (
         <MaterialStep

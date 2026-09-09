@@ -94,6 +94,10 @@ async function handleApi(
     respondJson(res, 200, persona);
     return;
   }
+  if (req.method === "POST" && pathname === "/api/quickstart") {
+    respondJson(res, 200, await core.quickStart());
+    return;
+  }
   if (req.method === "POST" && pathname === "/api/conversations") {
     const conversation = await core.startConversation((body as { personaId?: string }).personaId || "");
     respondJson(res, 200, conversation);

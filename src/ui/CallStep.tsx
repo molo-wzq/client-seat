@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { MAX_MANAGER_TURNS } from "../domain/product-core";
 import type { Conversation, ConversationResult } from "../domain/types";
 import type { ProductApi } from "../product/product-api";
+import { BusyHint } from "./BusyHint";
 
 export function CallStep({
   api,
@@ -15,6 +16,7 @@ export function CallStep({
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [busyHint, setBusyHint] = useState("理财经理正在思考…");
   const [error, setError] = useState<string | null>(null);
   const logRef = useRef<HTMLOListElement>(null);
 
@@ -41,12 +43,28 @@ export function CallStep({
   async function send() {
     const customerText = text.trim();
     if (!customerText || !conversation || ended) return;
+    // 乐观更新:客户话立即上屏,模型 5–15 秒的等待不显得卡死;失败回滚。
+    const previous = conversation;
+    setConversation({
+      ...conversation,
+      turns: [
+        ...conversation.turns,
+        {
+          number: Math.max(0, ...conversation.turns.map((t) => t.number)) + 1,
+          speaker: "customer" as const,
+          text: customerText,
+        },
+      ],
+    });
+    setText("");
     setBusy(true);
+    setBusyHint("理财经理正在思考…");
     setError(null);
     try {
       setConversation(await api.sendCustomerTurn(conversationId, customerText));
-      setText("");
     } catch (e) {
+      setConversation(previous);
+      setText(customerText);
       setError((e as Error).message);
     } finally {
       setBusy(false);
@@ -55,6 +73,7 @@ export function CallStep({
 
   async function finish() {
     setBusy(true);
+    setBusyHint("正在生成对练结果…");
     setError(null);
     try {
       if (conversation?.status === "ongoing") {
@@ -91,6 +110,7 @@ export function CallStep({
           </li>
         ))}
       </ol>
+      {busy && <BusyHint text={busyHint} />}
       {!ended && (
         <div className="reply-box">
           <label htmlFor="customer-reply">客户回复</label>

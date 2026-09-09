@@ -20,6 +20,8 @@ export interface ProductApi {
   savePersona(input: PersonaInput): Promise<Persona>;
   listPersonas(): Promise<Persona[]>;
   startConversation(personaId: string): Promise<Conversation>;
+  /** 快速开始:跳过素材流程,用内置画像与已发布策略卡(空库时种子兜底)直接开一通对话。 */
+  quickStart(): Promise<Conversation>;
   getConversation(conversationId: string): Promise<Conversation>;
   sendCustomerTurn(conversationId: string, text: string): Promise<Conversation>;
   finishConversation(conversationId: string): Promise<Conversation>;

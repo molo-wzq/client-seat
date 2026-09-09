@@ -1,4 +1,4 @@
-import { SEED_PERSONAS, SEED_PRODUCT_CARD } from "./seed";
+import { buildSeedMaterial, SEED_MATERIAL_ID, SEED_MATERIAL_TITLE, SEED_PERSONAS, SEED_PRODUCT_CARD } from "./seed";
 import { randomId } from "./ports";
 import { numberTurns, parseTranscriptTurns, resolveTurnRange } from "./transcript";
 import type { CopywritingPort, DialoguePort, ProductStorage } from "./ports";
@@ -29,6 +29,8 @@ export interface ProductCore {
   savePersona(input: PersonaInput): Promise<Persona>;
   listPersonas(): Promise<Persona[]>;
   startConversation(personaId: string): Promise<Conversation>;
+  /** 快速开始:库中无已发布策略卡时以种子素材(已发布态)兜底,用第一个内置画像直接开一通对话;幂等。 */
+  quickStart(): Promise<Conversation>;
   getConversation(conversationId: string): Promise<Conversation>;
   sendCustomerTurn(conversationId: string, text: string): Promise<Conversation>;
   finishConversation(conversationId: string): Promise<Conversation>;
@@ -238,6 +240,35 @@ export function createProductCore(deps: {
 
     async getConversation(conversationId) {
       return requireConversation(conversationId);
+    },
+
+    async quickStart() {
+      if ((await listPublishedCards()).length === 0) {
+        const existing = (await storage.listMaterials()).find(
+          (m) => m.title === SEED_MATERIAL_TITLE,
+        );
+        if (existing) {
+          // 种子素材已在库但卡未发布:直接发布其草稿卡。
+          const draftIds = existing.cards.filter((c) => c.status === "draft").map((c) => c.id);
+          if (draftIds.length > 0) await this.publishCards(existing.id, draftIds);
+        } else {
+          const seed = buildSeedMaterial();
+          const materialId = SEED_MATERIAL_ID;
+          await storage.saveMaterial({
+            ...seed,
+            id: materialId,
+            createdAt: new Date().toISOString(),
+            cards: seed.cards.map((card) => ({
+              ...card,
+              status: "published" as const,
+              sourceExcerpt: { ...card.sourceExcerpt, materialId },
+            })),
+          });
+        }
+      }
+      const persona = SEED_PERSONAS[0];
+      if (!persona) throw new Error("缺少内置画像,无法快速开始");
+      return this.startConversation(persona.id);
     },
 
     async sendCustomerTurn(conversationId, text) {

@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Persona } from "../domain/types";
 import type { ProductApi } from "../product/product-api";
+import { BusyHint } from "./BusyHint";
+import { useBusyTask } from "./use-busy-task";
 
 /** 画像编辑中的一条属性:用户决定它对 AI 理财经理是否可见。 */
 interface PersonaLine {
@@ -25,8 +27,7 @@ export function PersonaStep({
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ name: string; lines: PersonaLine[] } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const { busy, busyHint, error, setError, run } = useBusyTask("正在接通…");
 
   useEffect(() => {
     let cancelled = false;
@@ -44,18 +45,6 @@ export function PersonaStep({
   }, [api]);
 
   const selected = personas.find((p) => p.id === selectedId) ?? null;
-
-  async function run(action: () => Promise<void>) {
-    setBusy(true);
-    setError(null);
-    try {
-      await action();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function saveCustomPersona(): Promise<Persona> {
     if (!editing) throw new Error("没有正在编辑的画像");
@@ -96,6 +85,7 @@ export function PersonaStep({
           {error}
         </p>
       )}
+      {busy && <BusyHint text={busyHint} />}
 
       {!editing && (
         <div className="persona-list">
@@ -198,7 +188,7 @@ export function PersonaStep({
           <div className="actions">
             <button
               type="button"
-              onClick={() => run(async () => void (await saveCustomPersona()))}
+              onClick={() => run(async () => void (await saveCustomPersona()), "正在保存画像…")}
               disabled={busy}
             >
               保存为我的生客

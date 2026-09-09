@@ -11,6 +11,9 @@ import { parseTranscriptTurns, numberTurns } from "./transcript";
 
 export const SEED_MATERIAL_TITLE = "素材01:存量生客首次触达(拉新资金活动)";
 
+/** 快速开始兜底入库的种子素材固定 id(幂等判定用)。 */
+export const SEED_MATERIAL_ID = "seed-c01";
+
 /** 素材01 转写稿(已脱敏),来自 l1/transcripts/01-存量生客首次触达.md。 */
 export const SEED_TRANSCRIPT = [
   "T01 经理:哎,您好,客户A您好,早上好。我是这个某银行您的客户经理。就是您现在在忙吗?有空吗?就是有两个信息,想跟您说。",
