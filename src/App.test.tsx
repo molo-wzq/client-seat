@@ -74,3 +74,61 @@ describe("快速开始", () => {
     expect(await screen.findByText(/我是咱们银行的客户经理/)).toBeInTheDocument();
   });
 });
+
+describe("进行中对局可找回", () => {
+  async function startOngoingCall(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: "快速开始一通对话" }));
+    expect(await screen.findByRole("heading", { name: /对局/ })).toBeInTheDocument();
+    const reply = screen.getByLabelText("客户回复");
+    await user.type(reply, "喂");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    await screen.findByText(/我是咱们银行的客户经理/);
+  }
+
+  it("另接新电话后,旧的进行中通话仍可从通话记录回到桌面继续", async () => {
+    const user = userEvent.setup();
+    const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+
+    render(<App api={api} />);
+    await startOngoingCall(user);
+
+    await user.click(screen.getByRole("button", { name: "新对局(布置)" }));
+    await user.click(screen.getByRole("button", { name: /到期资金·稳健阿姨/ }));
+    await user.click(screen.getByRole("button", { name: "接通电话,开始对局" }));
+    expect(await screen.findByLabelText("客户回复")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /通话记录/ }));
+    expect((await screen.findAllByText("进行中")).length).toBe(2);
+    await user.click(screen.getByRole("button", { name: /代发·资金在证券/ }));
+
+    expect(await screen.findByLabelText("客户回复")).toBeInTheDocument();
+    expect(screen.getByText(/我是咱们银行的客户经理/)).toBeInTheDocument();
+  });
+
+  it("离开并结束另一通电话后,左栏「进行中的通话」可从目录找回旧通话", async () => {
+    const user = userEvent.setup();
+    const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+
+    render(<App api={api} />);
+    await startOngoingCall(user);
+
+    await user.click(screen.getByRole("button", { name: "新对局(布置)" }));
+    await user.click(screen.getByRole("button", { name: /到期资金·稳健阿姨/ }));
+    await user.click(screen.getByRole("button", { name: "接通电话,开始对局" }));
+    const reply = await screen.findByLabelText("客户回复");
+    await user.type(reply, "喂");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    await screen.findByText(/我是咱们银行的客户经理/);
+    await user.click(screen.getByRole("button", { name: "结束并查看结果" }));
+    expect(await screen.findByRole("heading", { name: "这通电话是怎样推进的" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "再来一局" }));
+    expect(await screen.findByRole("heading", { name: /对局布置/ })).toBeInTheDocument();
+
+    const resume = screen.getByRole("button", { name: "进行中的通话" });
+    expect(resume).toBeEnabled();
+    await user.click(resume);
+    expect(await screen.findByLabelText("客户回复")).toBeInTheDocument();
+    expect(screen.getByText(/我是咱们银行的客户经理/)).toBeInTheDocument();
+  });
+});

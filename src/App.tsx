@@ -57,6 +57,12 @@ export function App({ api }: { api: ProductApi }) {
     [materials],
   );
   const seatedPersona = personas.find((p) => p.id === conversation?.personaId) ?? null;
+  // 目录按创建时间倒序;取最近一通进行中的通话,用于离开对局后找回。
+  const ongoingCall = conversations.find((c) => c.status === "ongoing") ?? null;
+
+  async function resumeOngoing() {
+    if (ongoingCall) await openHistory(ongoingCall);
+  }
 
   async function enterTable(next: Conversation) {
     setConversation(next);
@@ -120,9 +126,11 @@ export function App({ api }: { api: ProductApi }) {
         view={view}
         materialCount={materials.length}
         cardCount={allCards.length}
-        historyCount={conversations.filter((c) => c.status === "ended").length}
+        historyCount={conversations.length}
         sessionStatus={conversation?.status ?? null}
+        hasOngoing={Boolean(ongoingCall)}
         onNavigate={setView}
+        onResumeOngoing={() => void resumeOngoing()}
         onQuickStart={() => void quickStart()}
         quickBusy={quickBusy}
       />

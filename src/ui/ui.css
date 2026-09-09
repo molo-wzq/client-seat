@@ -191,6 +191,11 @@ button:disabled {
   color: var(--accent);
 }
 
+.badge-ongoing {
+  background: #e6f4ea;
+  color: #1e7a3c;
+}
+
 .card dl,
 .result-summary {
   margin: 0;

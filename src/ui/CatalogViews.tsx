@@ -96,14 +96,27 @@ export function HistoryView({
   personas: Persona[];
   onOpen: (conversation: Conversation) => void | Promise<void>;
 }) {
+  // 进行中的通话排在最前,保证离开对局后总能从这份列表找回。
+  const ongoing = conversations.filter((c) => c.status === "ongoing");
   const ended = conversations.filter((c) => c.status === "ended");
   return (
     <section className="act" aria-labelledby="history-title">
-      <h2 id="history-title">历史通话</h2>
-      {ended.length === 0 ? (
-        <p className="hint">还没有结束的通话。</p>
+      <h2 id="history-title">通话记录</h2>
+      {conversations.length === 0 ? (
+        <p className="hint">还没有通话。接通一通电话后会出现在这里。</p>
       ) : (
         <ul className="catalog-list">
+          {ongoing.map((conversation) => {
+            const persona = personas.find((p) => p.id === conversation.personaId);
+            return (
+              <li key={conversation.id}>
+                <button type="button" className="catalog-item" onClick={() => void onOpen(conversation)}>
+                  {persona?.name ?? "未知生客"}
+                  <span className="badge badge-ongoing">进行中</span>
+                </button>
+              </li>
+            );
+          })}
           {ended.map((conversation) => {
             const persona = personas.find((p) => p.id === conversation.personaId);
             return (

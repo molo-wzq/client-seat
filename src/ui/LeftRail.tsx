@@ -6,7 +6,9 @@ export function LeftRail({
   cardCount,
   historyCount,
   sessionStatus,
+  hasOngoing,
   onNavigate,
+  onResumeOngoing,
   onQuickStart,
   quickBusy,
 }: {
@@ -15,7 +17,10 @@ export function LeftRail({
   cardCount: number;
   historyCount: number;
   sessionStatus: "ongoing" | "ended" | null;
+  /** 目录里存在进行中的通话(内存 session 已不在时,用于找回)。 */
+  hasOngoing?: boolean;
   onNavigate: (view: AppView) => void;
+  onResumeOngoing: () => void;
   onQuickStart: () => void;
   quickBusy: boolean;
 }) {
@@ -31,8 +36,14 @@ export function LeftRail({
       <nav className="rail-nav">
         <button
           className={view === "table" || view === "postgame" ? "rail-item current" : "rail-item"}
-          onClick={() => onNavigate(sessionStatus === "ended" ? "postgame" : "table")}
-          disabled={!sessionStatus}
+          onClick={() => {
+            if (sessionStatus) {
+              onNavigate(sessionStatus === "ended" ? "postgame" : "table");
+            } else {
+              onResumeOngoing();
+            }
+          }}
+          disabled={!sessionStatus && !hasOngoing}
         >
           进行中的通话
         </button>
@@ -58,7 +69,7 @@ export function LeftRail({
           className={view === "history" ? "rail-item current" : "rail-item"}
           onClick={() => onNavigate("history")}
         >
-          历史通话({historyCount})
+          通话记录({historyCount})
         </button>
       </nav>
     </aside>
