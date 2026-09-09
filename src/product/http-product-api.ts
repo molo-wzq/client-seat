@@ -19,28 +19,6 @@ export function createHttpProductApi(baseUrl = ""): ProductApi {
   }
 
   return {
-    transcribeAudio: async (input) => {
-      const response = await fetch(`${baseUrl}/api/materials/transcribe`, {
-        method: "POST",
-        headers: {
-          "Content-Type": input.mediaType || "application/octet-stream",
-          "X-File-Name": encodeURIComponent(input.fileName),
-        },
-        body: input.bytes.buffer.slice(
-          input.bytes.byteOffset,
-          input.bytes.byteOffset + input.bytes.byteLength,
-        ) as ArrayBuffer,
-      });
-      const body = await response.json().catch(() => null);
-      if (!response.ok) {
-        const message =
-          body && typeof body === "object" && "error" in body
-            ? String((body as { error: unknown }).error)
-            : `请求失败(HTTP ${response.status})`;
-        throw new Error(message);
-      }
-      return body as { transcript: string };
-    },
     analyzeTranscript: (input) =>
       request("/materials/analyze", { method: "POST", body: JSON.stringify(input) }),
     publishMaterialCards: (materialId) =>

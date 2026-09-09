@@ -22,18 +22,6 @@ export interface CopywritingPort {
   analyzeTranscript(transcript: string): Promise<TranscriptAnalysis>;
 }
 
-/** 单段录音转写输入。录音只跨过转写端口,不作为素材持久化。 */
-export interface AudioInput {
-  fileName: string;
-  mediaType: string;
-  bytes: Uint8Array;
-}
-
-/** 录音转写:输出可由用户校对、再进入现有素材分析流程的文字。 */
-export interface AudioTranscriptionPort {
-  transcribeAudio(input: AudioInput): Promise<string>;
-}
-
 export interface TranscriptAnalysis {
   analysis: CaseAnalysis;
   /** 未经发布确认的卡,由领域层落库为草稿。 */

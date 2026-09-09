@@ -25,26 +25,6 @@ const STUB_PERSONA: Persona = {
 };
 
 describe("加载提示", () => {
-  it("素材步:录音转写期间显示等待提示,完成后文字进入可校对区域", async () => {
-    const pending = deferred<{ transcript: string }>();
-    const api = { transcribeAudio: () => pending.promise } as unknown as ProductApi;
-    const user = userEvent.setup();
-    render(<MaterialStep api={api} onPublished={() => {}} />);
-
-    await user.upload(
-      screen.getByLabelText("优秀电话录音"),
-      new File(["audio"], "优秀案例.mp3", { type: "audio/mpeg" }),
-    );
-    await user.click(screen.getByRole("button", { name: "转成文字" }));
-    expect(await screen.findByRole("status")).toHaveTextContent("正在转写录音,可能需要几分钟…");
-
-    pending.resolve({ transcript: "T01 经理:您好。\nT02 客户:您说。" });
-    expect(await screen.findByLabelText("电话转写稿")).toHaveValue(
-      "T01 经理:您好。\nT02 客户:您说。",
-    );
-    expect(screen.getByRole("status")).toHaveTextContent("转写完成");
-  });
-
   it("素材步:分析期间显示「正在分析转写稿」", async () => {
     const pending = deferred<Material>();
     const api = { analyzeTranscript: () => pending.promise } as unknown as ProductApi;

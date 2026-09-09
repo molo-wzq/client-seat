@@ -1,8 +1,6 @@
 import { buildSeedMaterial, SEED_CARDS, SEED_CARD_IDS, SEED_TRANSCRIPT } from "../domain/seed";
 import { parseTranscriptTurns } from "../domain/transcript";
 import type {
-  AudioInput,
-  AudioTranscriptionPort,
   CopywritingPort,
   DialoguePort,
   ManagerTurnInput,
@@ -28,12 +26,7 @@ const FUND_CLUE = /(证券|股|资产|资金)/;
  * (SC2 后半)→ 默认分支按画像是否有资金线索选择 SC2 现状了解或 SC3 直接给事由。
  * 产品事实只取自种子产品卡;声称使用的卡必须在本轮检索到的已发布卡内。
  */
-export class FakeModelAdapter implements AudioTranscriptionPort, CopywritingPort, DialoguePort {
-  async transcribeAudio(input: AudioInput): Promise<string> {
-    if (input.bytes.byteLength === 0) throw new Error("录音文件为空");
-    return "T01 经理:您好,我是咱们银行的客户经理。\nT02 客户:您好,您说。";
-  }
-
+export class FakeModelAdapter implements CopywritingPort, DialoguePort {
   async analyzeTranscript(transcript: string): Promise<TranscriptAnalysis> {
     // 种子素材按原样识别;其他输入同样返回种子分析(伪实现不做真实提炼)。
     if (transcript.trim() !== SEED_TRANSCRIPT.trim()) {

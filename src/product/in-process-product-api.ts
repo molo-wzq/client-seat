@@ -1,5 +1,5 @@
 import { createProductCore } from "../domain/product-core";
-import type { AudioTranscriptionPort, CopywritingPort, DialoguePort, ProductStorage } from "../domain/ports";
+import type { CopywritingPort, DialoguePort, ProductStorage } from "../domain/ports";
 import type { Conversation, Material, Persona } from "../domain/types";
 import type { ProductApi } from "./product-api";
 
@@ -38,11 +38,10 @@ export class InMemoryStorage implements ProductStorage {
 }
 
 export function createInProcessProductApi(input: {
-  adapter: AudioTranscriptionPort & CopywritingPort & DialoguePort;
+  adapter: CopywritingPort & DialoguePort;
   storage?: ProductStorage;
 }): ProductApi {
   const core = createProductCore({
-    transcription: input.adapter,
     copywriting: input.adapter,
     dialogue: input.adapter,
     storage: input.storage ?? new InMemoryStorage(),
