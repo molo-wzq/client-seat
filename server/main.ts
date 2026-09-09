@@ -2,11 +2,7 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import {
-  DEFAULT_MODEL_BASE_URL,
-  DEFAULT_MODEL_NAME,
-  OpenAICompatibleModelAdapter,
-} from "../src/adapters/openai-model-adapter";
+import { OpenAICompatibleModelAdapter } from "../src/adapters/openai-model-adapter";
 import { FakeModelAdapter } from "../src/adapters/fake-model-adapter";
 import type { CopywritingPort, DialoguePort } from "../src/domain/ports";
 import { createProductCore } from "../src/domain/product-core";
@@ -14,6 +10,7 @@ import type { MaterialDraftPatch } from "../src/domain/types";
 import { isMaterialKind } from "../src/domain/types";
 import { FileStorage } from "./file-store";
 import { loadEnvFile } from "./env";
+import { readLlmConfig } from "./model-config";
 
 loadEnvFile();
 
@@ -21,15 +18,12 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.env.PORT || 5175);
 const DATA_FILE = path.join(ROOT, "data", "db.json");
 
-const apiKey = process.env.MIMO_API_KEY;
-const adapter: CopywritingPort & DialoguePort = apiKey
-  ? new OpenAICompatibleModelAdapter({
-      apiKey,
-      baseUrl: process.env.MIMO_BASE_URL || DEFAULT_MODEL_BASE_URL,
-      model: process.env.MIMO_MODEL || DEFAULT_MODEL_NAME,
-    })
+// 对话/文案分析共用 LLM 配置;转写走独立 CLI(server/audio-intake.ts),不在此组合根。
+const llm = readLlmConfig(process.env);
+const adapter: CopywritingPort & DialoguePort = llm.apiKey
+  ? new OpenAICompatibleModelAdapter({ apiKey: llm.apiKey, baseUrl: llm.baseUrl, model: llm.model })
   : new FakeModelAdapter();
-if (!apiKey) {
+if (!llm.apiKey) {
   console.warn(
     "[phone-coach] 未配置 MIMO_API_KEY,语言模型使用内置伪实现(仅演示);配置见 README.md",
   );

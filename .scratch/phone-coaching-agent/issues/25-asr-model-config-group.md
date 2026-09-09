@@ -4,7 +4,7 @@
 
 **Blocked by:** None.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 ## 用户问题(架构审计会话确认)
 
@@ -30,3 +30,5 @@
 - 后:填 `ASR_API_KEY/ASR_BASE_URL/ASR_MODEL` 即切转写供应商,LLM 组不动;只填 `MIMO_*` 时行为与现在逐字节一致;契约单测覆盖四态。
 
 ## Comments
+
+- 2026-09-09 已实现:新增 `server/model-config.ts`(LLM 组 `MIMO_*` 不变;ASR 组 `ASR_API_KEY/ASR_BASE_URL/ASR_MODEL`,未填回退 LLM 组,model 兼容历史 `MIMO_ASR_MODEL` 且不回退到对话模型);`server/audio-intake.ts` 与 `server/main.ts` 改走解析函数;README 环境变量段说明两组配置与回退;单测 6 条覆盖四态 + 历史变量兼容。只填 `MIMO_*` 时行为与之前一致(全量 84 测试通过)。待人工验收。

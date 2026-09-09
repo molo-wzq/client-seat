@@ -1,10 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { DEFAULT_MODEL_BASE_URL, DEFAULT_MODEL_NAME } from "../src/adapters/openai-model-adapter";
 import { loadEnvFile } from "./env";
+import { readAsrConfig, readLlmConfig } from "./model-config";
 import {
-  DEFAULT_ASR_MODEL,
   MAX_AUDIO_BYTES,
   MimoAudioTranscriber,
   MimoSpeakerDiarizer,
@@ -78,22 +77,25 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  const apiKey = process.env.MIMO_API_KEY;
-  if (!apiKey) throw new Error("缺少 MIMO_API_KEY,无法执行后台录音转写");
+  // 转写(ASR)与说话人整理(LLM)分开配置:转写可整体换供应商,整理是文本任务留在 LLM 组。
+  const asr = readAsrConfig(process.env);
+  const llm = readLlmConfig(process.env);
+  if (!asr.apiKey) throw new Error("缺少转写模型密钥:配 ASR_API_KEY,或共用对话配置 MIMO_API_KEY");
+  if (!llm.apiKey) throw new Error("缺少说话人整理模型密钥:配 MIMO_API_KEY");
 
   console.log(`开始后台转写:${path.basename(audioPath)}(耗时可能为数分钟)`);
   const outputPath = await ingestAudio({
     audioPath,
     outputPath: optionValue(args, "--out"),
     transcriber: new MimoAudioTranscriber({
-      apiKey,
-      baseUrl: process.env.MIMO_BASE_URL || DEFAULT_MODEL_BASE_URL,
-      model: process.env.MIMO_ASR_MODEL || DEFAULT_ASR_MODEL,
+      apiKey: asr.apiKey,
+      baseUrl: asr.baseUrl,
+      model: asr.model,
     }),
     diarizer: new MimoSpeakerDiarizer({
-      apiKey,
-      baseUrl: process.env.MIMO_BASE_URL || DEFAULT_MODEL_BASE_URL,
-      model: process.env.MIMO_MODEL || DEFAULT_MODEL_NAME,
+      apiKey: llm.apiKey,
+      baseUrl: llm.baseUrl,
+      model: llm.model,
     }),
   });
   console.log(`转写完成:${outputPath}`);
