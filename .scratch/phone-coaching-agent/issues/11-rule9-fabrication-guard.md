@@ -22,3 +22,5 @@
 测试:`src/adapters/prompts.test.ts`(6 项,断言提示词内容);`src/adapters/fake-model-adapter.test.ts`(2 项,钉住伪适配器开场分支——该分支 HEAD 已有,本次补钉);真模型回归加入 `src/smoke.real.test.ts`(MIMO_SMOKE=1 触发)。伪适配器钉子与真模型冒烟共用 `src/test/manager-reply-guards.ts` 的防护定义(第二人称+代发句式模式,不禁「面向代发客户的活动」类产品事实表述;占位符按字面括号 token 断言)。demo-03 同场景(P03 开场)真模型共跑 4 次(3 次初版断言 + 1 次收紧后断言),均无身份断言与占位符。全量测试 47 过 3 跳过,typecheck 通过。
 
 评审备注(2026-09-09 双轴 code-review):状态沿用票 01–10 惯例置 `ready-for-human`(标签文档语义为"需人工实现",与 tracker 既有用法存在漂移,已向用户提出);checkbox 3 依赖手动门控的冒烟测试,验收时可再触发 `MIMO_SMOKE=1 npx vitest run src/smoke.real.test.ts` 复核。
+
+验收记录:业务口径经用户确认通过(2026-09-09)。

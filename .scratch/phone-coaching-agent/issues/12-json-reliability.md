@@ -21,3 +21,5 @@
 采样中的附带发现:模型偶发输出 usedCardId="无" 之类垃圾值——领域层 `product-core` 的已发布卡校验(`product-core.ts:268-275`)会将其剥除,策略路径不受污染,该不变量已由既有代码保障,本票不改。
 
 工具与记录:`l2/json-reliability-probe.ts`(probe/sample 两模式)、`l2/json-reliability-baseline.md`、`json-reliability-sample-before.json`、`json-reliability-sample-after.json`。样本与方法局限(双轴评审后补记):每组 12 轮为方向性证据(2/12 vs 0/12 无统计显著性),不作「已显著降低」的声明;降级判定用「元数据缺失」宽口径,票面「纯文本降级」为其主要子集;复跑命令:`npx tsx .scratch/phone-coaching-agent/l2/json-reliability-probe.ts sample "复核" [输出文件名]`。
+
+验收记录:业务口径经用户确认通过(2026-09-09)。
