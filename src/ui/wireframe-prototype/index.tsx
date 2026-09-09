@@ -6,7 +6,7 @@
  *       仅 dev 模式可见(App.tsx 门控);只读、假数据、不连真模型。
  *       变体 A 工作台双栏 / B 首页卡片流 / C 单页三区连续。
  */
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { SEED_CARDS, SEED_PERSONAS } from "../../domain/seed";
 import "./wireframe.css";
 
@@ -194,6 +194,25 @@ function VariantB() {
 
 const D_SEED_CARDS = SEED_CARDS.map((c) => ({ id: c.id, name: c.name }));
 
+/** 变体 D 全局外壳:借鉴变体 A 的左侧栏,三幕(布置/对局/结算)共用,静态展示。 */
+function DShell({ active, children }: { active: string; children: ReactNode }) {
+  return (
+    <div className="wf-d-shell">
+      <aside className="wf-side">
+        <div className="wf-title">电话对练</div>
+        <div className="wf-btn primary">⚡ 快速开始一通</div>
+        <div className={`wf-nav-item${active === "进行中" ? " active" : ""}`}>▶ 进行中的通话</div>
+        <div className={`wf-nav-item${active === "布置" ? " active" : ""}`}>新对局(布置)</div>
+        <div className="wf-nav-item">素材库(2)</div>
+        <div className="wf-nav-item">策略卡(3)</div>
+        <div className="wf-nav-item">历史通话(4)</div>
+        <div className="wf-note">全局导航常驻;右侧按对局阶段切换三幕内容。</div>
+      </aside>
+      <div className="wf-d-main">{children}</div>
+    </div>
+  );
+}
+
 function VariantD() {
   // 原型态:三幕全用本地状态,不连真模型。卡组机制已否决:策略卡维持"发布即全员上场",
   // 布置阶段唯一拖拽动作 = 画像入座。
@@ -213,6 +232,7 @@ function VariantD() {
 
   if (phase === "setup") {
     return (
+      <DShell active="布置">
       <div className="wf-d">
         <div className="wf-topbar">
           <div className="wf-title">第 1 幕 · 对局布置</div>
@@ -293,11 +313,13 @@ function VariantD() {
           借鉴:数字桌游的开局布置(Wingspan/Scythe 入座起手)。策略卡不拖不选:发布即全员上场,现有机制不变。
         </div>
       </div>
+      </DShell>
     );
   }
 
   if (phase === "table") {
     return (
+      <DShell active="进行中">
       <div className="wf-d">
         <div className="wf-topbar">
           <div className="wf-title">第 2 幕 · 对局</div>
@@ -358,10 +380,12 @@ function VariantD() {
           「本轮在用」的高亮对应游戏里的激活卡发光。
         </div>
       </div>
+      </DShell>
     );
   }
 
   return (
+    <DShell active="进行中">
     <div className="wf-d">
       <div className="wf-topbar">
         <div className="wf-title">第 3 幕 · 战后结算</div>
@@ -398,6 +422,7 @@ function VariantD() {
         任意一条可跳回对局现场看原文。这就是"复盘"的游戏化形态。
       </div>
     </div>
+    </DShell>
   );
 }
 

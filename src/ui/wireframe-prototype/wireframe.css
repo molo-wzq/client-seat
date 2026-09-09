@@ -224,6 +224,34 @@
 }
 
 /* ===== 变体 D:棋盘对练(拖拽) ===== */
+.wf-d-shell {
+  display: grid;
+  grid-template-columns: 200px 1fr;
+  min-height: 100vh;
+}
+
+.wf-d-shell .wf-side {
+  border-right: 1px solid #ccc;
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wf-d-shell .wf-side .wf-nav-item {
+  padding: 8px 10px;
+  border: 1px solid transparent;
+}
+
+.wf-d-shell .wf-side .wf-nav-item.active {
+  border: 1.5px solid #333;
+  font-weight: 700;
+}
+
+.wf-d-main {
+  min-width: 0;
+}
+
 .wf-d {
   padding: 16px 20px 60px;
   max-width: 1100px;
