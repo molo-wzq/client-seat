@@ -107,11 +107,6 @@ export function SetupAct({
           </article>
           <h3>自制素材入口</h3>
           <MaterialStep api={api} compact onPublished={onPublished} />
-          <div className="actions">
-            <button type="button" className="ghost" disabled title="L4 音频接入后可上传录音自动转写">
-              上传录音
-            </button>
-          </div>
         </div>
       </div>
       {customizing && (

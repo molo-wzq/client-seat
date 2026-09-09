@@ -71,9 +71,6 @@ export function ResultStep({
                 >
                   回放原文
                 </button>
-                <button type="button" className="ghost" disabled title="L4 音频接入后可播放对应原声片段">
-                  播放原声
-                </button>
               </div>
             </li>
           ))}
