@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "电话对练智能体 · 产品架构",
+    "output": "architecture-external.html",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "training-loop",
+        "label": "训练闭环",
+        "focus": [
+          "learners",
+          "console",
+          "dialogue",
+          "result"
+        ],
+        "note": "一次完整训练:演练生客电话,复盘策略路径。"
+      },
+      {
+        "id": "strategy-pipeline",
+        "label": "策略沉淀",
+        "focus": [
+          "console",
+          "extraction",
+          "strategy-db",
+          "dialogue"
+        ],
+        "note": "从优秀录音到可复用策略,再进入实战。"
+      },
+      {
+        "id": "privacy",
+        "label": "信息隔离",
+        "focus": [
+          "persona",
+          "dialogue",
+          "llm"
+        ],
+        "note": "隐藏信息不越界,模型只看到可见画像与已发布策略。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "learners",
+      "type": "external",
+      "label": "理财经理(学员)",
+      "sublabel": "扮演生客 · 实战演练",
+      "pos": [
+        30,
+        170
+      ],
+      "size": [
+        140,
+        80
+      ]
+    },
+    {
+      "id": "console",
+      "type": "frontend",
+      "label": "对练工作台",
+      "sublabel": "素材 → 画像 → 对话 → 结果",
+      "pos": [
+        240,
+        170
+      ],
+      "size": [
+        180,
+        80
+      ]
+    },
+    {
+      "id": "dialogue",
+      "type": "backend",
+      "label": "AI 对话引擎",
+      "sublabel": "AI 理财经理 · 模拟通话",
+      "pos": [
+        660,
+        170
+      ],
+      "size": [
+        200,
+        80
+      ]
+    },
+    {
+      "id": "llm",
+      "type": "cloud",
+      "label": "大语言模型服务",
+      "sublabel": "OpenAI 兼容 · 结构化输出",
+      "pos": [
+        1120,
+        170
+      ],
+      "size": [
+        190,
+        80
+      ]
+    },
+    {
+      "id": "extraction",
+      "type": "backend",
+      "label": "策略提炼",
+      "sublabel": "转写稿 → 策略卡",
+      "pos": [
+        235,
+        380
+      ],
+      "size": [
+        190,
+        76
+      ]
+    },
+    {
+      "id": "strategy-db",
+      "type": "database",
+      "label": "策略库",
+      "sublabel": "已发布卡 · 按信号检索",
+      "pos": [
+        495,
+        380
+      ],
+      "size": [
+        150,
+        76
+      ]
+    },
+    {
+      "id": "persona",
+      "type": "backend",
+      "label": "生客画像",
+      "sublabel": "可见注入 · 隐藏隔离",
+      "pos": [
+        675,
+        380
+      ],
+      "size": [
+        170,
+        76
+      ]
+    },
+    {
+      "id": "result",
+      "type": "backend",
+      "label": "结果追溯",
+      "sublabel": "策略路径 · 片段回溯",
+      "pos": [
+        1120,
+        380
+      ],
+      "size": [
+        190,
+        76
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "① 策略沉淀",
+      "wraps": [
+        "extraction",
+        "strategy-db"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "② 模拟演练",
+      "wraps": [
+        "console",
+        "dialogue",
+        "persona"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "③ 复盘追溯",
+      "wraps": [
+        "result"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "learners-to-console",
+      "from": "learners",
+      "to": "console",
+      "label": "四步操作",
+      "variant": "emphasis"
+    },
+    {
+      "id": "console-to-extraction",
+      "from": "console",
+      "to": "extraction",
+      "label": "提交转写稿",
+      "labelDy": 64
+    },
+    {
+      "id": "extraction-to-db",
+      "from": "extraction",
+      "to": "strategy-db",
+      "label": "审阅发布"
+    },
+    {
+      "id": "db-to-dialogue",
+      "from": "strategy-db",
+      "to": "dialogue",
+      "label": "检索已发布策略",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "persona-to-dialogue",
+      "from": "persona",
+      "to": "dialogue",
+      "label": "仅可见信息"
+    },
+    {
+      "id": "console-to-dialogue",
+      "from": "console",
+      "to": "dialogue",
+      "label": "输入「喂」开始"
+    },
+    {
+      "id": "dialogue-to-llm",
+      "from": "dialogue",
+      "to": "llm",
+      "label": "策略提示词 · JSON 输出"
+    },
+    {
+      "id": "dialogue-to-result",
+      "from": "dialogue",
+      "to": "result",
+      "label": "生成策略路径"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "训练闭环",
+      "items": [
+        "优秀录音 → 策略卡 → 模拟演练 → 复盘追溯,四步完成一次完整训练",
+        "学员扮演生客,从客户视角体验优秀打法",
+        "AI 理财经理面对不同生客画像自然推进或体面收口"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "AI 能力",
+      "items": [
+        "从转写稿提炼案例分析与可复用策略卡,人工审阅后发布",
+        "对话中按客户信号实时选用已发布策略,复用打法不照抄话术",
+        "结果页还原每轮使用的策略与原始素材片段,训练可复盘"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "数据与安全",
+      "items": [
+        "生客画像区分可见/隐藏信息,隐藏信息不进入模型",
+        "策略卡发布前为草稿态,不可被对话引用",
+        "模型服务经 OpenAI 兼容接口接入,密钥由服务端托管"
+      ]
+    }
+  ]
+}
