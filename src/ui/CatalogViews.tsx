@@ -19,7 +19,7 @@ export function MaterialsView({
     <section className="act" aria-labelledby="materials-title">
       <h2 id="materials-title">素材库</h2>
       {materials.length === 0 ? (
-        <p className="hint">还没有素材。可在布置幕侧栏粘贴转写稿,或在下方直接分析。</p>
+        <p className="hint">还没有素材。在下方粘贴一段优秀电话的转写稿,生成你的第一批策略卡。</p>
       ) : (
         <ul className="catalog-list">
           {materials.map((material) => (

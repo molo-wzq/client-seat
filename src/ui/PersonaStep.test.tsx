@@ -2,18 +2,19 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { FakeModelAdapter } from "../adapters/fake-model-adapter";
+import { SEED_PERSONAS } from "../domain/seed";
 import { createInProcessProductApi } from "../product/in-process-product-api";
 import { PersonaStep } from "./PersonaStep";
 
 describe("画像步骤", () => {
-  it("从预设画像修改属性保存为自定义画像,并以此开始通话", async () => {
+  it("从预设画像修改属性保存为自定义画像,并通知父级入座刷新", async () => {
     const user = userEvent.setup();
     const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
-    const onStarted = vi.fn();
-    render(<PersonaStep api={api} onStarted={onStarted} />);
+    const onSaved = vi.fn();
+    render(<PersonaStep api={api} personas={SEED_PERSONAS} onSaved={onSaved} />);
 
     // 预设画像 P01 默认选中
-    expect(await screen.findByText("代发·资金在证券")).toBeInTheDocument();
+    expect(screen.getByText("代发·资金在证券")).toBeInTheDocument();
 
     // 修改属性:改名并把第一条可见信息切换为隐藏
     await user.click(screen.getByRole("button", { name: "修改属性" }));
@@ -23,11 +24,7 @@ describe("画像步骤", () => {
     await user.click(screen.getAllByRole("checkbox")[0]!);
 
     await user.click(screen.getByRole("button", { name: "保存为我的生客" }));
-    expect(await screen.findByText("我的测试生客")).toBeInTheDocument();
-
-    // 保存后的自定义画像直接开始通话
-    await user.click(screen.getByRole("button", { name: "开始接听" }));
-    expect(onStarted).toHaveBeenCalledWith(expect.any(String));
+    expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ name: "我的测试生客" }));
 
     // 画像确实以提交内容保存:第一条属性已归入隐藏
     const saved = (await api.listPersonas()).find((p) => p.name === "我的测试生客");
@@ -35,13 +32,13 @@ describe("画像步骤", () => {
     expect(saved?.hidden).toHaveLength(5);
   });
 
-  it("全部属性留空也可以开始通话(保持未知,不自动补全)", async () => {
+  it("全部属性留空也保存为自定义画像(保持未知,不自动补全)", async () => {
     const user = userEvent.setup();
     const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
-    const onStarted = vi.fn();
-    render(<PersonaStep api={api} onStarted={onStarted} />);
+    const onSaved = vi.fn();
+    render(<PersonaStep api={api} personas={SEED_PERSONAS} onSaved={onSaved} />);
 
-    expect(await screen.findByText("代发·资金在证券")).toBeInTheDocument();
+    expect(screen.getByText("代发·资金在证券")).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "修改属性" }));
 
     // 称呼与全部属性都留空
@@ -50,12 +47,9 @@ describe("画像步骤", () => {
       await user.clear(input);
     }
     await user.click(screen.getByRole("button", { name: "保存为我的生客" }));
-    expect(await screen.findByText("自定义生客")).toBeInTheDocument();
+    expect(onSaved).toHaveBeenCalledOnce();
 
     const saved = (await api.listPersonas()).find((p) => p.visible.length === 0 && p.hidden.length === 0);
     expect(saved).toBeDefined();
-
-    await user.click(screen.getByRole("button", { name: "开始接听" }));
-    expect(onStarted).toHaveBeenCalledWith(expect.any(String));
   });
 });

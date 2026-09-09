@@ -16,12 +16,10 @@ export function MaterialStep({
   api,
   onPublished,
   initialMaterial,
-  compact = false,
 }: {
   api: ProductApi;
   onPublished?: (material: Material) => void;
   initialMaterial?: Material | null;
-  compact?: boolean;
 }) {
   const [transcript, setTranscript] = useState(SEED_TRANSCRIPT);
   const [kind, setKind] = useState<MaterialKind>(initialMaterial?.kind ?? "顺利沟通");
@@ -83,18 +81,16 @@ export function MaterialStep({
 
   return (
     <section className="step" aria-labelledby="material-title">
-      <h2 id="material-title">{compact ? "自制素材" : "录音分析"}</h2>
+      <h2 id="material-title">录音分析</h2>
       <p className="hint">
-        {compact
-          ? "粘贴转写稿,分析并发布后新卡下一局生效。完整编辑在左侧「素材库」。"
-          : "粘贴一段优秀电话的转写稿,系统将完成说话人区分与结构化分析,提炼为策略卡。识别或提炼有偏差的地方可以直接修改;策略卡确认发布后,才能驱动模拟对话。"}
+        粘贴一段优秀电话的转写稿,系统将完成说话人区分与结构化分析,提炼为策略卡。识别或提炼有偏差的地方可以直接修改;策略卡确认发布后,才能驱动模拟对话。
       </p>
       {!material && (
         <>
           <label htmlFor="transcript">电话转写稿</label>
           <textarea
             id="transcript"
-            rows={compact ? 6 : 12}
+            rows={12}
             value={transcript}
             onChange={(e) => setTranscript(e.target.value)}
             placeholder="粘贴电话转写稿,每行一句,如「T01 经理:……」"
@@ -133,30 +129,7 @@ export function MaterialStep({
           {error}
         </p>
       )}
-      {material && compact && (
-        <div className="cards">
-          <h3>
-            {material.title} · {material.kind ?? "未分类"}
-          </h3>
-          <ul>
-            {material.cards.map((card) => (
-              <li key={card.id}>
-                {card.name}
-                <span className={`badge badge-${card.status}`}>{STATUS_TEXT[card.status]}</span>
-              </li>
-            ))}
-          </ul>
-          <div className="actions">
-            <button onClick={publish} disabled={busy || draftCount === 0}>
-              确认并发布全部草稿{draftCount > 0 ? `(${draftCount}张)` : ""}
-            </button>
-          </div>
-          {material.cards.some((c) => c.status === "published") && (
-            <p className="hint">新卡下一局生效,本通仍用当前已发布卡。完整编辑在左侧「素材库」。</p>
-          )}
-        </div>
-      )}
-      {material && !compact && (
+      {material && (
         <>
           <label htmlFor="material-kind-edit">素材类型</label>
           <select

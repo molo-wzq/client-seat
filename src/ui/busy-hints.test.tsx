@@ -35,18 +35,15 @@ describe("加载提示", () => {
     expect(screen.getByRole("status")).toHaveTextContent("正在分析转写稿,可能需要 1–2 分钟…");
   });
 
-  it("画像步:开始接听期间显示「正在接通」", async () => {
-    const pending = deferred<Conversation>();
-    const api = {
-      listPersonas: async () => [STUB_PERSONA],
-      startConversation: () => pending.promise,
-    } as unknown as ProductApi;
+  it("画像步:保存画像期间显示「正在保存画像」", async () => {
+    const pending = deferred<Persona>();
+    const api = { savePersona: () => pending.promise } as unknown as ProductApi;
     const user = userEvent.setup();
-    render(<PersonaStep api={api} onStarted={() => {}} />);
+    render(<PersonaStep api={api} personas={[STUB_PERSONA]} onSaved={() => {}} />);
 
-    expect(await screen.findByText("测试生客")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "开始接听" }));
-    expect(screen.getByRole("status")).toHaveTextContent("正在接通…");
+    await user.click(screen.getByRole("button", { name: "修改属性" }));
+    await user.click(screen.getByRole("button", { name: "保存为我的生客" }));
+    expect(screen.getByRole("status")).toHaveTextContent("正在保存画像…");
   });
 
   it("快速开始:准备期间显示「正在准备对话」", async () => {
@@ -60,7 +57,7 @@ describe("加载提示", () => {
     const user = userEvent.setup();
     render(<App api={api} />);
 
-    await user.click(screen.getByRole("button", { name: "快速开始一通对话" }));
+    await user.click(await screen.findByRole("button", { name: "快速开始一通对话" }));
     expect(screen.getByRole("status")).toHaveTextContent("正在准备对话…");
   });
 });

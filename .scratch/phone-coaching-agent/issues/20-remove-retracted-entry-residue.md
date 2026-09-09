@@ -4,7 +4,7 @@
 
 **Blocked by:** None.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 ## 用户问题
 
@@ -25,3 +25,5 @@
 - 后:提示指向素材库自身的粘贴入口;grep 无 compact「自制素材」残留;全部测试通过。
 
 ## Comments
+
+- 2026-09-09 已实现:素材库空态改为指向下方粘贴入口;MaterialStep 删除 compact「自制素材」死分支(grep 无残留);PersonaStep 删除永不渲染的「开始接听/保存并开始接听」死代码,画像列表改由布置幕 props 传入,删除重复 listPersonas 请求,组件只剩「创建/修改生客」职责。PersonaStep.test 与 busy-hints.test 同步改为新契约(原「开始接听」用例转为「保存画像」用例)。待人工验收。

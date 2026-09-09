@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { Persona } from "../domain/types";
 import type { ProductApi } from "../product/product-api";
 import { BusyHint } from "./BusyHint";
@@ -17,36 +17,19 @@ function personaToLines(persona: Persona): PersonaLine[] {
   ];
 }
 
+/** 自定义生客编辑器:画像列表由布置幕传入(目录已加载),保存后经 onSaved 通知父级刷新。 */
 export function PersonaStep({
   api,
-  onStarted,
+  personas,
   onSaved,
-  startLabel = "开始接听",
 }: {
   api: ProductApi;
-  onStarted?: (conversationId: string) => void;
+  personas: Persona[];
   onSaved?: (persona: Persona) => void;
-  startLabel?: string;
 }) {
-  const [personas, setPersonas] = useState<Persona[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(() => personas[0]?.id ?? null);
   const [editing, setEditing] = useState<{ name: string; lines: PersonaLine[] } | null>(null);
-  const { busy, busyHint, error, setError, run } = useBusyTask("正在接通…");
-
-  useEffect(() => {
-    let cancelled = false;
-    api
-      .listPersonas()
-      .then((list) => {
-        if (cancelled) return;
-        setPersonas(list);
-        setSelectedId((current) => current ?? list[0]?.id ?? null);
-      })
-      .catch((e) => setError((e as Error).message));
-    return () => {
-      cancelled = true;
-    };
-  }, [api]);
+  const { busy, busyHint, error, run } = useBusyTask("正在保存画像…");
 
   const selected = personas.find((p) => p.id === selectedId) ?? null;
 
@@ -57,25 +40,10 @@ export function PersonaStep({
       visible: editing.lines.filter((line) => !line.hidden).map((line) => line.text),
       hidden: editing.lines.filter((line) => line.hidden).map((line) => line.text),
     });
-    setPersonas((current) => [...current, saved]);
     setSelectedId(saved.id);
     setEditing(null);
     onSaved?.(saved);
     return saved;
-  }
-
-  async function saveAndStart() {
-    await run(async () => {
-      const saved = await saveCustomPersona();
-      if (onStarted) onStarted((await api.startConversation(saved.id)).id);
-    });
-  }
-
-  async function start() {
-    if (!selected) return;
-    await run(async () => {
-      if (onStarted) onStarted((await api.startConversation(selected.id)).id);
-    });
   }
 
   return (
@@ -191,18 +159,9 @@ export function PersonaStep({
             </button>
           </div>
           <div className="actions">
-            <button
-              type="button"
-              onClick={() => run(async () => void (await saveCustomPersona()), "正在保存画像…")}
-              disabled={busy}
-            >
+            <button type="button" onClick={() => run(async () => void (await saveCustomPersona()))} disabled={busy}>
               保存为我的生客
             </button>
-            {onStarted && (
-              <button type="button" onClick={saveAndStart} disabled={busy}>
-                保存并开始接听
-              </button>
-            )}
             <button type="button" className="ghost" onClick={() => setEditing(null)} disabled={busy}>
               取消
             </button>
@@ -213,6 +172,7 @@ export function PersonaStep({
       {!editing && (
         <div className="actions">
           <button
+            type="button"
             className="ghost"
             onClick={() =>
               selected &&
@@ -222,11 +182,6 @@ export function PersonaStep({
           >
             修改属性
           </button>
-          {onStarted && (
-            <button onClick={start} disabled={busy || !selected}>
-              {startLabel}
-            </button>
-          )}
         </div>
       )}
     </section>

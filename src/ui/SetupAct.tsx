@@ -109,6 +109,7 @@ export function SetupAct({
       {customizing && (
         <PersonaStep
           api={api}
+          personas={personas}
           onSaved={(persona) => {
             seat(persona);
             onCatalogChange();
