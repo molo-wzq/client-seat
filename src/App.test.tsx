@@ -137,6 +137,35 @@ describe("进行中对局可找回", () => {
   });
 });
 
+describe("左栏口径与标签", () => {
+  it("策略卡计数只算已发布;通话结束后左栏按钮变为「查看结算」", async () => {
+    const user = userEvent.setup();
+    const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+
+    render(<App api={api} />);
+
+    await user.click(await screen.findByRole("button", { name: /素材库/ }));
+    await user.click(await screen.findByRole("button", { name: "载入示例" }));
+    await user.click(screen.getByRole("button", { name: "生成策略卡" }));
+    expect(await screen.findByText("生客开场,自报身份先给退路")).toBeInTheDocument();
+    // 3 张草稿尚未发布:左栏不计数,与布置桌口径一致
+    expect(screen.getByRole("button", { name: "策略卡(0)" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /确认并发布/ }));
+    expect((await screen.findAllByText("已发布")).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "策略卡(3)" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "快速开始一通对话" }));
+    const reply = await screen.findByLabelText("客户回复");
+    await user.type(reply, "喂");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    await screen.findByText(/我是咱们银行的客户经理/);
+    await user.click(screen.getByRole("button", { name: "结束并查看结果" }));
+    expect(await screen.findByRole("heading", { name: "这通电话是怎样推进的" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "查看结算" })).toBeInTheDocument();
+  });
+});
+
 describe("目录加载反馈与重试", () => {
   it("首屏显示加载提示;失败时给出错误与重试,重试成功后正常渲染", async () => {
     const user = userEvent.setup();

@@ -45,7 +45,7 @@ export function LeftRail({
           }}
           disabled={!sessionStatus && !hasOngoing}
         >
-          进行中的通话
+          {sessionStatus === "ended" ? "查看结算" : "进行中的通话"}
         </button>
         <button
           className={view === "setup" ? "rail-item current" : "rail-item"}

@@ -126,7 +126,7 @@ export function App({ api }: { api: ProductApi }) {
       <LeftRail
         view={view}
         materialCount={materials.length}
-        cardCount={allCards.length}
+        cardCount={publishedCards.length}
         historyCount={conversations.length}
         sessionStatus={conversation?.status ?? null}
         hasOngoing={Boolean(ongoingCall)}
