@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assembleManagerSystemPrompt } from "../adapters/prompts";
-import { createInProcessProductApi } from "../product/in-process-product-api";
+import { createInProcessProductCore } from "../product/in-process-product-api";
 import { RecordingAdapter } from "../test/recording-adapter";
 import { SEED_PERSONA, SEED_PERSONAS, SEED_PRODUCT_CARD } from "./seed";
 
@@ -9,7 +9,7 @@ const HIDDEN_LINE = "可动用闲钱约15万,其余资金在股市";
 
 async function apiWithCustomPersona() {
   const recording = new RecordingAdapter();
-  const api = createInProcessProductApi({ adapter: recording });
+  const api = createInProcessProductCore({ adapter: recording });
   const persona = await api.savePersona({
     name: "自定义生客",
     visible: [VISIBLE_LINE],

@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { FakeModelAdapter } from "../adapters/fake-model-adapter";
-import { createInProcessProductApi, InMemoryStorage } from "../product/in-process-product-api";
+import { createInProcessProductCore, InMemoryStorage } from "../product/in-process-product-api";
 import { SEED_PERSONAS, SEED_TRANSCRIPT, buildSeedMaterial } from "./seed";
 import { MATERIAL_KINDS } from "./types";
 
 function setup() {
   const storage = new InMemoryStorage();
-  const api = createInProcessProductApi({ adapter: new FakeModelAdapter(), storage });
+  const api = createInProcessProductCore({ adapter: new FakeModelAdapter(), storage });
   return { api, storage };
 }
 

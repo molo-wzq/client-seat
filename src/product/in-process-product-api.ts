@@ -1,7 +1,6 @@
-import { createProductCore } from "../domain/product-core";
+import { createProductCore, type ProductCore } from "../domain/product-core";
 import type { CopywritingPort, DialoguePort, ProductStorage } from "../domain/ports";
 import type { Conversation, Material, Persona } from "../domain/types";
-import type { ProductApi } from "./product-api";
 
 /** 内存存储:测试与进程内组合根使用。 */
 export class InMemoryStorage implements ProductStorage {
@@ -37,10 +36,10 @@ export class InMemoryStorage implements ProductStorage {
   }
 }
 
-export function createInProcessProductApi(input: {
+export function createInProcessProductCore(input: {
   adapter: CopywritingPort & DialoguePort;
   storage?: ProductStorage;
-}): ProductApi {
+}): ProductCore {
   const core = createProductCore({
     copywriting: input.adapter,
     dialogue: input.adapter,

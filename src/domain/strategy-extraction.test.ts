@@ -3,19 +3,19 @@ import {
   normalizeAnalysis,
   normalizeCard,
 } from "../adapters/openai-model-adapter";
-import { createInProcessProductApi } from "../product/in-process-product-api";
+import { createInProcessProductCore } from "../product/in-process-product-api";
 import { RecordingAdapter } from "../test/recording-adapter";
 import { SEED_TRANSCRIPT } from "./seed";
 import { numberTurns, parseTurnRange, parseTranscriptTurns } from "./transcript";
 import type { Material, MaterialTurn } from "./types";
 
 async function analyzedMaterial(): Promise<{
-  api: ReturnType<typeof createInProcessProductApi>;
+  api: ReturnType<typeof createInProcessProductCore>;
   recording: RecordingAdapter;
   material: Material;
 }> {
   const recording = new RecordingAdapter();
-  const api = createInProcessProductApi({ adapter: recording });
+  const api = createInProcessProductCore({ adapter: recording });
   // 用种子转写稿:种子策略卡的来源轮次区间(T01–T26)须能在轮次中对回。
   const material = await api.analyzeTranscript({ transcript: SEED_TRANSCRIPT });
   return { api, recording, material };

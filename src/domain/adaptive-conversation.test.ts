@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInProcessProductApi } from "../product/in-process-product-api";
+import { createInProcessProductCore } from "../product/in-process-product-api";
 import { RecordingAdapter } from "../test/recording-adapter";
 import { MAX_MANAGER_TURNS } from "./product-core";
 import { SEED_CARD_IDS, SEED_PERSONA, SEED_PERSONAS, SEED_TRANSCRIPT } from "./seed";
@@ -15,13 +15,13 @@ const HIDDEN_SIGNATURES = ["15万", "保险推销", "戒心"];
 
 async function setup() {
   const adapter = new RecordingAdapter();
-  const api = createInProcessProductApi({ adapter });
+  const api = createInProcessProductCore({ adapter });
   return { api, adapter };
 }
 
 /** 发布种子三张卡并以指定画像开始通话;say 逐轮发送客户发言。 */
 async function publishedConversation(
-  api: ReturnType<typeof createInProcessProductApi>,
+  api: ReturnType<typeof createInProcessProductCore>,
   personaId = SEED_PERSONA.id,
 ) {
   const material = await api.analyzeTranscript({ transcript: SEED_TRANSCRIPT });

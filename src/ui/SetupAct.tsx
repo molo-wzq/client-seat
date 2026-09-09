@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { SEED_PRODUCT_CARD } from "../domain/seed";
 import type { Persona, StrategyCard } from "../domain/types";
-import type { ProductApi } from "../product/product-api";
+import type { ProductCore } from "../domain/product-core";
 import { PersonaStep } from "./PersonaStep";
 
 export function SetupAct({
@@ -12,7 +12,7 @@ export function SetupAct({
   onCatalogChange,
   connectBusy,
 }: {
-  api: ProductApi;
+  api: ProductCore;
   personas: Persona[];
   publishedCards: StrategyCard[];
   onConnect: (personaId: string) => void;

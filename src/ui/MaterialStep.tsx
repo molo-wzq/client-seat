@@ -2,7 +2,7 @@ import { useState } from "react";
 import { SEED_TRANSCRIPT } from "../domain/seed";
 import type { CaseAnalysis, Material, MaterialKind, MaterialTurn, StrategyCard } from "../domain/types";
 import { MATERIAL_KINDS } from "../domain/types";
-import type { ProductApi } from "../product/product-api";
+import type { ProductCore } from "../domain/product-core";
 import { BusyHint } from "./BusyHint";
 import { AnalysisEditor, CardEditor, TurnsEditor } from "./MaterialEditors";
 import { useBusyTask } from "./use-busy-task";
@@ -17,7 +17,7 @@ export function MaterialStep({
   onPublished,
   initialMaterial,
 }: {
-  api: ProductApi;
+  api: ProductCore;
   onPublished?: (material: Material) => void;
   initialMaterial?: Material | null;
 }) {

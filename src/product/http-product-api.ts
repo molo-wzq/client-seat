@@ -1,7 +1,11 @@
-import type { ProductApi } from "./product-api";
+import type { ProductCore } from "../domain/product-core";
 
-/** 浏览器端实现:调用轻量 Node 服务(见 server/)。 */
-export function createHttpProductApi(baseUrl = ""): ProductApi {
+/**
+ * 浏览器端适配器:UI 只依赖领域侧唯一接口 ProductCore(声明在 domain/product-core.ts)。
+ * 本文件以 http 传输满足该接口,真实服务在 server/(组合根 createProductCore + FileStorage);
+ * 测试与进程内路径用 in-process-product-api.ts 的同类适配器。
+ */
+export function createHttpProductCore(baseUrl = ""): ProductCore {
   async function request<T>(path: string, init?: RequestInit): Promise<T> {
     const response = await fetch(`${baseUrl}/api${path}`, {
       headers: { "Content-Type": "application/json" },

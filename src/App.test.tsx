@@ -2,8 +2,8 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { FakeModelAdapter } from "./adapters/fake-model-adapter";
-import type { ProductApi } from "./product/product-api";
-import { createInProcessProductApi } from "./product/in-process-product-api";
+import type { ProductCore } from "./domain/product-core";
+import { createInProcessProductCore } from "./product/in-process-product-api";
 import { SCORING_PATTERN } from "./test/scoring-pattern";
 import { App } from "./App";
 
@@ -14,7 +14,7 @@ import { App } from "./App";
 describe("素材到模拟通话的核心闭环", () => {
   it("发布转写策略、入座接通并在结算中追溯所用策略卡", async () => {
     const user = userEvent.setup();
-    const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+    const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
 
     render(<App api={api} />);
 
@@ -66,7 +66,7 @@ describe("素材到模拟通话的核心闭环", () => {
 describe("快速开始", () => {
   it("跳过素材流程直接进对局,并可立即开始一轮对练", async () => {
     const user = userEvent.setup();
-    const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+    const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
 
     render(<App api={api} />);
     await user.click(await screen.findByRole("button", { name: "快速开始一通对话" }));
@@ -91,7 +91,7 @@ describe("进行中对局可找回", () => {
 
   it("另接新电话后,旧的进行中通话仍可从通话记录回到桌面继续", async () => {
     const user = userEvent.setup();
-    const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+    const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
 
     render(<App api={api} />);
     await startOngoingCall(user);
@@ -111,7 +111,7 @@ describe("进行中对局可找回", () => {
 
   it("离开并结束另一通电话后,左栏「进行中的通话」可从目录找回旧通话", async () => {
     const user = userEvent.setup();
-    const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+    const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
 
     render(<App api={api} />);
     await startOngoingCall(user);
@@ -140,7 +140,7 @@ describe("进行中对局可找回", () => {
 describe("左栏口径与标签", () => {
   it("策略卡计数只算已发布;通话结束后左栏按钮变为「查看结算」", async () => {
     const user = userEvent.setup();
-    const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+    const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
 
     render(<App api={api} />);
 
@@ -169,13 +169,13 @@ describe("左栏口径与标签", () => {
 describe("目录加载反馈与重试", () => {
   it("首屏显示加载提示;失败时给出错误与重试,重试成功后正常渲染", async () => {
     const user = userEvent.setup();
-    const real = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+    const real = createInProcessProductCore({ adapter: new FakeModelAdapter() });
     let fail = true;
     const api = {
       listPersonas: () => (fail ? Promise.reject(new Error("网络不可用")) : real.listPersonas()),
       listMaterials: () => (fail ? Promise.reject(new Error("网络不可用")) : real.listMaterials()),
       listConversations: () => (fail ? Promise.reject(new Error("网络不可用")) : real.listConversations()),
-    } as unknown as ProductApi;
+    } as unknown as ProductCore;
 
     render(<App api={api} />);
 
@@ -200,7 +200,7 @@ describe("目录加载反馈与重试", () => {
       listMaterials: () => Promise.resolve([]),
       listConversations: () => Promise.resolve([]),
       quickStart: () => Promise.reject(new Error("接通失败")),
-    } as unknown as ProductApi;
+    } as unknown as ProductCore;
 
     render(<App api={api} />);
     await user.click(await screen.findByRole("button", { name: "快速开始一通对话" }));

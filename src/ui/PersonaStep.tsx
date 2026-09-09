@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Persona } from "../domain/types";
-import type { ProductApi } from "../product/product-api";
+import type { ProductCore } from "../domain/product-core";
 import { BusyHint } from "./BusyHint";
 import { useBusyTask } from "./use-busy-task";
 
@@ -23,7 +23,7 @@ export function PersonaStep({
   personas,
   onSaved,
 }: {
-  api: ProductApi;
+  api: ProductCore;
   personas: Persona[];
   onSaved?: (persona: Persona) => void;
 }) {

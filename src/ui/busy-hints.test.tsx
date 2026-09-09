@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "../App";
 import type { Conversation, Material, Persona } from "../domain/types";
-import type { ProductApi } from "../product/product-api";
+import type { ProductCore } from "../domain/product-core";
 import { MaterialStep } from "./MaterialStep";
 import { PersonaStep } from "./PersonaStep";
 
@@ -27,7 +27,7 @@ const STUB_PERSONA: Persona = {
 describe("加载提示", () => {
   it("素材步:分析期间显示「正在分析转写稿」", async () => {
     const pending = deferred<Material>();
-    const api = { analyzeTranscript: () => pending.promise } as unknown as ProductApi;
+    const api = { analyzeTranscript: () => pending.promise } as unknown as ProductCore;
     const user = userEvent.setup();
     render(<MaterialStep api={api} onPublished={() => {}} />);
 
@@ -38,7 +38,7 @@ describe("加载提示", () => {
 
   it("画像步:保存画像期间显示「正在保存画像」", async () => {
     const pending = deferred<Persona>();
-    const api = { savePersona: () => pending.promise } as unknown as ProductApi;
+    const api = { savePersona: () => pending.promise } as unknown as ProductCore;
     const user = userEvent.setup();
     render(<PersonaStep api={api} personas={[STUB_PERSONA]} onSaved={() => {}} />);
 
@@ -54,7 +54,7 @@ describe("加载提示", () => {
       listPersonas: async () => [],
       listMaterials: async () => [],
       listConversations: async () => [],
-    } as unknown as ProductApi;
+    } as unknown as ProductCore;
     const user = userEvent.setup();
     render(<App api={api} />);
 

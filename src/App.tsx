@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Conversation, ConversationResult, Material, Persona } from "./domain/types";
-import type { ProductApi } from "./product/product-api";
+import type { ProductCore } from "./domain/product-core";
 import { BusyHint } from "./ui/BusyHint";
 import { CardsView, HistoryView, MaterialsView } from "./ui/CatalogViews";
 import { LeftRail, type AppView } from "./ui/LeftRail";
@@ -9,7 +9,7 @@ import { SetupAct } from "./ui/SetupAct";
 import { TableAct } from "./ui/TableAct";
 import { WireframePrototype } from "./ui/wireframe-prototype";
 
-export function App({ api }: { api: ProductApi }) {
+export function App({ api }: { api: ProductCore }) {
   const [view, setView] = useState<AppView>("setup");
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);

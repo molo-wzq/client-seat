@@ -3,13 +3,13 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { FakeModelAdapter } from "../adapters/fake-model-adapter";
 import { SEED_PERSONAS } from "../domain/seed";
-import { createInProcessProductApi } from "../product/in-process-product-api";
+import { createInProcessProductCore } from "../product/in-process-product-api";
 import { PersonaStep } from "./PersonaStep";
 
 describe("画像步骤", () => {
   it("从预设画像修改属性保存为自定义画像,并通知父级入座刷新", async () => {
     const user = userEvent.setup();
-    const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+    const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
     const onSaved = vi.fn();
     render(<PersonaStep api={api} personas={SEED_PERSONAS} onSaved={onSaved} />);
 
@@ -34,7 +34,7 @@ describe("画像步骤", () => {
 
   it("全部属性留空也保存为自定义画像(保持未知,不自动补全)", async () => {
     const user = userEvent.setup();
-    const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+    const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
     const onSaved = vi.fn();
     render(<PersonaStep api={api} personas={SEED_PERSONAS} onSaved={onSaved} />);
 

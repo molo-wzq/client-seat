@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createInProcessProductApi } from "../product/in-process-product-api";
+import { createInProcessProductCore } from "../product/in-process-product-api";
 import { RecordingAdapter } from "../test/recording-adapter";
 import { SCORING_PATTERN } from "../test/scoring-pattern";
 import { SEED_PERSONA, SEED_TRANSCRIPT } from "./seed";
@@ -21,7 +21,7 @@ async function completedResult(personaId = SEED_PERSONA.id, script: string[] = D
 
 async function createBareApi() {
   const adapter = new RecordingAdapter();
-  const api = createInProcessProductApi({ adapter });
+  const api = createInProcessProductCore({ adapter });
   return { api, adapter };
 }
 

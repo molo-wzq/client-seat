@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { Conversation, ConversationResult } from "../domain/types";
-import type { ProductApi } from "../product/product-api";
+import type { ProductCore } from "../domain/product-core";
 import { CallStep } from "./CallStep";
 
 function ongoingConversation(): Conversation {
@@ -26,14 +26,14 @@ function deferred<T>() {
 }
 
 /** 只实现 CallStep 用到的三个方法,其余抛错以防误用。 */
-function stubApi(sendImpl: () => Promise<Conversation>): ProductApi {
+function stubApi(sendImpl: () => Promise<Conversation>): ProductCore {
   const conversation = ongoingConversation();
   return {
     getConversation: async () => conversation,
     sendCustomerTurn: sendImpl,
     finishConversation: async () => ({ ...conversation, status: "ended" }),
     getResult: async () => ({}) as ConversationResult,
-  } as unknown as ProductApi;
+  } as unknown as ProductCore;
 }
 
 async function renderAndType(sendImpl: () => Promise<Conversation>) {

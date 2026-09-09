@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MAX_MANAGER_TURNS } from "../domain/product-core";
 import type { Conversation, ConversationResult } from "../domain/types";
-import type { ProductApi } from "../product/product-api";
+import type { ProductCore } from "../domain/product-core";
 import { BusyHint } from "./BusyHint";
 
 export function CallStep({
@@ -10,7 +10,7 @@ export function CallStep({
   onFinished,
   onConversationChange,
 }: {
-  api: ProductApi;
+  api: ProductCore;
   conversationId: string;
   onFinished: (result: ConversationResult) => void;
   onConversationChange?: (conversation: Conversation) => void;

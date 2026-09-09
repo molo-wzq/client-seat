@@ -1,6 +1,6 @@
 import { MAX_MANAGER_TURNS } from "../domain/product-core";
 import type { Conversation, ConversationResult, Persona, StrategyCard } from "../domain/types";
-import type { ProductApi } from "../product/product-api";
+import type { ProductCore } from "../domain/product-core";
 import { CallStep } from "./CallStep";
 
 export function TableAct({
@@ -12,7 +12,7 @@ export function TableAct({
   onFinished,
   onConversationChange,
 }: {
-  api: ProductApi;
+  api: ProductCore;
   conversationId: string;
   conversation: Conversation | null;
   persona: Persona | null;

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { Conversation, Material, Persona, StrategyCard } from "../domain/types";
-import type { ProductApi } from "../product/product-api";
+import type { ProductCore } from "../domain/product-core";
 import { MaterialStep } from "./MaterialStep";
 
 export function MaterialsView({
@@ -8,7 +8,7 @@ export function MaterialsView({
   materials,
   onPublished,
 }: {
-  api: ProductApi;
+  api: ProductCore;
   materials: Material[];
   onPublished: () => void;
 }) {
