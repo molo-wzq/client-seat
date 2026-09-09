@@ -21,7 +21,8 @@ export function MaterialStep({
   onPublished?: (material: Material) => void;
   initialMaterial?: Material | null;
 }) {
-  const [transcript, setTranscript] = useState(SEED_TRANSCRIPT);
+  // 新素材从空稿开始,避免误分析演示素材;示例改为一键显式载入。
+  const [transcript, setTranscript] = useState("");
   const [kind, setKind] = useState<MaterialKind>(initialMaterial?.kind ?? "顺利沟通");
   const [material, setMaterial] = useState<Material | null>(initialMaterial ?? null);
   const { busy, busyHint, error, run } = useBusyTask("正在保存…");
@@ -119,6 +120,14 @@ export function MaterialStep({
               disabled={busy || !transcript.trim()}
             >
               {busy ? "分析中…" : "生成策略卡"}
+            </button>
+            <button
+              type="button"
+              className="ghost"
+              onClick={() => setTranscript(SEED_TRANSCRIPT)}
+              disabled={busy || transcript.trim() !== ""}
+            >
+              载入示例
             </button>
           </div>
         </>

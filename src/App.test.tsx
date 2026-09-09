@@ -22,7 +22,10 @@ describe("素材到模拟通话的核心闭环", () => {
 
     await user.click(screen.getByRole("button", { name: /素材库/ }));
     expect(await screen.findByRole("heading", { name: "录音分析" })).toBeInTheDocument();
+    // 新素材从空稿开始,示例需显式载入(票 21)
     const transcriptBox = screen.getByLabelText("电话转写稿") as HTMLTextAreaElement;
+    expect(transcriptBox.value).toBe("");
+    await user.click(screen.getByRole("button", { name: "载入示例" }));
     expect(transcriptBox.value).toContain("拉新资金");
     expect(screen.getByLabelText("素材类型")).toHaveValue("顺利沟通");
 

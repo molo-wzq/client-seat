@@ -31,6 +31,7 @@ describe("加载提示", () => {
     const user = userEvent.setup();
     render(<MaterialStep api={api} onPublished={() => {}} />);
 
+    await user.click(screen.getByRole("button", { name: "载入示例" }));
     await user.click(screen.getByRole("button", { name: "生成策略卡" }));
     expect(screen.getByRole("status")).toHaveTextContent("正在分析转写稿,可能需要 1–2 分钟…");
   });
