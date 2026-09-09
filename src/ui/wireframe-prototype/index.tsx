@@ -305,8 +305,6 @@ function VariantD() {
             <div className="wf-box solid">
               <div className="wf-hint">拉新资金活动 · 虚拟产品事实,AI 不得用卡外信息</div>
             </div>
-            <div className="wf-title">自制素材入口</div>
-            <div className="wf-hint">粘贴转写稿 → 分析 → 确认发布(新卡下一局生效)</div>
           </div>
         </div>
         <div className="wf-note">

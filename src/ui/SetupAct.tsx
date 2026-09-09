@@ -2,7 +2,6 @@ import { useState } from "react";
 import { SEED_PRODUCT_CARD } from "../domain/seed";
 import type { Persona, StrategyCard } from "../domain/types";
 import type { ProductApi } from "../product/product-api";
-import { MaterialStep } from "./MaterialStep";
 import { PersonaStep } from "./PersonaStep";
 
 export function SetupAct({
@@ -10,14 +9,14 @@ export function SetupAct({
   personas,
   publishedCards,
   onConnect,
-  onPublished,
+  onCatalogChange,
   connectBusy,
 }: {
   api: ProductApi;
   personas: Persona[];
   publishedCards: StrategyCard[];
   onConnect: (personaId: string) => void;
-  onPublished: () => void;
+  onCatalogChange: () => void;
   connectBusy: boolean;
 }) {
   const [seated, setSeated] = useState<Persona | null>(null);
@@ -105,8 +104,6 @@ export function SetupAct({
               {SEED_PRODUCT_CARD.activity.deadline} · {SEED_PRODUCT_CARD.flexibleProduct.name}
             </p>
           </article>
-          <h3>自制素材入口</h3>
-          <MaterialStep api={api} compact onPublished={onPublished} />
         </div>
       </div>
       {customizing && (
@@ -114,7 +111,7 @@ export function SetupAct({
           api={api}
           onSaved={(persona) => {
             seat(persona);
-            onPublished();
+            onCatalogChange();
           }}
         />
       )}

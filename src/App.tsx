@@ -140,7 +140,7 @@ export function App({ api }: { api: ProductApi }) {
             personas={personas}
             publishedCards={publishedCards}
             onConnect={(personaId) => void connect(personaId)}
-            onPublished={() => void refreshCatalog()}
+            onCatalogChange={() => void refreshCatalog()}
             connectBusy={connectBusy}
           />
         )}
