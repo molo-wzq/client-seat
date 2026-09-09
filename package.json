@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "concurrently -k -n api,web -c blue,green \"tsx watch server/main.ts\" \"vite\"",
     "server": "tsx server/main.ts",
+    "audio:ingest": "tsx server/audio-intake.ts",
     "build": "tsc -b && vite build",
     "start": "npm run build && tsx server/main.ts",
     "typecheck": "tsc -b && tsc -p tsconfig.server.json --noEmit",

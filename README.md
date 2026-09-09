@@ -37,10 +37,21 @@ MIMO_MODEL=mimo-v2.5                                     # 可省略
 | 命令 | 说明 |
 | --- | --- |
 | `npm run dev` | 同时启动 API 服务与前端(开发模式) |
+| `npm run audio:ingest -- <录音文件>` | 后台转写一段录音,产出待校对稿到 `data/audio-intake/` |
 | `npm run test` | 运行全部测试(最高层端到端产品测试使用伪适配器) |
 | `npm run typecheck` | `tsc -b` + 服务端类型检查 |
 | `npm run build` | 类型检查并构建前端产物到 `dist/` |
 | `npm start` | 构建并以 API 服务托管 `dist/`(生产式单进程运行) |
+
+## 后台录音摄入
+
+录音转写耗时较长,不放在前端。配置 `MIMO_API_KEY` 后运行:
+
+```bash
+npm run audio:ingest -- "D:\path\call.m4a"
+```
+
+支持 `mp3/m4a/wav/webm/ogg`,单段不超过 25MB。默认输出到 Git 忽略的 `data/audio-intake/`;也可追加 `--out <文件.md>` 指定位置。输出是“待校对、待脱敏”的文字稿,不会自动写入素材库或发布策略卡。
 
 ## 结构
 
