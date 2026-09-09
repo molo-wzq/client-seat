@@ -1,0 +1,240 @@
+{
+  "schema_version": 1,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "「电话对练」游戏手册",
+    "output": "game-manual.html",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "views": [
+      {
+        "id": "quick-start",
+        "label": "快速开局",
+        "focus": [
+          "pick-material",
+          "extract",
+          "publish",
+          "ai-open"
+        ],
+        "note": "从选素材到 AI 开场,三步接通。"
+      },
+      {
+        "id": "in-match",
+        "label": "对局进行时",
+        "focus": [
+          "ai-open",
+          "your-turn",
+          "hidden-info"
+        ],
+        "note": "回合制:AI 出招你接招;你的隐藏信息它看不到。"
+      },
+      {
+        "id": "replay",
+        "label": "结算复盘",
+        "focus": [
+          "your-turn",
+          "settle"
+        ],
+        "note": "看 AI 用了什么策略,从哪段素材学来的。"
+      }
+    ]
+  },
+  "lanes": [
+    {
+      "id": "player",
+      "label": "你 · 学员(扮演生客)"
+    },
+    {
+      "id": "system",
+      "label": "对练系统 · AI 理财经理 + 裁判"
+    }
+  ],
+  "phases": [
+    {
+      "id": "prepare",
+      "label": "开局准备",
+      "fromCol": 0,
+      "toCol": 2
+    },
+    {
+      "id": "match",
+      "label": "正式对局",
+      "fromCol": 3,
+      "toCol": 4,
+      "variant": "emphasis"
+    },
+    {
+      "id": "settle",
+      "label": "结算复盘",
+      "fromCol": 5,
+      "toCol": 5
+    }
+  ],
+  "mainPath": [
+    "pick-material",
+    "extract",
+    "publish",
+    "ai-open",
+    "your-turn",
+    "settle"
+  ],
+  "nodes": [
+    {
+      "id": "pick-material",
+      "lane": "player",
+      "col": 0,
+      "type": "external",
+      "label": "① 选素材",
+      "sublabel": "内置素材或粘贴转写稿"
+    },
+    {
+      "id": "publish",
+      "lane": "player",
+      "col": 2,
+      "type": "backend",
+      "label": "③ 审阅发布",
+      "sublabel": "发布后才生效",
+      "tag": "草稿 → 已发布",
+      "width": 70
+    },
+    {
+      "id": "hidden-info",
+      "lane": "player",
+      "col": 3,
+      "type": "security",
+      "label": "隐藏信息",
+      "sublabel": "AI 看不到的部分",
+      "tag": "对 AI 隔离",
+      "width": 66
+    },
+    {
+      "id": "your-turn",
+      "lane": "player",
+      "col": 5,
+      "type": "external",
+      "label": "你的回合",
+      "sublabel": "推进、犹豫、拒绝都行",
+      "width": 84,
+      "tag": "AI 说完,轮到你"
+    },
+    {
+      "id": "extract",
+      "lane": "system",
+      "col": 1,
+      "type": "backend",
+      "label": "② AI 拆解",
+      "sublabel": "转写稿 → 案例 + 策略卡",
+      "tag": "真模型提炼"
+    },
+    {
+      "id": "ai-open",
+      "lane": "system",
+      "col": 3,
+      "type": "backend",
+      "label": "④ AI 开场",
+      "sublabel": "识别信号,实时选策略卡",
+      "tag": "接「喂」后先开口"
+    },
+    {
+      "id": "settle",
+      "lane": "system",
+      "col": 5,
+      "type": "backend",
+      "label": "⑤ 结算复盘",
+      "sublabel": "策略路径 · 片段级回溯"
+    }
+  ],
+  "edges": [
+    {
+      "id": "material-to-extract",
+      "from": "pick-material",
+      "to": "extract",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top"
+    },
+    {
+      "id": "extract-to-publish",
+      "from": "extract",
+      "to": "publish",
+      "route": "drop",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "publish-to-open",
+      "from": "publish",
+      "to": "ai-open",
+      "label": "策略就绪",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 14
+    },
+    {
+      "id": "open-to-you",
+      "from": "ai-open",
+      "to": "your-turn",
+      "route": "drop",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "you-to-open",
+      "from": "your-turn",
+      "to": "ai-open",
+      "role": "return",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "bias": 0.4
+    },
+    {
+      "id": "you-to-settle",
+      "from": "your-turn",
+      "to": "settle",
+      "label": "通话结束",
+      "route": "drop",
+      "fromSide": "bottom",
+      "toSide": "top",
+      "labelDy": 32
+    },
+    {
+      "id": "settle-to-open",
+      "from": "settle",
+      "to": "ai-open",
+      "label": "再来一局",
+      "variant": "dashed",
+      "role": "branch",
+      "route": "return-left",
+      "fromSide": "left",
+      "toSide": "left"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "新手引导 · 30 秒上手",
+      "items": [
+        "你扮演生客,AI 扮演优秀理财经理,全程只有你们俩通话",
+        "开局只需一步:选定画像后输入「喂」,电话就接通了"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "核心规则",
+      "items": [
+        "AI 只使用已发布的策略卡:草稿不进对局,参考话术不照抄",
+        "画像有隐藏信息,AI 看不到——它只能靠对话自己挖出来"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "结算与胜负",
+      "items": [
+        "没有输赢:结算页复盘 AI 用了哪张卡、来自素材哪一段",
+        "结算后换个画像再来一局,对比不同生客的打法差异"
+      ]
+    }
+  ]
+}
