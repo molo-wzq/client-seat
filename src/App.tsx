@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ConversationResult, Material } from "./domain/types";
 import type { ProductApi } from "./product/product-api";
 import { BusyHint } from "./ui/BusyHint";
+import { WireframePrototype } from "./ui/wireframe-prototype";
 import { MaterialStep } from "./ui/MaterialStep";
 import { PersonaStep } from "./ui/PersonaStep";
 import { CallStep } from "./ui/CallStep";
@@ -46,6 +47,11 @@ export function App({ api }: { api: ProductApi }) {
   }
 
   const currentStepIndex = STEP_LABELS.findIndex((s) => s.key === step);
+
+  // 低保真线框原型(仅 dev):/?wireframe 开启,?variant=A|B|C 切换,评审用后即弃。
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).has("wireframe")) {
+    return <WireframePrototype />;
+  }
 
   return (
     <main className="app">
