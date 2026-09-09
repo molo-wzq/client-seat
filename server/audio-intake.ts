@@ -1,14 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { DEFAULT_MODEL_BASE_URL } from "../src/adapters/openai-model-adapter";
+import { DEFAULT_MODEL_BASE_URL, DEFAULT_MODEL_NAME } from "../src/adapters/openai-model-adapter";
 import { loadEnvFile } from "./env";
 import {
   DEFAULT_ASR_MODEL,
   MAX_AUDIO_BYTES,
   MimoAudioTranscriber,
+  MimoSpeakerDiarizer,
   parseAudioFormat,
   type AudioTranscriber,
+  type SpeakerDiarizer,
 } from "./audio-transcriber";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -17,6 +19,7 @@ export async function ingestAudio(input: {
   audioPath: string;
   outputPath?: string;
   transcriber: AudioTranscriber;
+  diarizer: SpeakerDiarizer;
   now?: Date;
 }): Promise<string> {
   const audioPath = path.resolve(input.audioPath);
@@ -28,8 +31,10 @@ export async function ingestAudio(input: {
   if (bytes.length === 0) throw new Error("录音文件为空");
   if (bytes.length > MAX_AUDIO_BYTES) throw new Error("录音文件不能超过 25MB");
 
-  const transcript = (await input.transcriber.transcribe({ bytes, format })).trim();
-  if (!transcript) throw new Error("转写服务未返回文字");
+  const rawTranscript = (await input.transcriber.transcribe({ bytes, format })).trim();
+  if (!rawTranscript) throw new Error("转写服务未返回文字");
+  const transcript = (await input.diarizer.diarize(rawTranscript)).trim();
+  if (!transcript) throw new Error("说话人区分服务未返回文字");
 
   const now = input.now ?? new Date();
   const stamp = now.toISOString().replace(/[:.]/g, "-");
@@ -84,6 +89,11 @@ async function main(): Promise<void> {
       apiKey,
       baseUrl: process.env.MIMO_BASE_URL || DEFAULT_MODEL_BASE_URL,
       model: process.env.MIMO_ASR_MODEL || DEFAULT_ASR_MODEL,
+    }),
+    diarizer: new MimoSpeakerDiarizer({
+      apiKey,
+      baseUrl: process.env.MIMO_BASE_URL || DEFAULT_MODEL_BASE_URL,
+      model: process.env.MIMO_MODEL || DEFAULT_MODEL_NAME,
     }),
   });
   console.log(`转写完成:${outputPath}`);

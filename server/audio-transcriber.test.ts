@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { MimoAudioTranscriber, parseAudioFormat } from "./audio-transcriber";
+import { MimoAudioTranscriber, MimoSpeakerDiarizer, parseAudioFormat } from "./audio-transcriber";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -9,7 +9,30 @@ describe("后台录音转写适配器", () => {
     expect(() => parseAudioFormat("call.txt")).toThrow(/格式不支持/);
   });
 
-  it("发送音频和说话人指令,返回转写文字", async () => {
+  it("用独立文本调用整理说话人与轮次", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      status: 200,
+      text: async () => JSON.stringify({ choices: [{ message: { content: "T01 经理:您好。\nT02 客户:您说。" } }] }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const diarizer = new MimoSpeakerDiarizer({
+      apiKey: "test",
+      baseUrl: "https://example.test/v1",
+      model: "mimo-v2.5",
+    });
+
+    const result = await diarizer.diarize("您好。您说。");
+
+    expect(result).toContain("T02 客户:");
+    const body = JSON.parse((fetchMock.mock.calls[0]![1] as RequestInit).body as string) as {
+      messages: Array<{ role: string; content: string }>;
+    };
+    expect(body.messages[0]?.content).toContain("严格保留原文");
+    expect(body.messages[1]).toEqual({ role: "user", content: "您好。您说。" });
+  });
+
+  it("按网关要求只发送音频,返回转写文字", async () => {
     const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
       ok: true,
       status: 200,
@@ -26,6 +49,6 @@ describe("后台录音转写适配器", () => {
       messages: Array<{ content: Array<{ input_audio?: { data: string; format: string }; text?: string }> }>;
     };
     expect(body.messages[0]?.content[0]?.input_audio).toEqual({ data: "AQID", format: "m4a" });
-    expect(body.messages[0]?.content[1]?.text).toContain("逐句区分说话人");
+    expect(body.messages[0]?.content).toHaveLength(1);
   });
 });

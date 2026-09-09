@@ -51,7 +51,7 @@ MIMO_MODEL=mimo-v2.5                                     # 可省略
 npm run audio:ingest -- "D:\path\call.m4a"
 ```
 
-支持 `mp3/m4a/wav/webm/ogg`,单段不超过 25MB。默认输出到 Git 忽略的 `data/audio-intake/`;也可追加 `--out <文件.md>` 指定位置。输出是“待校对、待脱敏”的文字稿,不会自动写入素材库或发布策略卡。
+支持 `mp3/m4a/wav/webm/ogg`,单段不超过 25MB。后台先完成纯音频转写,再独立整理经理/客户轮次。默认输出到 Git 忽略的 `data/audio-intake/`;也可追加 `--out <文件.md>` 指定位置。输出是“待校对、待脱敏”的文字稿,不会自动写入素材库或发布策略卡。
 
 ## 结构
 
