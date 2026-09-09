@@ -4,7 +4,18 @@ import {
   DEFAULT_MODEL_NAME,
   OpenAICompatibleModelAdapter,
 } from "./adapters/openai-model-adapter";
-import { SEED_CARDS, SEED_PERSONA, SEED_PRODUCT_CARD, SEED_TRANSCRIPT } from "./domain/seed";
+import {
+  SEED_CARDS,
+  SEED_PERSONA,
+  SEED_PERSONA_P03,
+  SEED_PRODUCT_CARD,
+  SEED_TRANSCRIPT,
+} from "./domain/seed";
+import {
+  expectNoFabricatedIdentity,
+  expectNoPlaceholderTokens,
+  openingManagerTurnInput,
+} from "./test/rule9";
 
 /**
  * 真实模型冒烟测试(spec.md 测试决策):默认跳过,手动触发——
@@ -54,5 +65,17 @@ suite("真实模型冒烟", () => {
     expect(output.reply).toBeTruthy();
     expect(output.reply).not.toMatch(/^(经理|理财经理)[:：]/);
     expect(output.usedCardId).toBeTruthy();
+  });
+
+  it("规则9回归:可见信息无代发时,开场不得假设客户为代发客户(票11,demo-03 同场景)", { timeout: 300_000 }, async () => {
+    const adapter = createAdapter();
+    // P03(定期到期·话少客户)可见信息不含代发关系;demo-03 曾在此场景
+    // 首轮凭空称客户为「代发客户」。断言与伪适配器钉子共用
+    // src/test/rule9.ts 的防护定义。
+    const output = await adapter.generateManagerTurn(
+      openingManagerTurnInput(SEED_PERSONA_P03.visible),
+    );
+    expectNoFabricatedIdentity(output.reply);
+    expectNoPlaceholderTokens(output.reply);
   });
 });
