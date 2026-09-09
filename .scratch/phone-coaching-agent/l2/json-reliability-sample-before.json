@@ -1,0 +1,101 @@
+{
+  "date": "2026-09-09",
+  "note": "票12改造前基线:适配器无 response_format(stash 采样)",
+  "model": "mimo-v2.5",
+  "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
+  "rounds": 12,
+  "degraded": 2,
+  "degradedRate": 0.167,
+  "rows": [
+    {
+      "persona": "P01",
+      "scenario": "开场",
+      "degraded": false,
+      "usedCardId": "sc-c01-1",
+      "replyHead": "您好，我是咱们XX银行的客户经理。您现在方便说几句话吗？是这样的，您是我们行的代发客",
+      "ms": 13380
+    },
+    {
+      "persona": "P01",
+      "scenario": "软拒绝",
+      "degraded": false,
+      "usedCardId": "sc-c01-1",
+      "replyHead": "好的，没关系，那先不打扰您了。我是咱们行的客户经理，有需要随时可以联系我。",
+      "ms": 39276
+    },
+    {
+      "persona": "P01",
+      "scenario": "资金话题",
+      "degraded": true,
+      "replyHead": "国债逆回购确实灵活,收益也不比货基差。那您账户里不是每天都满仓做逆回购吧?有些闲置的",
+      "ms": 12839
+    },
+    {
+      "persona": "P01",
+      "scenario": "明确拒绝",
+      "degraded": false,
+      "replyHead": "好的，打扰您了，祝您生活愉快。再见。",
+      "ms": 8177
+    },
+    {
+      "persona": "P02",
+      "scenario": "开场",
+      "degraded": false,
+      "replyHead": "您好阿姨，我是某银行的理财经理。您现在方便讲电话吗？之前跟您沟通过资金到账的事儿，行",
+      "ms": 27291
+    },
+    {
+      "persona": "P02",
+      "scenario": "软拒绝",
+      "degraded": false,
+      "usedCardId": "sc-c01-3",
+      "replyHead": "好的，那不打扰您了。我是咱们行的客户经理，有需要随时找我。",
+      "ms": 4132
+    },
+    {
+      "persona": "P02",
+      "scenario": "资金话题",
+      "degraded": false,
+      "usedCardId": "sc-c01-2",
+      "replyHead": "您很专业啊，国债逆回购确实灵活。其实我们行里也有类似国债逆回购这种，资金不用锁很久的",
+      "ms": 25371
+    },
+    {
+      "persona": "P02",
+      "scenario": "明确拒绝",
+      "degraded": false,
+      "replyHead": "好的,打扰您了。我是咱们行的客户经理,有需要随时找我。",
+      "ms": 9732
+    },
+    {
+      "persona": "P03",
+      "scenario": "开场",
+      "degraded": false,
+      "usedCardId": "sc-c01-1",
+      "replyHead": "您好，我是XX银行的客户经理，您现在方便吗？行里有个面向代发客户的新资金活动，想跟您",
+      "ms": 13427
+    },
+    {
+      "persona": "P03",
+      "scenario": "软拒绝",
+      "degraded": false,
+      "usedCardId": "sc-c01-2",
+      "replyHead": "好的，完全理解。我是咱们行的客户经理，后续有任何需要随时联系我。",
+      "ms": 5496
+    },
+    {
+      "persona": "P03",
+      "scenario": "资金话题",
+      "degraded": true,
+      "replyHead": "好的,国债逆回购确实是个不错的闲钱管理方式。那您平时没做逆回购的时候,闲置资金一般怎",
+      "ms": 11747
+    },
+    {
+      "persona": "P03",
+      "scenario": "明确拒绝",
+      "degraded": false,
+      "replyHead": "好的,理解,打扰您了。我是咱们行的客户经理,有需要随时找我。",
+      "ms": 9542
+    }
+  ]
+}

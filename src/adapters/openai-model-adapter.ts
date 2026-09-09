@@ -58,7 +58,11 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     }
     messages.push({ role: "user", content: input.customerText });
 
-    const { content, reasoning } = await this.chat(messages);
+    // 网关支持 response_format=json_object(票 12 探测:HTTP 200 且输出可解析)。
+    // 规则 10 要求只输出 JSON;纯文本降级路径仍保留作最后兜底。
+    const { content, reasoning } = await this.chat(messages, {
+      response_format: { type: "json_object" },
+    });
     if (content.trim()) return this.managerTurnFromText(content);
     // 推理模型偶发把最终 JSON 落在 reasoning_content 而 content 为空:
     // 能解析出结构化输出则采用;思维链文本绝不能当作对话播出。
@@ -102,6 +106,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
 
   private async chat(
     messages: Array<{ role: string; content: string }>,
+    extraBody?: Record<string, unknown>,
   ): Promise<{ content: string; reasoning: string }> {
     const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
       method: "POST",
@@ -115,6 +120,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
         messages,
         temperature: 0.7,
         max_tokens: 16384,
+        ...extraBody,
       }),
     });
     if (!response.ok) {

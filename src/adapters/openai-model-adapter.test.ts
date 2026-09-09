@@ -72,3 +72,44 @@ describe("推理模型输出兜底", () => {
     await expect(adapter.generateManagerTurn(managerInput())).rejects.toThrow("语言模型返回为空");
   });
 });
+
+describe("JSON 输出模式(票 12)", () => {
+  it("对话请求发送 response_format=json_object,转写分析请求不发送", async () => {
+    const managerPayload = {
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content: '{"signal":"无","goal":"确认时机","reply":"您好,方便聊两句吗?","shouldEnd":false}',
+          },
+        },
+      ],
+    };
+    const analystPayload = {
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content:
+              '{"analysis":{"scenario":"s","customerState":"c","overallGoal":"g","stages":[],"strengths":[],"weaknesses":[],"actualResult":"r","reusableConditions":[]},"cards":[{"id":"sc-1","name":"n"}]}',
+          },
+        },
+      ],
+    };
+    const payloads = [managerPayload, analystPayload];
+    const fetchMock = vi.fn(async (_url: string | URL | RequestInit, _init?: RequestInit) => {
+      const payload = payloads.at(fetchMock.mock.calls.length - 1) ?? managerPayload;
+      return { ok: true, status: 200, text: async () => JSON.stringify(payload), json: async () => payload };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    await adapter.generateManagerTurn(managerInput());
+    await adapter.analyzeTranscript("T01 经理:你好。\nT02 客户:什么事?");
+
+    const bodies = fetchMock.mock.calls.map(
+      (call) => JSON.parse((call[1] as RequestInit).body as string) as Record<string, unknown>,
+    );
+    expect(bodies[0].response_format).toEqual({ type: "json_object" });
+    expect(bodies[1].response_format).toBeUndefined();
+  });
+});

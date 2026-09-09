@@ -1,0 +1,106 @@
+{
+  "date": "2026-09-09",
+  "note": "票12改造后复测:适配器已启用 response_format=json_object;改造前基线见 demo-conversations-02-05-小结(4段演示6次降级)",
+  "model": "mimo-v2.5",
+  "baseUrl": "https://token-plan-cn.xiaomimimo.com/v1",
+  "rounds": 12,
+  "degraded": 0,
+  "degradedRate": 0,
+  "rows": [
+    {
+      "persona": "P01",
+      "scenario": "开场",
+      "degraded": false,
+      "usedCardId": "sc-c01-1",
+      "replyHead": "您好，我是XX银行的客户经理。请问您现在方便说话吗？您是我们行的代发客户，行里有个针",
+      "ms": 23736
+    },
+    {
+      "persona": "P01",
+      "scenario": "软拒绝",
+      "degraded": false,
+      "usedCardId": "sc-c01-1",
+      "replyHead": "好的,理解。那就不打扰您了。我是咱们行的客户经理,后面有需要随时联系我。",
+      "ms": 5332
+    },
+    {
+      "persona": "P01",
+      "scenario": "资金话题",
+      "degraded": false,
+      "usedCardId": "sc-c01-2",
+      "replyHead": "明白，国债逆回购安全灵活，您这操作挺专业的。那您平时在证券账户里，大概会留多少日常要",
+      "ms": 11663
+    },
+    {
+      "persona": "P01",
+      "scenario": "明确拒绝",
+      "degraded": false,
+      "usedCardId": "sc-c01-1 (停止部分)",
+      "replyHead": "好的,理解。我是咱们行的客户经理,有需要随时联系我。祝您生活愉快!",
+      "ms": 4992
+    },
+    {
+      "persona": "P02",
+      "scenario": "开场",
+      "degraded": false,
+      "usedCardId": "sc-c01-1",
+      "replyHead": "您好，我是咱们银行的客户经理。您现在方便听我说两分钟吗？",
+      "ms": 22537
+    },
+    {
+      "persona": "P02",
+      "scenario": "软拒绝",
+      "degraded": false,
+      "usedCardId": "sc-c01-1",
+      "replyHead": "好的，没关系。我是咱们行的客户经理，有需要随时找我。祝您生活愉快！",
+      "ms": 3908
+    },
+    {
+      "persona": "P02",
+      "scenario": "资金话题",
+      "degraded": false,
+      "usedCardId": "sc-c01-2",
+      "replyHead": "那您挺专业的，国债逆回购确实稳妥。那您平时银行这边的活钱一般怎么放呢？",
+      "ms": 17408
+    },
+    {
+      "persona": "P02",
+      "scenario": "明确拒绝",
+      "degraded": false,
+      "replyHead": "好的,理解。我是咱们行的客户经理,有需要随时联系我。",
+      "ms": 17740
+    },
+    {
+      "persona": "P03",
+      "scenario": "开场",
+      "degraded": false,
+      "usedCardId": "sc-c01-1",
+      "replyHead": "先生您好，我是XX银行的客户经理，也是您的管户经理。现在方便说几句话吗？您有一笔资金",
+      "ms": 19628
+    },
+    {
+      "persona": "P03",
+      "scenario": "软拒绝",
+      "degraded": false,
+      "usedCardId": "sc-c01-1",
+      "replyHead": "好的,那就不打扰您了。我是咱们行的客户经理,有需要随时找我。",
+      "ms": 37793
+    },
+    {
+      "persona": "P03",
+      "scenario": "资金话题",
+      "degraded": false,
+      "usedCardId": "sc-c01-2",
+      "replyHead": "国债逆回购确实灵活，收益也不错。那您大部分资金是长期放在股票账户里，还是说有部分是闲",
+      "ms": 4200
+    },
+    {
+      "persona": "P03",
+      "scenario": "明确拒绝",
+      "degraded": false,
+      "usedCardId": "无",
+      "replyHead": "好的,非常抱歉打扰您。我是咱们行的客户经理,有需要随时联系我。",
+      "ms": 3789
+    }
+  ]
+}
