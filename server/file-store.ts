@@ -45,6 +45,9 @@ export class FileStorage implements ProductStorage {
   async getConversation(id: string): Promise<Conversation | null> {
     return this.conversations.get(id) ?? null;
   }
+  async listConversations(): Promise<Conversation[]> {
+    return [...this.conversations.values()];
+  }
 
   async savePersona(persona: Persona): Promise<void> {
     this.personas.set(persona.id, persona);

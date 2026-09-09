@@ -20,9 +20,13 @@ function personaToLines(persona: Persona): PersonaLine[] {
 export function PersonaStep({
   api,
   onStarted,
+  onSaved,
+  startLabel = "开始接听",
 }: {
   api: ProductApi;
-  onStarted: (conversationId: string) => void;
+  onStarted?: (conversationId: string) => void;
+  onSaved?: (persona: Persona) => void;
+  startLabel?: string;
 }) {
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -56,20 +60,21 @@ export function PersonaStep({
     setPersonas((current) => [...current, saved]);
     setSelectedId(saved.id);
     setEditing(null);
+    onSaved?.(saved);
     return saved;
   }
 
   async function saveAndStart() {
     await run(async () => {
       const saved = await saveCustomPersona();
-      onStarted((await api.startConversation(saved.id)).id);
+      if (onStarted) onStarted((await api.startConversation(saved.id)).id);
     });
   }
 
   async function start() {
     if (!selected) return;
     await run(async () => {
-      onStarted((await api.startConversation(selected.id)).id);
+      if (onStarted) onStarted((await api.startConversation(selected.id)).id);
     });
   }
 
@@ -193,9 +198,11 @@ export function PersonaStep({
             >
               保存为我的生客
             </button>
-            <button type="button" onClick={saveAndStart} disabled={busy}>
-              保存并开始接听
-            </button>
+            {onStarted && (
+              <button type="button" onClick={saveAndStart} disabled={busy}>
+                保存并开始接听
+              </button>
+            )}
             <button type="button" className="ghost" onClick={() => setEditing(null)} disabled={busy}>
               取消
             </button>
@@ -215,9 +222,11 @@ export function PersonaStep({
           >
             修改属性
           </button>
-          <button onClick={start} disabled={busy || !selected}>
-            开始接听
-          </button>
+          {onStarted && (
+            <button onClick={start} disabled={busy || !selected}>
+              {startLabel}
+            </button>
+          )}
         </div>
       )}
     </section>

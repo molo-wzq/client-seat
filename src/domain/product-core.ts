@@ -8,23 +8,27 @@ import type {
   ConversationTurn,
   Material,
   MaterialDraftPatch,
+  MaterialKind,
   Persona,
   PersonaInput,
   StrategyCard,
   VisiblePersona,
 } from "./types";
+import { isMaterialKind } from "./types";
 
 /** 每通电话的经理轮数上限(spec.md:提示词规则+应用层轮数上限)。 */
 export const MAX_MANAGER_TURNS = 12;
 
 export interface ProductCore {
-  analyzeTranscript(input: { title?: string; transcript: string }): Promise<Material>;
+  analyzeTranscript(input: { title?: string; transcript: string; kind?: MaterialKind }): Promise<Material>;
   /** 人工确认:把该素材的全部草稿卡发布为已发布。 */
   publishMaterialCards(materialId: string): Promise<Material>;
   /** 人工确认:发布指定策略卡(卡是发布决定的最小单元)。 */
   publishCards(materialId: string, cardIds: string[]): Promise<Material>;
   /** 人工修改素材草稿:纠正说话人、编辑分析、编辑未发布的策略卡。 */
   updateMaterialDraft(materialId: string, patch: MaterialDraftPatch): Promise<Material>;
+  listMaterials(): Promise<Material[]>;
+  getMaterial(materialId: string): Promise<Material>;
   /** 从预设或修改后的属性保存一位自定义生客;留空字段保持未知,不自动补全。 */
   savePersona(input: PersonaInput): Promise<Persona>;
   listPersonas(): Promise<Persona[]>;
@@ -32,6 +36,7 @@ export interface ProductCore {
   /** 快速开始:库中无已发布策略卡时以种子素材(已发布态)兜底,用第一个内置画像直接开一通对话;幂等。 */
   quickStart(): Promise<Conversation>;
   getConversation(conversationId: string): Promise<Conversation>;
+  listConversations(): Promise<Conversation[]>;
   sendCustomerTurn(conversationId: string, text: string): Promise<Conversation>;
   finishConversation(conversationId: string): Promise<Conversation>;
   getResult(conversationId: string): Promise<ConversationResult>;
@@ -78,9 +83,10 @@ export function createProductCore(deps: {
   }
 
   return {
-    async analyzeTranscript({ title, transcript }) {
+    async analyzeTranscript({ title, transcript, kind }) {
       const text = transcript.trim();
       if (!text) throw new Error("转写稿内容为空");
+      if (kind !== undefined && !isMaterialKind(kind)) throw new Error("素材类型不合法");
 
       const { analysis, cards, turns: adapterTurns } = await copywriting.analyzeTranscript(text);
       // 标题取场景首句,避免长句截断在词中间。
@@ -120,6 +126,7 @@ export function createProductCore(deps: {
           };
         }),
         createdAt: new Date().toISOString(),
+        ...(kind ? { kind } : {}),
       } satisfies Material;
       await storage.saveMaterial(material);
       return material;
@@ -204,8 +211,21 @@ export function createProductCore(deps: {
         });
       }
 
+      if (patch.kind !== undefined) {
+        if (!isMaterialKind(patch.kind)) throw new Error("素材类型不合法");
+        material.kind = patch.kind;
+      }
+
       await storage.saveMaterial(material);
       return material;
+    },
+
+    async listMaterials() {
+      return storage.listMaterials();
+    },
+
+    async getMaterial(materialId) {
+      return requireMaterial(materialId);
     },
 
     async listPersonas() {
@@ -240,6 +260,11 @@ export function createProductCore(deps: {
 
     async getConversation(conversationId) {
       return requireConversation(conversationId);
+    },
+
+    async listConversations() {
+      const conversations = await storage.listConversations();
+      return [...conversations].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
     },
 
     async quickStart() {

@@ -8,10 +8,12 @@ export function CallStep({
   api,
   conversationId,
   onFinished,
+  onConversationChange,
 }: {
   api: ProductApi;
   conversationId: string;
   onFinished: (result: ConversationResult) => void;
+  onConversationChange?: (conversation: Conversation) => void;
 }) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [text, setText] = useState("");
@@ -20,11 +22,20 @@ export function CallStep({
   const [error, setError] = useState<string | null>(null);
   const logRef = useRef<HTMLOListElement>(null);
 
+  function applyConversation(next: Conversation) {
+    setConversation(next);
+    onConversationChange?.(next);
+  }
+
   useEffect(() => {
     let cancelled = false;
     api
       .getConversation(conversationId)
-      .then((c) => !cancelled && setConversation(c))
+      .then((c) => {
+        if (cancelled) return;
+        setConversation(c);
+        onConversationChange?.(c);
+      })
       .catch((e) => !cancelled && setError((e as Error).message));
     return () => {
       cancelled = true;
@@ -45,7 +56,7 @@ export function CallStep({
     if (!customerText || !conversation || ended) return;
     // 乐观更新:客户话立即上屏,模型 5–15 秒的等待不显得卡死;失败回滚。
     const previous = conversation;
-    setConversation({
+    applyConversation({
       ...conversation,
       turns: [
         ...conversation.turns,
@@ -61,9 +72,9 @@ export function CallStep({
     setBusyHint("理财经理正在思考…");
     setError(null);
     try {
-      setConversation(await api.sendCustomerTurn(conversationId, customerText));
+      applyConversation(await api.sendCustomerTurn(conversationId, customerText));
     } catch (e) {
-      setConversation(previous);
+      applyConversation(previous);
       setText(customerText);
       setError((e as Error).message);
     } finally {

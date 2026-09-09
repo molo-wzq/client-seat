@@ -33,6 +33,8 @@ export function createHttpProductApi(baseUrl = ""): ProductApi {
         method: "PATCH",
         body: JSON.stringify(patch),
       }),
+    listMaterials: () => request("/materials"),
+    getMaterial: (materialId) => request(`/materials/${encodeURIComponent(materialId)}`),
     listPersonas: () => request("/personas"),
     savePersona: (input) =>
       request("/personas", { method: "POST", body: JSON.stringify(input) }),
@@ -41,6 +43,7 @@ export function createHttpProductApi(baseUrl = ""): ProductApi {
     quickStart: () => request("/quickstart", { method: "POST" }),
     getConversation: (conversationId) =>
       request(`/conversations/${encodeURIComponent(conversationId)}`),
+    listConversations: () => request("/conversations"),
     sendCustomerTurn: (conversationId, text) =>
       request(`/conversations/${encodeURIComponent(conversationId)}/turns`, {
         method: "POST",

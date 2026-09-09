@@ -367,5 +367,6 @@ export function buildSeedMaterial(): Omit<Material, "id" | "createdAt"> {
     turns: numberTurns(parseTranscriptTurns(SEED_TRANSCRIPT)),
     analysis: structuredClone(SEED_ANALYSIS),
     cards: structuredClone(SEED_CARDS),
+    kind: "顺利沟通",
   };
 }

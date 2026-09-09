@@ -51,7 +51,12 @@ describe("加载提示", () => {
 
   it("快速开始:准备期间显示「正在准备对话」", async () => {
     const pending = deferred<Conversation>();
-    const api = { quickStart: () => pending.promise } as unknown as ProductApi;
+    const api = {
+      quickStart: () => pending.promise,
+      listPersonas: async () => [],
+      listMaterials: async () => [],
+      listConversations: async () => [],
+    } as unknown as ProductApi;
     const user = userEvent.setup();
     render(<App api={api} />);
 

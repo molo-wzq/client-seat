@@ -11,6 +11,7 @@ import { FakeModelAdapter } from "../src/adapters/fake-model-adapter";
 import type { CopywritingPort, DialoguePort } from "../src/domain/ports";
 import { createProductCore } from "../src/domain/product-core";
 import type { MaterialDraftPatch } from "../src/domain/types";
+import { isMaterialKind } from "../src/domain/types";
 import { FileStorage } from "./file-store";
 import { loadEnvFile } from "./env";
 
@@ -57,8 +58,26 @@ async function handleApi(
   const body = await readJsonBody(req);
 
   if (req.method === "POST" && pathname === "/api/materials/analyze") {
-    const material = await core.analyzeTranscript(body as { title?: string; transcript: string });
+    const input = body as { title?: string; transcript: string; kind?: unknown };
+    if (input.kind !== undefined && !isMaterialKind(input.kind)) {
+      respondJson(res, 400, { error: "素材类型不合法" });
+      return;
+    }
+    const material = await core.analyzeTranscript({
+      title: input.title,
+      transcript: input.transcript,
+      kind: isMaterialKind(input.kind) ? input.kind : undefined,
+    });
     respondJson(res, 200, material);
+    return;
+  }
+  if (req.method === "GET" && pathname === "/api/materials") {
+    respondJson(res, 200, await core.listMaterials());
+    return;
+  }
+  const materialGetMatch = pathname.match(/^\/api\/materials\/([^/]+)$/);
+  if (req.method === "GET" && materialGetMatch) {
+    respondJson(res, 200, await core.getMaterial(decodeURIComponent(materialGetMatch[1])));
     return;
   }
   const publishMatch = pathname.match(/^\/api\/materials\/([^/]+)\/publish$/);
@@ -96,6 +115,10 @@ async function handleApi(
   }
   if (req.method === "POST" && pathname === "/api/quickstart") {
     respondJson(res, 200, await core.quickStart());
+    return;
+  }
+  if (req.method === "GET" && pathname === "/api/conversations") {
+    respondJson(res, 200, await core.listConversations());
     return;
   }
   if (req.method === "POST" && pathname === "/api/conversations") {

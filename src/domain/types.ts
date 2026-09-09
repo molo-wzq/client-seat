@@ -2,6 +2,15 @@
 
 export type CardStatus = "draft" | "published";
 
+/** 素材类型:按客户对通话的总体倾向归类,入库归档项。 */
+export type MaterialKind = "顺利沟通" | "软拒绝" | "明确拒绝";
+
+export const MATERIAL_KINDS: readonly MaterialKind[] = ["顺利沟通", "软拒绝", "明确拒绝"];
+
+export function isMaterialKind(value: unknown): value is MaterialKind {
+  return typeof value === "string" && (MATERIAL_KINDS as readonly string[]).includes(value);
+}
+
 /** 策略卡来源片段:可追溯到素材与转写轮次。 */
 export interface SourceExcerpt {
   materialTitle: string;
@@ -97,6 +106,8 @@ export interface Material {
   analysis: CaseAnalysis;
   cards: StrategyCard[];
   createdAt: string;
+  /** 素材类型;旧数据可能缺失,视为未分类,不自动补全。 */
+  kind?: MaterialKind;
 }
 
 /** 转写轮次:number 与轮次区间标注(T01…)按出现顺序对应;speaker 可被用户纠正。 */
@@ -111,6 +122,7 @@ export interface MaterialDraftPatch {
   turns?: MaterialTurn[];
   analysis?: CaseAnalysis;
   cards?: Array<Omit<StrategyCard, "status">>;
+  kind?: MaterialKind;
 }
 
 export type Speaker = "customer" | "manager";

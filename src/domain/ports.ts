@@ -65,6 +65,7 @@ export interface ProductStorage {
   getMaterial(id: string): Promise<Material | null>;
   saveConversation(conversation: Conversation): Promise<void>;
   getConversation(id: string): Promise<Conversation | null>;
+  listConversations(): Promise<Conversation[]>;
   savePersona(persona: Persona): Promise<void>;
   listPersonas(): Promise<Persona[]>;
 }

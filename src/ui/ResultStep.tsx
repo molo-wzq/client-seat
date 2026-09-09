@@ -7,6 +7,10 @@ export function ResultStep({
   result: ConversationResult;
   onRestart: () => void;
 }) {
+  function scrollToTurn(turnNumber: number) {
+    document.getElementById(`result-turn-${turnNumber}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
   return (
     <section className="step" aria-labelledby="result-title">
       <h2 id="result-title">这通电话是怎样推进的</h2>
@@ -59,6 +63,18 @@ export function ResultStep({
                   ))}
                 </blockquote>
               )}
+              <div className="actions">
+                <button
+                  type="button"
+                  className="ghost"
+                  onClick={() => scrollToTurn(entry.turnNumber)}
+                >
+                  回放原文
+                </button>
+                <button type="button" className="ghost" disabled title="L4 音频接入后可播放对应原声片段">
+                  播放原声
+                </button>
+              </div>
             </li>
           ))}
         </ol>
@@ -67,7 +83,7 @@ export function ResultStep({
       <h3>完整对话</h3>
       <ol className="result-log">
         {result.turns.map((turn) => (
-          <li key={turn.number}>
+          <li key={turn.number} id={`result-turn-${turn.number}`}>
             <span className="who">
               {turn.speaker === "customer" ? "你(生客)" : "理财经理(AI)"}:
             </span>
@@ -77,7 +93,7 @@ export function ResultStep({
       </ol>
 
       <div className="actions">
-        <button onClick={onRestart}>重新开始一轮</button>
+        <button onClick={onRestart}>再来一局</button>
       </div>
     </section>
   );
