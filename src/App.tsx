@@ -19,6 +19,8 @@ export function App({ api }: { api: ProductApi }) {
   const [quickBusy, setQuickBusy] = useState(false);
   const [connectBusy, setConnectBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [catalogBusy, setCatalogBusy] = useState(true);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
 
   async function refreshCatalog() {
     const [nextPersonas, nextMaterials, nextConversations] = await Promise.all([
@@ -31,21 +33,20 @@ export function App({ api }: { api: ProductApi }) {
     setConversations(nextConversations);
   }
 
+  async function initialLoad() {
+    setCatalogBusy(true);
+    setCatalogError(null);
+    try {
+      await refreshCatalog();
+    } catch (e) {
+      setCatalogError((e as Error).message);
+    } finally {
+      setCatalogBusy(false);
+    }
+  }
+
   useEffect(() => {
-    let cancelled = false;
-    Promise.all([api.listPersonas(), api.listMaterials(), api.listConversations()])
-      .then(([nextPersonas, nextMaterials, nextConversations]) => {
-        if (cancelled) return;
-        setPersonas(nextPersonas);
-        setMaterials(nextMaterials);
-        setConversations(nextConversations);
-      })
-      .catch((e) => {
-        if (!cancelled) setError((e as Error).message);
-      });
-    return () => {
-      cancelled = true;
-    };
+    void initialLoad();
   }, [api]);
 
   const publishedCards = useMemo(
@@ -140,41 +141,57 @@ export function App({ api }: { api: ProductApi }) {
         {error && (
           <p role="alert" className="error">
             {error}
+            <button type="button" className="error-close" onClick={() => setError(null)} aria-label="关闭错误提示">
+              ×
+            </button>
           </p>
         )}
-        {view === "setup" && (
-          <SetupAct
-            api={api}
-            personas={personas}
-            publishedCards={publishedCards}
-            onConnect={(personaId) => void connect(personaId)}
-            onCatalogChange={() => void refreshCatalog()}
-            connectBusy={connectBusy}
-          />
-        )}
-        {view === "table" && conversation && (
-          <TableAct
-            api={api}
-            conversationId={conversation.id}
-            conversation={conversation}
-            persona={seatedPersona}
-            publishedCards={publishedCards}
-            onConversationChange={setConversation}
-            onFinished={(finished) => {
-              setResult(finished);
-              setConversation((current) => (current ? { ...current, status: "ended" } : current));
-              setView("postgame");
-              void refreshCatalog();
-            }}
-          />
-        )}
-        {view === "postgame" && result && <ResultStep result={result} onRestart={restart} />}
-        {view === "materials" && (
-          <MaterialsView api={api} materials={materials} onPublished={() => void refreshCatalog()} />
-        )}
-        {view === "cards" && <CardsView cards={allCards} />}
-        {view === "history" && (
-          <HistoryView conversations={conversations} personas={personas} onOpen={(item) => void openHistory(item)} />
+        {catalogBusy ? (
+          <BusyHint text="正在准备桌面…" />
+        ) : catalogError ? (
+          <div role="alert" className="error catalog-error">
+            <span>目录加载失败:{catalogError}</span>
+            <button type="button" onClick={() => void initialLoad()}>
+              重试
+            </button>
+          </div>
+        ) : (
+          <>
+            {view === "setup" && (
+              <SetupAct
+                api={api}
+                personas={personas}
+                publishedCards={publishedCards}
+                onConnect={(personaId) => void connect(personaId)}
+                onCatalogChange={() => void refreshCatalog()}
+                connectBusy={connectBusy}
+              />
+            )}
+            {view === "table" && conversation && (
+              <TableAct
+                api={api}
+                conversationId={conversation.id}
+                conversation={conversation}
+                persona={seatedPersona}
+                publishedCards={publishedCards}
+                onConversationChange={setConversation}
+                onFinished={(finished) => {
+                  setResult(finished);
+                  setConversation((current) => (current ? { ...current, status: "ended" } : current));
+                  setView("postgame");
+                  void refreshCatalog();
+                }}
+              />
+            )}
+            {view === "postgame" && result && <ResultStep result={result} onRestart={restart} />}
+            {view === "materials" && (
+              <MaterialsView api={api} materials={materials} onPublished={() => void refreshCatalog()} />
+            )}
+            {view === "cards" && <CardsView cards={allCards} />}
+            {view === "history" && (
+              <HistoryView conversations={conversations} personas={personas} onOpen={(item) => void openHistory(item)} />
+            )}
+          </>
         )}
       </main>
     </div>

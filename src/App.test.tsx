@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { FakeModelAdapter } from "./adapters/fake-model-adapter";
+import type { ProductApi } from "./product/product-api";
 import { createInProcessProductApi } from "./product/in-process-product-api";
 import { SCORING_PATTERN } from "./test/scoring-pattern";
 import { App } from "./App";
@@ -65,7 +66,7 @@ describe("快速开始", () => {
     const api = createInProcessProductApi({ adapter: new FakeModelAdapter() });
 
     render(<App api={api} />);
-    await user.click(screen.getByRole("button", { name: "快速开始一通对话" }));
+    await user.click(await screen.findByRole("button", { name: "快速开始一通对话" }));
 
     expect(await screen.findByRole("heading", { name: /对局/ })).toBeInTheDocument();
     const reply = screen.getByLabelText("客户回复");
@@ -77,7 +78,7 @@ describe("快速开始", () => {
 
 describe("进行中对局可找回", () => {
   async function startOngoingCall(user: ReturnType<typeof userEvent.setup>) {
-    await user.click(screen.getByRole("button", { name: "快速开始一通对话" }));
+    await user.click(await screen.findByRole("button", { name: "快速开始一通对话" }));
     expect(await screen.findByRole("heading", { name: /对局/ })).toBeInTheDocument();
     const reply = screen.getByLabelText("客户回复");
     await user.type(reply, "喂");
@@ -130,5 +131,50 @@ describe("进行中对局可找回", () => {
     await user.click(resume);
     expect(await screen.findByLabelText("客户回复")).toBeInTheDocument();
     expect(screen.getByText(/我是咱们银行的客户经理/)).toBeInTheDocument();
+  });
+});
+
+describe("目录加载反馈与重试", () => {
+  it("首屏显示加载提示;失败时给出错误与重试,重试成功后正常渲染", async () => {
+    const user = userEvent.setup();
+    const real = createInProcessProductApi({ adapter: new FakeModelAdapter() });
+    let fail = true;
+    const api = {
+      listPersonas: () => (fail ? Promise.reject(new Error("网络不可用")) : real.listPersonas()),
+      listMaterials: () => (fail ? Promise.reject(new Error("网络不可用")) : real.listMaterials()),
+      listConversations: () => (fail ? Promise.reject(new Error("网络不可用")) : real.listConversations()),
+    } as unknown as ProductApi;
+
+    render(<App api={api} />);
+
+    expect(screen.getByText("正在准备桌面…")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("目录加载失败:网络不可用");
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+
+    // 重试仍失败:错误保持可见
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("目录加载失败:网络不可用");
+
+    fail = false;
+    await user.click(screen.getByRole("button", { name: "重试" }));
+    expect(await screen.findByRole("heading", { name: /对局布置/ })).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("操作错误可以一键关闭", async () => {
+    const user = userEvent.setup();
+    const api = {
+      listPersonas: () => Promise.resolve([]),
+      listMaterials: () => Promise.resolve([]),
+      listConversations: () => Promise.resolve([]),
+      quickStart: () => Promise.reject(new Error("接通失败")),
+    } as unknown as ProductApi;
+
+    render(<App api={api} />);
+    await user.click(await screen.findByRole("button", { name: "快速开始一通对话" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("接通失败");
+
+    await user.click(screen.getByRole("button", { name: "关闭错误提示" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 });
