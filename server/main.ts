@@ -8,8 +8,9 @@ import {
   OpenAICompatibleModelAdapter,
 } from "../src/adapters/openai-model-adapter";
 import { FakeModelAdapter } from "../src/adapters/fake-model-adapter";
-import type { CopywritingPort, DialoguePort } from "../src/domain/ports";
-import { createProductCore } from "../src/domain/product-core";
+import { DEFAULT_ASR_MODEL, MimoAudioTranscriptionAdapter } from "../src/adapters/mimo-audio-transcription-adapter";
+import type { AudioTranscriptionPort, CopywritingPort, DialoguePort } from "../src/domain/ports";
+import { createProductCore, MAX_AUDIO_BYTES } from "../src/domain/product-core";
 import type { MaterialDraftPatch } from "../src/domain/types";
 import { isMaterialKind } from "../src/domain/types";
 import { FileStorage } from "./file-store";
@@ -35,7 +36,20 @@ if (!apiKey) {
   );
 }
 
-const core = createProductCore({ copywriting: adapter, dialogue: adapter, storage: new FileStorage(DATA_FILE) });
+const transcription: AudioTranscriptionPort = apiKey
+  ? new MimoAudioTranscriptionAdapter({
+      apiKey,
+      baseUrl: process.env.MIMO_BASE_URL || DEFAULT_MODEL_BASE_URL,
+      model: process.env.MIMO_ASR_MODEL || DEFAULT_ASR_MODEL,
+    })
+  : new FakeModelAdapter();
+
+const core = createProductCore({
+  transcription,
+  copywriting: adapter,
+  dialogue: adapter,
+  storage: new FileStorage(DATA_FILE),
+});
 
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url || "/", `http://localhost:${PORT}`);
@@ -55,6 +69,27 @@ async function handleApi(
   res: http.ServerResponse,
   pathname: string,
 ): Promise<void> {
+  if (req.method === "POST" && pathname === "/api/materials/transcribe") {
+    const encodedName = Array.isArray(req.headers["x-file-name"])
+      ? req.headers["x-file-name"][0]
+      : req.headers["x-file-name"];
+    let fileName = "";
+    try {
+      fileName = decodeURIComponent(encodedName || "");
+    } catch {
+      respondJson(res, 400, { error: "录音文件名不合法" });
+      return;
+    }
+    const bytes = await readBinaryBody(req, MAX_AUDIO_BYTES);
+    const result = await core.transcribeAudio({
+      fileName,
+      mediaType: req.headers["content-type"] || "application/octet-stream",
+      bytes: new Uint8Array(bytes),
+    });
+    respondJson(res, 200, result);
+    return;
+  }
+
   const body = await readJsonBody(req);
 
   if (req.method === "POST" && pathname === "/api/materials/analyze") {
@@ -154,6 +189,34 @@ async function handleApi(
     return;
   }
   respondJson(res, 404, { error: `未知接口:${req.method} ${pathname}` });
+}
+
+function readBinaryBody(req: http.IncomingMessage, maxBytes: number): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const declared = Number(req.headers["content-length"] || 0);
+    if (declared > maxBytes) {
+      req.resume();
+      reject(new Error("录音文件不能超过 25MB"));
+      return;
+    }
+    const chunks: Buffer[] = [];
+    let size = 0;
+    let tooLarge = false;
+    req.on("data", (chunk: Buffer) => {
+      if (tooLarge) return;
+      size += chunk.length;
+      if (size > maxBytes) {
+        tooLarge = true;
+        reject(new Error("录音文件不能超过 25MB"));
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      if (!tooLarge) resolve(Buffer.concat(chunks));
+    });
+    req.on("error", reject);
+  });
 }
 
 function readJsonBody(req: http.IncomingMessage): Promise<Record<string, unknown>> {

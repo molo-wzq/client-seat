@@ -7,6 +7,7 @@ import type {
   Persona,
   PersonaInput,
 } from "../domain/types";
+import type { AudioInput } from "../domain/ports";
 
 /**
  * 产品缝:UI 只依赖本接口。
@@ -14,6 +15,8 @@ import type {
  * - 浏览器运行时使用 HttpProductApi(轻量 Node 服务承载真实适配器与存储)。
  */
 export interface ProductApi {
+  /** 录音只用于生成待校对文字,不会随素材保存。 */
+  transcribeAudio(input: AudioInput): Promise<{ transcript: string }>;
   analyzeTranscript(input: { title?: string; transcript: string; kind?: MaterialKind }): Promise<Material>;
   publishMaterialCards(materialId: string): Promise<Material>;
   publishCards(materialId: string, cardIds: string[]): Promise<Material>;

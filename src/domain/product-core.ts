@@ -1,7 +1,7 @@
 import { buildSeedMaterial, SEED_MATERIAL_ID, SEED_MATERIAL_TITLE, SEED_PERSONAS, SEED_PRODUCT_CARD } from "./seed";
 import { randomId } from "./ports";
 import { numberTurns, parseTranscriptTurns, resolveTurnRange } from "./transcript";
-import type { CopywritingPort, DialoguePort, ProductStorage } from "./ports";
+import type { AudioInput, AudioTranscriptionPort, CopywritingPort, DialoguePort, ProductStorage } from "./ports";
 import type {
   Conversation,
   ConversationResult,
@@ -18,8 +18,11 @@ import { isMaterialKind } from "./types";
 
 /** 每通电话的经理轮数上限(spec.md:提示词规则+应用层轮数上限)。 */
 export const MAX_MANAGER_TURNS = 12;
+export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
+export const SUPPORTED_AUDIO_EXTENSIONS = ["mp3", "m4a", "wav", "webm", "ogg"] as const;
 
 export interface ProductCore {
+  transcribeAudio(input: AudioInput): Promise<{ transcript: string }>;
   analyzeTranscript(input: { title?: string; transcript: string; kind?: MaterialKind }): Promise<Material>;
   /** 人工确认:把该素材的全部草稿卡发布为已发布。 */
   publishMaterialCards(materialId: string): Promise<Material>;
@@ -43,11 +46,12 @@ export interface ProductCore {
 }
 
 export function createProductCore(deps: {
+  transcription: AudioTranscriptionPort;
   copywriting: CopywritingPort;
   dialogue: DialoguePort;
   storage: ProductStorage;
 }): ProductCore {
-  const { copywriting, dialogue, storage } = deps;
+  const { transcription, copywriting, dialogue, storage } = deps;
 
   async function requireMaterial(materialId: string): Promise<Material> {
     const material = await storage.getMaterial(materialId);
@@ -83,6 +87,18 @@ export function createProductCore(deps: {
   }
 
   return {
+    async transcribeAudio(input) {
+      const extension = input.fileName.split(".").pop()?.toLowerCase() ?? "";
+      if (!input.fileName.trim() || !SUPPORTED_AUDIO_EXTENSIONS.includes(extension as (typeof SUPPORTED_AUDIO_EXTENSIONS)[number])) {
+        throw new Error(`录音格式不支持,请使用 ${SUPPORTED_AUDIO_EXTENSIONS.join("/")}`);
+      }
+      if (input.bytes.byteLength === 0) throw new Error("录音文件为空");
+      if (input.bytes.byteLength > MAX_AUDIO_BYTES) throw new Error("录音文件不能超过 25MB");
+      const transcript = (await transcription.transcribeAudio(input)).trim();
+      if (!transcript) throw new Error("转写服务未返回文字");
+      return { transcript };
+    },
+
     async analyzeTranscript({ title, transcript, kind }) {
       const text = transcript.trim();
       if (!text) throw new Error("转写稿内容为空");
@@ -411,4 +427,3 @@ export function createProductCore(deps: {
     },
   };
 }
-

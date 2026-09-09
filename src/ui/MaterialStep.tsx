@@ -24,6 +24,9 @@ export function MaterialStep({
   compact?: boolean;
 }) {
   const [transcript, setTranscript] = useState(SEED_TRANSCRIPT);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
+  const [materialTitle, setMaterialTitle] = useState<string | undefined>();
+  const [transcriptionReady, setTranscriptionReady] = useState(false);
   const [kind, setKind] = useState<MaterialKind>(initialMaterial?.kind ?? "顺利沟通");
   const [material, setMaterial] = useState<Material | null>(initialMaterial ?? null);
   const { busy, busyHint, error, run } = useBusyTask("正在保存…");
@@ -81,6 +84,20 @@ export function MaterialStep({
 
   const draftCount = material?.cards.filter((c) => c.status === "draft").length ?? 0;
 
+  async function transcribeSelectedAudio() {
+    if (!audioFile) return;
+    await run(async () => {
+      const result = await api.transcribeAudio({
+        fileName: audioFile.name,
+        mediaType: audioFile.type,
+        bytes: new Uint8Array(await audioFile.arrayBuffer()),
+      });
+      setTranscript(result.transcript);
+      setMaterialTitle(audioFile.name.replace(/\.[^.]+$/, ""));
+      setTranscriptionReady(true);
+    }, "正在转写录音,可能需要几分钟…");
+  }
+
   return (
     <section className="step" aria-labelledby="material-title">
       <h2 id="material-title">{compact ? "自制素材" : "录音分析"}</h2>
@@ -91,6 +108,26 @@ export function MaterialStep({
       </p>
       {!material && (
         <>
+          <div className="audio-intake">
+            <label htmlFor="audio-file">优秀电话录音</label>
+            <input
+              id="audio-file"
+              type="file"
+              accept=".mp3,.m4a,.wav,.webm,.ogg"
+              onChange={(event) => {
+                setAudioFile(event.target.files?.[0] ?? null);
+                setTranscriptionReady(false);
+              }}
+              disabled={busy}
+            />
+            <p className="hint">支持 mp3、m4a、wav、webm、ogg,单段不超过 25MB。录音仅用于本次转写,不会保存到素材库。</p>
+            <div className="actions">
+              <button type="button" className="ghost" onClick={() => void transcribeSelectedAudio()} disabled={busy || !audioFile}>
+                转成文字
+              </button>
+            </div>
+          </div>
+          {transcriptionReady && <p role="status">转写完成。请先校对下面的文字和说话人,确认后再生成策略卡。</p>}
           <label htmlFor="transcript">电话转写稿</label>
           <textarea
             id="transcript"
@@ -116,11 +153,11 @@ export function MaterialStep({
             <button
               onClick={() =>
                 run(
-                  () => api.analyzeTranscript({ transcript, kind }).then(setMaterial),
+                  () => api.analyzeTranscript({ title: materialTitle, transcript, kind }).then(setMaterial),
                   "正在分析转写稿,可能需要 1–2 分钟…",
                 )
               }
-              disabled={busy || !transcript.trim()}
+              disabled={busy || !transcript.trim() || Boolean(audioFile && !transcriptionReady)}
             >
               {busy ? "分析中…" : "生成策略卡"}
             </button>
