@@ -102,6 +102,7 @@ npm run audio:ingest -- "D:\path\call.m4a"
 | [游戏手册](docs/game-manual.html) | 玩法流程图：开局准备 → 正式对局 → 结算复盘，含规则与回环（交互式，浏览器打开） |
 | [产品架构](docs/architecture-external.html) | 对外展示用架构图：策略沉淀 → 模拟演练 → 复盘追溯，三个视角切换（交互式） |
 | [组件图](docs/architecture.html) | 开发者视角的实现架构，组件可定位到源码文件（交互式） |
+| [UI 素材库 v1](docs/design/ui-asset-library-v1.md) | 前端视觉方向：设计 token、组件规格与 AI 瑕疵更正，附概念图（拟物化改版的视觉基准） |
 | [术语表](CONTEXT.md) | 素材、策略卡、收口等领域词汇的唯一定义 |
 | [路线图](PROJECT-ROADMAP.md) | L0–L7 分层计划与当前进度 |
 
