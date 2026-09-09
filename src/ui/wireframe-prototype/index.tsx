@@ -32,6 +32,7 @@ function setVariant(v: string) {
 
 export function WireframePrototype() {
   const [variant, setLocal] = useState(currentVariant);
+  const isCapture = new URLSearchParams(window.location.search).has("capture");
 
   useEffect(() => {
     function cycle(dir: 1 | -1) {
@@ -55,7 +56,7 @@ export function WireframePrototype() {
       {variant === "B" && <VariantB />}
       {variant === "C" && <VariantC />}
       {variant === "D" && <VariantD />}
-      <div className="wf-switcher">
+      {!isCapture && <div className="wf-switcher">
         <button
           onClick={() => {
             const i = VARIANTS.indexOf(variant);
@@ -81,7 +82,7 @@ export function WireframePrototype() {
         >
           →
         </button>
-      </div>
+      </div>}
     </div>
   );
 }
@@ -96,7 +97,7 @@ function VariantA() {
         <div className="wf-btn primary">快速开始一通</div>
         <div className="wf-nav-item active">▶ 进行中的通话</div>
         <div className="wf-nav-item">素材库(2)</div>
-        <div className="wf-nav-item">策略卡(3)</div>
+        <div className="wf-nav-item">技能卡(3)</div>
         <div className="wf-nav-item">历史通话(4)</div>
         <div className="wf-note">主张:打开即是通话;素材是侧房,不是第一道门。</div>
       </aside>
@@ -193,6 +194,12 @@ function VariantB() {
 /* ===== 变体 D:棋盘对练——策略卡/画像/产品是棋子,可拖拽布置;通话轨道是棋盘 ===== */
 
 const D_SEED_CARDS = SEED_CARDS.map((c) => ({ id: c.id, name: c.name }));
+type DPhase = "setup" | "table" | "postgame";
+
+function currentDPhase(): DPhase {
+  const phase = new URLSearchParams(window.location.search).get("phase");
+  return phase === "table" || phase === "postgame" ? phase : "setup";
+}
 
 /** 变体 D 全局外壳:借鉴变体 A 的左侧栏,三幕(布置/对局/结算)共用,静态展示。 */
 function DShell({ active, children }: { active: string; children: ReactNode }) {
@@ -204,9 +211,9 @@ function DShell({ active, children }: { active: string; children: ReactNode }) {
         <div className={`wf-nav-item${active === "进行中" ? " active" : ""}`}>▶ 进行中的通话</div>
         <div className={`wf-nav-item${active === "布置" ? " active" : ""}`}>新对局(布置)</div>
         <div className="wf-nav-item">素材库(2)</div>
-        <div className="wf-nav-item">策略卡(3)</div>
+        <div className="wf-nav-item">技能卡(3)</div>
         <div className="wf-nav-item">历史通话(4)</div>
-        <div className="wf-note">全局导航常驻;右侧按对局阶段切换三幕内容。</div>
+        <div className="wf-note">选择画像、接通电话、完成复盘，一局三幕。</div>
       </aside>
       <div className="wf-d-main">{children}</div>
     </div>
@@ -216,7 +223,7 @@ function DShell({ active, children }: { active: string; children: ReactNode }) {
 function VariantD() {
   // 原型态:三幕全用本地状态,不连真模型。卡组机制已否决:策略卡维持"发布即全员上场",
   // 布置阶段唯一拖拽动作 = 画像入座。
-  const [phase, setPhase] = useState<"setup" | "table" | "postgame">("setup");
+  const [phase, setPhase] = useState<DPhase>(currentDPhase);
   const [seatPersona, setSeatPersona] = useState<string | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
   const persona = SEED_PERSONAS.find((p) => p.id === seatPersona);
@@ -240,8 +247,8 @@ function VariantD() {
         </div>
         <div className="wf-d-board">
           <div className="wf-d-hand">
-            <div className="wf-title">生客名册</div>
-            <div className="wf-hint">拖到中央「客户席」接通;或直接快速开始(默认 P01)</div>
+            <div className="wf-title">客户画像</div>
+            <div className="wf-hint">选择一位客户入座，或用默认画像快速开局</div>
             {SEED_PERSONAS.map((p) => (
               <div
                 key={p.id}
@@ -255,9 +262,6 @@ function VariantD() {
                 </div>
               </div>
             ))}
-            <div className="wf-box solid">
-              <div className="wf-hint">+ 自定义生客(从名册复制改)</div>
-            </div>
           </div>
 
           <div className="wf-d-center">
@@ -278,8 +282,8 @@ function VariantD() {
                 <div className="wf-hint">把一位生客拖到这里,电话接通 ▸</div>
               )}
             </div>
-            <div className="wf-title">桌上的策略卡(只读,全部已发布)</div>
-            <div className="wf-hint">AI 对局中自动取用;本通不选卡——卡组机制已否决</div>
+            <div className="wf-title">桌上的技能卡</div>
+            <div className="wf-hint">AI 会根据客户回应，在对局中自动选择合适的技能</div>
             <div className="wf-d-track" style={{ marginBottom: 4 }}>
               {D_SEED_CARDS.map((c) => (
                 <div key={c.id} className="wf-box solid">
@@ -308,7 +312,7 @@ function VariantD() {
           </div>
         </div>
         <div className="wf-note">
-          借鉴:数字桌游的开局布置(Wingspan/Scythe 入座起手)。策略卡不拖不选:发布即全员上场,现有机制不变。
+          第 1 幕：选择客户画像，查看本局可用技能与产品信息，然后接通电话。
         </div>
       </div>
       </DShell>
@@ -361,7 +365,7 @@ function VariantD() {
 
           <div className="wf-d-deck">
             <div className="wf-title">桌面明牌</div>
-            <div className="wf-hint">经理本轮亮出的策略卡(高亮 = 正在用)</div>
+            <div className="wf-hint">经理本轮亮出的技能卡(高亮 = 正在用)</div>
             {D_SEED_CARDS.map((c, i) => (
               <div key={c.id} className={`wf-box solid${i === 0 ? " active" : ""}`}>
                 <div className="wf-hint">
@@ -374,8 +378,7 @@ function VariantD() {
           </div>
         </div>
         <div className="wf-note">
-          借鉴:Hearthstone 的手牌/站场与拖牌落子;BGA 的轨道 token 与右侧行动日志;
-          「本轮在用」的高亮对应游戏里的激活卡发光。
+          第 2 幕：你扮演客户回应，经理根据局势打出技能卡，通话轨道推动对局走向收口。
         </div>
       </div>
       </DShell>
@@ -411,13 +414,12 @@ function VariantD() {
             ↻ 再来一局
           </button>{" "}
           <button className="wf-btn" onClick={() => setPhase("setup")}>
-            换画像/换卡组
+            换画像再来一局
           </button>
         </p>
       </div>
       <div className="wf-note">
-        借鉴:Slay the Spire / Wingspan 的结算屏——分项逐条揭晓、策略路径像战报回放,
-        任意一条可跳回对局现场看原文。这就是"复盘"的游戏化形态。
+        第 3 幕：逐条揭晓沟通结果与技能路径，像查看战报一样回到关键对话。
       </div>
     </div>
     </DShell>
