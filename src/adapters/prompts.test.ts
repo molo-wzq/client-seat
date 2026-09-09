@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assembleManagerSystemPrompt } from "./prompts";
+import { assembleAnalystSystemPrompt, assembleManagerSystemPrompt } from "./prompts";
 import {
   SEED_CARDS,
   SEED_PERSONA,
@@ -66,5 +66,15 @@ describe("经理系统提示词:规则 9 客户属性防护", () => {
   it("可见信息本身仍完整进入提示词(代发画像不受影响)", () => {
     const prompt = promptFor(SEED_PERSONA.visible);
     expect(prompt).toContain("代发工资客户,代发关系正常");
+  });
+});
+
+describe("分析提示词:场景读法(票 14)", () => {
+  it("区分「到账」与「到期」,按转写原文用词判断、不得混用", () => {
+    const prompt = assembleAnalystSystemPrompt();
+    expect(prompt).toContain("区分「到账」与「到期」");
+    expect(prompt).toContain("期限届满");
+    expect(prompt).toContain("不得混用");
+    expect(prompt).toMatch(/按转写原文用词判断/);
   });
 });
