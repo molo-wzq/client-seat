@@ -19,6 +19,12 @@ import { isMaterialKind } from "./types";
 /** 每通电话的经理轮数上限(spec.md:提示词规则+应用层轮数上限)。 */
 export const MAX_MANAGER_TURNS = 12;
 
+/** 领域错误:请求的资源不存在,server 层映射为 404。 */
+export class NotFoundError extends Error {}
+
+/** 领域错误:输入不合法(如素材类型归档错误),server 层映射为 400。 */
+export class ValidationError extends Error {}
+
 export interface ProductCore {
   analyzeTranscript(input: { title?: string; transcript: string; kind?: MaterialKind }): Promise<Material>;
   /** 人工确认:把该素材的全部草稿卡发布为已发布。 */
@@ -51,13 +57,13 @@ export function createProductCore(deps: {
 
   async function requireMaterial(materialId: string): Promise<Material> {
     const material = await storage.getMaterial(materialId);
-    if (!material) throw new Error(`素材不存在:${materialId}`);
+    if (!material) throw new NotFoundError(`素材不存在:${materialId}`);
     return material;
   }
 
   async function requireConversation(conversationId: string): Promise<Conversation> {
     const conversation = await storage.getConversation(conversationId);
-    if (!conversation) throw new Error(`通话不存在:${conversationId}`);
+    if (!conversation) throw new NotFoundError(`通话不存在:${conversationId}`);
     return conversation;
   }
 
@@ -73,7 +79,7 @@ export function createProductCore(deps: {
 
   async function requirePersona(personaId: string): Promise<Persona> {
     const persona = (await listAllPersonas()).find((p) => p.id === personaId);
-    if (!persona) throw new Error(`画像不存在:${personaId}`);
+    if (!persona) throw new NotFoundError(`画像不存在:${personaId}`);
     return persona;
   }
 
@@ -86,7 +92,7 @@ export function createProductCore(deps: {
     async analyzeTranscript({ title, transcript, kind }) {
       const text = transcript.trim();
       if (!text) throw new Error("转写稿内容为空");
-      if (kind !== undefined && !isMaterialKind(kind)) throw new Error("素材类型不合法");
+      if (kind !== undefined && !isMaterialKind(kind)) throw new ValidationError("素材类型不合法");
 
       const { analysis, cards, turns: adapterTurns } = await copywriting.analyzeTranscript(text);
       // 标题取场景首句,避免长句截断在词中间。
@@ -143,7 +149,7 @@ export function createProductCore(deps: {
       const material = await requireMaterial(materialId);
       for (const cardId of cardIds) {
         const card = material.cards.find((c) => c.id === cardId);
-        if (!card) throw new Error(`策略卡不存在:${cardId}`);
+        if (!card) throw new NotFoundError(`策略卡不存在:${cardId}`);
       }
       material.cards = material.cards.map((c) =>
         cardIds.includes(c.id) ? { ...c, status: "published" as const } : c,
@@ -200,7 +206,7 @@ export function createProductCore(deps: {
         if (!Array.isArray(patch.cards)) throw new Error("策略卡数据不合法");
         for (const incoming of patch.cards) {
           const current = material.cards.find((c) => c.id === incoming.id);
-          if (!current) throw new Error(`策略卡不存在:${incoming.id}`);
+          if (!current) throw new NotFoundError(`策略卡不存在:${incoming.id}`);
           if (current.status === "published") {
             throw new Error(`策略卡已发布,不可修改:${current.name}`);
           }
@@ -212,7 +218,7 @@ export function createProductCore(deps: {
       }
 
       if (patch.kind !== undefined) {
-        if (!isMaterialKind(patch.kind)) throw new Error("素材类型不合法");
+        if (!isMaterialKind(patch.kind)) throw new ValidationError("素材类型不合法");
         material.kind = patch.kind;
       }
 

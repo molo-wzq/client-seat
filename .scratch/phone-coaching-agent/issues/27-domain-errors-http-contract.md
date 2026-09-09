@@ -4,7 +4,7 @@
 
 **Blocked by:** None.
 
-**Status:** ready-for-agent
+**Status:** ready-for-human
 
 ## 用户问题(架构审计 C5)
 
@@ -25,3 +25,5 @@
 - 后:非法输入 400、不存在 404,统一由领域错误类型驱动;契约测试钉住全部错误路径;全量测试无回归。
 
 ## Comments
+
+- 2026-09-09 已实现:product-core 导出 `NotFoundError`/`ValidationError`(消息不变),素材/通话/画像/策略卡不存在的 throw 改 NotFoundError,素材类型不合法改 ValidationError;新增 `server/app-server.ts`(createRequestListener:路由+解析+静态+统一映射 404/400/500,删除 analyze 路由重复预校验),main.ts 收薄为组合根(读配置→建 core→listen);新增 server/app-server.test.ts 8 条真实端口契约测试(合法分析 200、两路径非法类型 400、不存在素材/通话 404、未知接口 404、快速开始 200)。全量 105 测试通过。待人工验收。
