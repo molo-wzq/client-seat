@@ -13,9 +13,10 @@ import {
 } from "./domain/seed";
 import {
   expectNoFabricatedIdentity,
+  expectNoFollowUpHook,
   expectNoPlaceholderTokens,
   openingManagerTurnInput,
-} from "./test/rule9";
+} from "./test/manager-reply-guards";
 
 /**
  * 真实模型冒烟测试(spec.md 测试决策):默认跳过,手动触发——
@@ -77,5 +78,30 @@ suite("真实模型冒烟", () => {
     );
     expectNoFabricatedIdentity(output.reply);
     expectNoPlaceholderTokens(output.reply);
+  });
+
+  it("规则6回归:明确拒绝收口含一句渠道表达,无后续钩子(票13,demo-05 同场景)", { timeout: 300_000 }, async () => {
+    const adapter = createAdapter();
+    const refusal = await adapter.generateManagerTurn({
+      ...openingManagerTurnInput(SEED_PERSONA_P03.visible),
+      history: [
+        { number: 1, speaker: "customer", text: "喂,哪位?" },
+        {
+          number: 2,
+          speaker: "manager",
+          text: "您好,我是咱们银行的客户经理。您现在方便简单聊两句吗?",
+        },
+      ],
+      customerText: "不需要,你不用再打过来了。",
+    });
+    // 明确拒绝:接住收口,且按补充规则留一句渠道/身份表达。
+    expect(refusal.shouldEnd).toBe(true);
+    expect(refusal.reply).toMatch(/随时找我|随时联系|联系我|加微信/);
+    // 渠道句以一句话带过:整轮仍守规则 1 的三句上限。
+    const sentences = refusal.reply.split(/[。!??]/).filter((s) => s.trim());
+    expect(sentences.length).toBeLessThanOrEqual(3);
+    // 一句为限的约束反面:不得带「过阵子再联系」类后续钩子。
+    expectNoFollowUpHook(refusal.reply);
+    expectNoPlaceholderTokens(refusal.reply);
   });
 });

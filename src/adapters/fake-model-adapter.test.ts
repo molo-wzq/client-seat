@@ -4,7 +4,7 @@ import { SEED_PERSONA, SEED_PERSONA_P03 } from "../domain/seed";
 import {
   expectNoFabricatedIdentity,
   openingManagerTurnInput,
-} from "../test/rule9";
+} from "../test/manager-reply-guards";
 
 /**
  * 开场轮回归钉子(票 11):可见信息缺"代发"时,伪实现开场

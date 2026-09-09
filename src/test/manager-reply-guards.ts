@@ -3,7 +3,7 @@ import type { ManagerTurnInput } from "../domain/ports";
 import { SEED_CARDS, SEED_PRODUCT_CARD } from "../domain/seed";
 
 /**
- * 票 11 共享断言与夹具:伪适配器钉子与真模型冒烟必须使用同一份
+ * 票 11/13 共享断言与夹具:伪适配器钉子与真模型冒烟必须使用同一份
  * 防护定义,避免两处词表漂移。
  */
 
@@ -27,4 +27,9 @@ export function openingManagerTurnInput(visible: string[]): ManagerTurnInput {
     history: [],
     customerText: "喂",
   };
+}
+
+/** 票 13:收口不得带「过阵子再联系」类后续钩子。 */
+export function expectNoFollowUpHook(reply: string): void {
+  expect(reply).not.toMatch(/过阵子|到时候我再联系|下次我再联系/);
 }

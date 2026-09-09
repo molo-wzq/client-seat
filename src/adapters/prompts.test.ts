@@ -55,6 +55,14 @@ describe("经理系统提示词:规则 9 客户属性防护", () => {
     }
   });
 
+  it("规则 6 补充收口渠道句:一句为限、无后续钩子(票 13)", () => {
+    const prompt = promptFor(P03_VISIBLE);
+    expect(prompt).toMatch(/礼貌收口[\s\S]{0,80}联系渠道/);
+    expect(prompt).toContain("一句为限");
+    expect(prompt).toContain("过阵子再联系");
+    expect(prompt).toContain("不编造自己姓名");
+  });
+
   it("可见信息本身仍完整进入提示词(代发画像不受影响)", () => {
     const prompt = promptFor(SEED_PERSONA.visible);
     expect(prompt).toContain("代发工资客户,代发关系正常");
