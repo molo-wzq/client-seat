@@ -59,6 +59,13 @@ export interface DialoguePort {
   generateManagerTurn(input: ManagerTurnInput): Promise<ManagerTurnOutput>;
 }
 
+/**
+ * 产品存储接缝。两个适配器(InMemoryStorage 测试 / FileStorage 生产)共享同一契约,
+ * 由 server/storage-contract.test.ts 参数化共同约束:
+ * - 读(get/list)返回快照拷贝,调用方改动返回值不污染已存数据;
+ * - 写 resolve 后即持久可见;并发写按调用顺序完成,不丢更新;
+ * - 不存在返回 null / 空数组。
+ */
 export interface ProductStorage {
   saveMaterial(material: Material): Promise<void>;
   listMaterials(): Promise<Material[]>;
