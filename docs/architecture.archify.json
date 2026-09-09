@@ -1,0 +1,382 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "bank-call-coach 电话对练 · 系统架构",
+    "output": "architecture.html",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "repository": {
+      "url": "https://github.com/molo-wzq/bank-call-coach.git",
+      "revision": "ce22152e5ef8e50f34659514f943ba5e009816ef"
+    },
+    "views": [
+      {
+        "id": "main-path",
+        "label": "请求主路径",
+        "focus": [
+          "ui",
+          "product-api",
+          "api-server",
+          "product-core",
+          "model-port",
+          "openai-adapter",
+          "mimo-llm"
+        ],
+        "note": "从四步界面到 MIMO 模型的完整调用链。"
+      },
+      {
+        "id": "ports-and-adapters",
+        "label": "端口与适配器",
+        "focus": [
+          "product-core",
+          "model-port",
+          "openai-adapter",
+          "fake-adapter"
+        ],
+        "note": "领域核心只依赖端口;真实与伪适配器按密钥切换。"
+      },
+      {
+        "id": "storage-and-secret",
+        "label": "存储与密钥",
+        "focus": [
+          "api-server",
+          "file-store",
+          "env"
+        ],
+        "note": "FileStorage 持久化到 data/db.json;密钥只存在于服务端。"
+      }
+    ]
+  },
+  "components": [
+    {
+      "id": "ui",
+      "type": "frontend",
+      "label": "训练界面",
+      "sublabel": "素材 → 画像 → 对话 → 结果",
+      "pos": [
+        40,
+        160
+      ],
+      "size": [
+        165,
+        80
+      ],
+      "sources": [
+        {
+          "path": "src/App.tsx"
+        },
+        {
+          "path": "src/ui/MaterialStep.tsx"
+        }
+      ]
+    },
+    {
+      "id": "product-api",
+      "type": "backend",
+      "label": "ProductApi 产品缝",
+      "sublabel": "HTTP 实现 · 进程内实现",
+      "pos": [
+        260,
+        160
+      ],
+      "size": [
+        165,
+        80
+      ],
+      "sources": [
+        {
+          "path": "src/product/product-api.ts"
+        },
+        {
+          "path": "src/product/http-product-api.ts"
+        }
+      ]
+    },
+    {
+      "id": "api-server",
+      "type": "backend",
+      "label": "API 服务",
+      "sublabel": "Node 组合根",
+      "pos": [
+        480,
+        160
+      ],
+      "size": [
+        165,
+        80
+      ],
+      "sources": [
+        {
+          "path": "server/main.ts"
+        }
+      ],
+      "tag": ":5175"
+    },
+    {
+      "id": "product-core",
+      "type": "backend",
+      "label": "产品用例核心",
+      "sublabel": "分析 · 发布 · 对话 · 结果",
+      "pos": [
+        700,
+        160
+      ],
+      "size": [
+        165,
+        80
+      ],
+      "sources": [
+        {
+          "path": "src/domain/product-core.ts"
+        },
+        {
+          "path": "src/domain/types.ts"
+        }
+      ]
+    },
+    {
+      "id": "model-port",
+      "type": "backend",
+      "label": "适配器端口",
+      "sublabel": "文案生成 · 对话生成",
+      "pos": [
+        920,
+        160
+      ],
+      "size": [
+        165,
+        80
+      ],
+      "sources": [
+        {
+          "path": "src/domain/ports.ts"
+        }
+      ]
+    },
+    {
+      "id": "openai-adapter",
+      "type": "backend",
+      "label": "OpenAI 兼容适配器",
+      "sublabel": "提示词组装 · prompts.ts",
+      "pos": [
+        1140,
+        160
+      ],
+      "size": [
+        175,
+        80
+      ],
+      "sources": [
+        {
+          "path": "src/adapters/openai-model-adapter.ts"
+        },
+        {
+          "path": "src/adapters/prompts.ts"
+        }
+      ]
+    },
+    {
+      "id": "env",
+      "type": "security",
+      "label": ".env.local",
+      "sublabel": "密钥仅存服务端",
+      "pos": [
+        268,
+        350
+      ],
+      "size": [
+        150,
+        72
+      ],
+      "sources": [
+        {
+          "path": "server/env.ts"
+        }
+      ]
+    },
+    {
+      "id": "file-store",
+      "type": "database",
+      "label": "本地 JSON 存储",
+      "sublabel": "FileStorage · data/db.json",
+      "pos": [
+        690,
+        350
+      ],
+      "size": [
+        185,
+        72
+      ],
+      "sources": [
+        {
+          "path": "server/file-store.ts"
+        }
+      ]
+    },
+    {
+      "id": "fake-adapter",
+      "type": "backend",
+      "label": "伪模型适配器",
+      "sublabel": "未配置密钥时兜底",
+      "pos": [
+        912.5,
+        350
+      ],
+      "size": [
+        180,
+        72
+      ],
+      "sources": [
+        {
+          "path": "src/adapters/fake-model-adapter.ts"
+        }
+      ]
+    },
+    {
+      "id": "mimo-llm",
+      "type": "external",
+      "label": "MIMO 语言模型",
+      "sublabel": "mimo-v2.5",
+      "tag": "OpenAI 兼容",
+      "pos": [
+        1135,
+        350
+      ],
+      "size": [
+        185,
+        72
+      ]
+    }
+  ],
+  "boundaries": [
+    {
+      "kind": "region",
+      "label": "浏览器 · Vite :5173",
+      "wraps": [
+        "ui",
+        "product-api"
+      ]
+    },
+    {
+      "kind": "region",
+      "label": "Node API 服务 :5175",
+      "wraps": [
+        "api-server",
+        "product-core",
+        "model-port",
+        "openai-adapter",
+        "env",
+        "file-store",
+        "fake-adapter"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "ui-to-seam",
+      "from": "ui",
+      "to": "product-api",
+      "label": "调用 ProductApi",
+      "variant": "emphasis",
+      "labelDy": 64
+    },
+    {
+      "id": "seam-to-server",
+      "from": "product-api",
+      "to": "api-server",
+      "label": "HTTP 实现 · fetch /api",
+      "labelDy": 64
+    },
+    {
+      "id": "server-to-core",
+      "from": "api-server",
+      "to": "product-core",
+      "label": "装配并调用用例",
+      "labelDy": 64
+    },
+    {
+      "id": "core-to-port",
+      "from": "product-core",
+      "to": "model-port",
+      "label": "调用端口"
+    },
+    {
+      "id": "port-to-openai",
+      "from": "model-port",
+      "to": "openai-adapter",
+      "label": "OpenAI 兼容实现",
+      "labelDy": 64
+    },
+    {
+      "id": "openai-to-mimo",
+      "from": "openai-adapter",
+      "to": "mimo-llm",
+      "label": "OpenAI 兼容 HTTP",
+      "labelDy": 24
+    },
+    {
+      "id": "port-to-fake",
+      "from": "model-port",
+      "to": "fake-adapter",
+      "label": "伪实现 · 无密钥兜底",
+      "variant": "dashed",
+      "labelDy": 24
+    },
+    {
+      "id": "core-to-store",
+      "from": "product-core",
+      "to": "file-store",
+      "label": "读写素材与会话",
+      "labelDy": 24
+    },
+    {
+      "id": "env-to-server",
+      "from": "env",
+      "to": "api-server",
+      "label": "提供 MIMO_API_KEY",
+      "variant": "security",
+      "fromSide": "top",
+      "toSide": "bottom"
+    },
+    {
+      "id": "seam-to-core-test",
+      "from": "product-api",
+      "to": "product-core",
+      "label": "进程内实现 · 测试直连",
+      "variant": "dashed",
+      "fromSide": "top",
+      "toSide": "top"
+    }
+  ],
+  "cards": [
+    {
+      "dot": "cyan",
+      "title": "请求主路径",
+      "items": [
+        "React 四步界面(素材 → 画像 → 对话 → 结果)只依赖 ProductApi 接口",
+        "浏览器使用 HTTP 实现 fetch /api,Vite 开发时把 /api 代理到 5175 端口",
+        "API 服务作为组合根装配产品核心(createProductCore),依次执行分析、发布、对话、结果用例"
+      ]
+    },
+    {
+      "dot": "emerald",
+      "title": "端口与适配器",
+      "items": [
+        "产品核心只调用 CopywritingPort / DialoguePort,不认识具体模型(依赖倒置)",
+        "已配置密钥时由 OpenAI 兼容适配器调用 MIMO mimo-v2.5,提示词组装见 prompts.ts",
+        "未配置 MIMO_API_KEY 时自动回退伪适配器(FakeModelAdapter),仅供测试与演示",
+        "种子数据内置 C01 素材、SC1–SC3 策略卡、P01 画像(ADR 0002)"
+      ]
+    },
+    {
+      "dot": "amber",
+      "title": "存储与密钥",
+      "items": [
+        "FileStorage 把素材、画像与会话持久化到 data/db.json",
+        "MIMO_API_KEY 只存在于服务端 .env.local,浏览器不可见",
+        "端到端测试走进程内实现 + 伪适配器,不经过 HTTP 与真实模型"
+      ]
+    }
+  ]
+}
