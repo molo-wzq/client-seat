@@ -83,7 +83,7 @@ export function MaterialStep({
           onClick={() =>
             run(
               () => api.analyzeTranscript({ transcript }).then(setMaterial),
-              "正在分析转写稿,约需 10–20 秒…",
+              "正在分析转写稿,可能需要 1–2 分钟…",
             )
           }
           disabled={busy || !transcript.trim()}

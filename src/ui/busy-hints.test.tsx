@@ -32,7 +32,7 @@ describe("加载提示", () => {
     render(<MaterialStep api={api} onPublished={() => {}} />);
 
     await user.click(screen.getByRole("button", { name: "生成策略卡" }));
-    expect(screen.getByRole("status")).toHaveTextContent("正在分析转写稿,约需 10–20 秒…");
+    expect(screen.getByRole("status")).toHaveTextContent("正在分析转写稿,可能需要 1–2 分钟…");
   });
 
   it("画像步:开始接听期间显示「正在接通」", async () => {
