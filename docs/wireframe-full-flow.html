@@ -1,0 +1,788 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>电话对练 · 低保真线框全流程图（依据 PRD spec.md）</title>
+<style>
+  /* 低保真约定:只做黑白灰。实线框=真实容器,虚线框=占位/待确认,灰条=文字占位,方块=按钮。 */
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #f0f0f0; color: #222;
+    font-family: "Microsoft YaHei", "PingFang SC", sans-serif; font-size: 14px; line-height: 1.5;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 24px 20px 80px; }
+
+  /* ===== 页头 ===== */
+  .doc-head { background: #fff; border: 2px solid #222; padding: 18px 20px; margin-bottom: 16px; }
+  .doc-head h1 { margin: 0 0 6px; font-size: 20px; }
+  .doc-head p { margin: 4px 0; color: #555; }
+  .legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; padding-top: 10px; border-top: 1px dashed #999; color: #555; font-size: 12px; align-items: center; }
+  .legend .k { display: inline-flex; align-items: center; gap: 5px; }
+
+  /* ===== 通用元素(线框词汇) ===== */
+  .p { display: inline-block; height: 10px; background: #d8d8d8; border-radius: 5px; vertical-align: middle; }
+  .p.d { background: #c4c4c4; }
+  .w20 { width: 20%; } .w30 { width: 30%; } .w40 { width: 40%; } .w50 { width: 50%; }
+  .w60 { width: 60%; } .w70 { width: 70%; } .w80 { width: 80%; } .w90 { width: 90%; } .w100 { width: 100%; }
+  .bs { border: 1.5px solid #666; background: #fff; padding: 8px 10px; }
+  .b  { border: 1.5px dashed #999; background: #fafafa; padding: 8px 10px; }
+  .btn { display: inline-block; border: 1.5px solid #333; background: #fff; color: #222; padding: 3px 10px; font-size: 12px; white-space: nowrap; }
+  .btn.pri { background: #333; color: #fff; }
+  .btn.dis { border-color: #bbb; color: #bbb; background: #eee; }
+  .btn.sm { padding: 1px 7px; font-size: 11px; }
+  .inp { border: 1.5px solid #333; background: #fff; padding: 6px 10px; color: #888; font-size: 12px; }
+  .chip { display: inline-block; border: 1px solid #999; padding: 0 7px; font-size: 11px; color: #555; background: #fff; }
+  .chip.fill { background: #ddd; }
+  .hint { color: #8a8a8a; font-size: 12px; }
+  .note { border-left: 3px solid #bbb; padding-left: 8px; color: #666; font-size: 12px; margin: 8px 0; }
+  .err { border: 1.5px solid #222; background: #e8e8e8; padding: 5px 9px; font-size: 12px; font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
+  .busy { color: #777; font-size: 12px; }
+  .arrow { color: #444; font-weight: 700; }
+
+  /* 待确认 / PRD 无 */
+  .tbc { border: 2px dashed #222; background: #fff; padding: 8px 10px; position: relative; }
+  .tbc .tag { position: absolute; top: -10px; left: 8px; background: #222; color: #fff; font-size: 11px; padding: 0 6px; }
+  .na .tag { background: #fff; color: #222; }
+
+  /* ===== 屏幕卡片 ===== */
+  .screen { background: #fff; border: 2px solid #333; display: flex; flex-direction: column; }
+  .screen > header { display: flex; align-items: center; gap: 8px; padding: 7px 12px; border-bottom: 1.5px solid #333; background: #f7f7f7; }
+  .screen .sid { font-weight: 700; background: #333; color: #fff; padding: 1px 8px; font-size: 13px; }
+  .screen h3 { margin: 0; font-size: 15px; }
+  .screen .st { margin-left: auto; font-size: 11px; color: #555; border: 1px solid #999; padding: 0 7px; }
+  .meta { margin: 0; font-size: 12px; border-bottom: 1px dashed #bbb; }
+  .meta > div { display: flex; gap: 8px; padding: 4px 12px; border-bottom: 1px dotted #ddd; }
+  .meta > div:last-child { border-bottom: none; }
+  .meta dt { flex: 0 0 58px; color: #777; font-weight: 700; }
+  .meta dd { margin: 0; color: #333; }
+  .art { padding: 12px; flex: 1; }
+
+  /* 分组 */
+  .group { margin-top: 34px; }
+  .group > h2 { font-size: 17px; margin: 0 0 2px; border-left: 6px solid #333; padding-left: 10px; }
+  .group > .gsub { color: #666; font-size: 12px; margin: 0 0 12px; padding-left: 16px; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(370px, 1fr)); gap: 16px; align-items: start; }
+
+  /* 线框里的窗口骨架 */
+  .win { border: 1.5px solid #333; background: #fff; display: flex; flex-wrap: wrap; min-height: 300px; }
+  .win .rail { flex: 1 1 150px; border-right: 1.5px solid #333; padding: 10px 8px; display: flex; flex-direction: column; gap: 7px; background: #f7f7f7; }
+  .win .main { flex: 2 1 220px; padding: 10px; min-width: 0; }
+  .cards .wide { grid-column: 1 / -1; }
+  .win .rail .it { border: 1px solid transparent; padding: 3px 6px; font-size: 12px; }
+  .win .rail .it.on { border: 1.5px solid #333; background: #fff; font-weight: 700; }
+  .win h4 { margin: 0 0 6px; font-size: 13px; }
+  .win h5 { margin: 8px 0 4px; font-size: 12px; color: #444; }
+
+  /* 对话气泡 */
+  .chat { border: 1px dashed #aaa; padding: 8px; display: flex; flex-direction: column; gap: 6px; min-height: 90px; }
+  .bub { border: 1px solid #999; background: #fff; padding: 4px 8px; font-size: 12px; max-width: 82%; }
+  .bub.me { align-self: flex-end; background: #e4e4e4; }
+
+  /* 轨道 */
+  .track { display: flex; gap: 3px; margin: 6px 0; }
+  .track i { flex: 1; height: 16px; border: 1px dashed #999; }
+  .track i.passed { background: #cfcfcf; border-style: solid; border-color: #999; }
+
+  /* 主线流程图 */
+  .flowmap { background: #fff; border: 2px solid #333; padding: 14px 16px; margin-bottom: 8px; }
+  .flowmap h2 { margin: 0 0 10px; font-size: 16px; }
+  .fline { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; font-size: 12px; }
+  .fnode { border: 1.5px solid #333; padding: 3px 9px; background: #fff; }
+  .fnode.pri { background: #333; color: #fff; }
+  .fnode.st { border-style: dashed; color: #555; }
+  .fbranch { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #bbb; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .ftip { color: #777; font-size: 12px; margin-top: 8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ================= 页头 ================= -->
+  <div class="doc-head">
+    <h1>电话对练 · 低保真线框全流程图</h1>
+    <p>依据:<b>.scratch/phone-coaching-agent/spec.md（PRD）</b>;结构基准为已验收实装(票 16:左栏 + 三幕),每屏标注与 PRD 四步主流程(提炼录音 → 创建生客 → 完成对话 → 解释打法)的对应。生成日期:2026-09-09。</p>
+    <p>口径:只表达信息层级、核心文案、按钮位置与页面状态;灰条均为文字占位,不代表最终文案。全图平铺,按真实使用顺序分 6 组。</p>
+    <div class="legend">
+      <span class="k"><span class="bs" style="padding:1px 8px;">实线框</span>=真实容器</span>
+      <span class="k"><span class="b" style="padding:1px 8px;">虚线框</span>=占位/待补全</span>
+      <span class="k"><span class="p w40"></span>=文字占位</span>
+      <span class="k"><span class="btn">按钮</span>=可点</span>
+      <span class="k"><span class="btn dis">按钮</span>=禁用</span>
+      <span class="k"><span class="busy">◐ 灰字</span>=加载中</span>
+      <span class="k"><span class="chip">虚线黑框+「待确认」</span>=PRD 未说明</span>
+    </div>
+  </div>
+
+  <!-- ================= 主线流程图 ================= -->
+  <div class="flowmap">
+    <h2>主线跳转图（先看这张）</h2>
+    <div class="fline">
+      <span class="fnode">打开产品</span><span class="arrow">→</span>
+      <span class="fnode st">S02 首屏加载中</span><span class="arrow">→成功</span>
+      <span class="fnode">S01 布置幕(首次变体,此后为 S10 常规态)</span><span class="arrow">→失败</span>
+      <span class="fnode st">S03 加载失败(重试回 S02)</span>
+    </div>
+    <div class="fline" style="margin-top:6px;">
+      <span class="fnode">S10 布置幕(入座/快速开始)</span><span class="arrow">→接通</span>
+      <span class="fnode pri">S20 开场(输入"喂")</span><span class="arrow">→</span>
+      <span class="fnode pri">S21–S23 逐轮(思考中 / 失败恢复)</span><span class="arrow">→结束</span>
+      <span class="fnode">S24 结束触发</span><span class="arrow">→</span>
+      <span class="fnode">S30 结算幕</span><span class="arrow">→再来一局</span>
+      <span class="fnode">S10</span>
+    </div>
+    <div class="fbranch">
+      <span class="hint">左栏支线:</span>
+      <span class="fnode">S40–S44 素材库(PRD「提炼录音」)</span>
+      <span class="fnode">S50 策略卡</span>
+      <span class="fnode">S51 通话记录</span><span class="arrow">→进行中回 S21 / 已结束回 S30</span>
+      <span class="fnode st">S12 对局中离开·找回</span>
+    </div>
+    <p class="ftip">全局规则:快速开始任何时刻可用(库中无已发布卡时用种子素材兜底,幂等);发布策略卡后<b>不自动开始对话</b>,新卡从下一局上场(发布提示文案未实装,见 S44)。</p>
+  </div>
+
+  <!-- ================= 第 0 组 ================= -->
+  <div class="group">
+    <h2>第 0 组 · 首次进入</h2>
+    <p class="gsub">用户打开产品的第一分钟:首屏加载 → 默认落地布置幕;覆盖加载中 / 失败恢复 / 演示模式 / 权限槽位。</p>
+    <div class="cards">
+
+      <article class="screen wide">
+        <header><span class="sid">S01</span><h3>全局外壳 + 首屏(布置幕)</h3><span class="st">首次使用变体</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>默认落地页 · PRD「创建生客」的入口;左栏常驻全部页面</dd></div>
+          <div><dt>操作</dt><dd>快速开始一通 / 点击或拖拽画像入座后接通 / 左栏切换目录页</dd></div>
+          <div><dt>去向</dt><dd>快速开始 → S21;接通 → S20;左栏 → S40/S50/S51;新对局 → S10</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="rail">
+              <h4>电话对练</h4>
+              <span class="btn pri">⚡ 快速开始一通</span>
+              <span class="it btn dis">▶ 进行中的通话(无)</span>
+              <span class="it on">新对局(布置)</span>
+              <span class="it">素材库(0)</span>
+              <span class="it">策略卡(0)</span>
+              <span class="it">通话记录(0)</span>
+              <div class="hint">首次使用:仅有内置画像 P01–P03,无任何素材、卡与历史。</div>
+            </div>
+            <div class="main">
+              <h4>第 1 幕 · 对局布置</h4>
+              <div style="display:flex; gap:8px;">
+                <div style="flex:1;">
+                  <h5>生客名册</h5>
+                  <div class="bs">P01 代发·资金在证券 <span class="chip">有隐藏牌</span></div>
+                  <div class="bs" style="margin-top:4px;">P02 到期资金·稳健阿姨 <span class="chip">有隐藏牌</span></div>
+                  <div class="bs" style="margin-top:4px;">P03 定期到期·话少客户 <span class="chip">有隐藏牌</span></div>
+                  <p><span class="btn">自定义生客</span></p>
+                </div>
+                <div style="flex:1.2;">
+                  <div class="b"><b>客户席</b><br><span class="hint">把一位生客拖到这里,电话接通 ▸</span></div>
+                  <h5>桌上的策略卡(只读,全部已发布)</h5>
+                  <div class="b"><span class="hint">还没有已发布策略卡。快速开始会用种子卡兜底。</span></div>
+                  <p><span class="btn pri">▸ 接通电话,开始对局</span> <span class="hint">(入座后才可点)</span></p>
+                </div>
+                <div style="flex:.8;">
+                  <h5>产品卡(固定)</h5>
+                  <div class="bs"><span class="p w80 d"></span><br><span class="hint">虚拟产品事实,AI 不得用卡外信息</span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S02</span><h3>首屏加载中</h3><span class="st">加载状态</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>打开产品后、目录数据返回前(全屏唯一加载位)</dd></div>
+          <div><dt>操作</dt><dd>无(等待)</dd></div>
+          <div><dt>去向</dt><dd>成功 → S01;失败 → S03</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="rail">
+              <h4>电话对练</h4><span class="btn pri">⚡ 快速开始一通</span>
+              <span class="it btn dis">▶ 进行中的通话</span>
+              <span class="it">新对局(布置)</span>
+              <span class="it">素材库(0)</span><span class="it">策略卡(0)</span><span class="it">通话记录(0)</span>
+              <div class="hint">左栏照常渲染,计数暂为 0;加载只替换主区。</div>
+            </div>
+            <div class="main" style="display:flex; align-items:center; justify-content:center; min-height:220px;">
+              <div class="busy">◐ 正在准备桌面…<br><span class="p w60"></span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S03</span><h3>首屏目录加载失败</h3><span class="st">失败恢复</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>S02 的失败分支;不再停留在静默空名册</dd></div>
+          <div><dt>操作</dt><dd>重试 / (单次操作的错误条另见 S23,带关闭)</dd></div>
+          <div><dt>去向</dt><dd>重试成功 → S01;仍失败停留本屏</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="rail">
+              <h4>电话对练</h4><span class="btn pri">⚡ 快速开始一通</span>
+              <span class="it btn dis">▶ 进行中的通话</span>
+              <span class="it">新对局(布置)</span>
+              <span class="it">素材库(0)</span><span class="it">策略卡(0)</span><span class="it">通话记录(0)</span>
+              <div class="hint">左栏照常渲染;失败只替换主区,不误显示为空名册。</div>
+            </div>
+            <div class="main">
+              <div class="err"><span>目录加载失败:{原因一行红字位}</span><span class="btn sm">重试</span></div>
+              <p class="hint">主区不渲染名册/卡桌,避免误读为"没有生客"。</p>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S04</span><h3>演示模式(未配模型密钥)</h3><span class="st">环境状态</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>贯穿全程的背景状态:未配 MIMO_API_KEY 时经理由内置脚本扮演</dd></div>
+          <div><dt>操作</dt><dd>无专属入口;配置密钥后自动切换真实模型</dd></div>
+          <div><dt>去向</dt><dd>不改变页面流转,只改变经理应答来源</dd></div>
+        </dl>
+        <div class="art">
+          <div class="tbc" style="min-height:130px;">
+            <span class="tag">PRD 未提及</span>
+            <b>界面无任何演示模式标识</b>(票 23 已拍板:仅在 README 说明,不在产品缝加标识;线框如实画"无标识")。
+            <p class="hint">若后续要求界面提示,此处补一条横幅位。</p>
+            <div class="b" style="margin-top:8px;"><span class="hint">应答为固定预设台词,仅用于走通流程与演示界面</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen na">
+        <header><span class="sid">—</span><h3>权限申请槽位</h3><span class="st">PRD 无此环节</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>常规产品"首次使用"流程中的授权步骤</dd></div>
+          <div><dt>操作</dt><dd>无</dd></div>
+          <div><dt>去向</dt><dd>无</dd></div>
+        </dl>
+        <div class="art">
+          <div class="tbc na" style="min-height:110px;">
+            <span class="tag">PRD 明确不做</span>
+            本地单机应用:<b>无登录、无账号、无团队/权限体系、无麦克风等浏览器授权</b>(纯文字对话,密钥只在本地服务端读取)。
+            <p class="hint">因此流程里不存在授权页,不画假页面。</p>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+
+  <!-- ================= 第 1 组 ================= -->
+  <div class="group">
+    <h2>第 1 组 · 备一局(第 1 幕 布置)</h2>
+    <p class="gsub">对应 PRD「创建生客」:预设画像 + 部分属性修改 + 可见/隐藏决定;准备动作只有"入座",素材生产不在本幕。</p>
+    <div class="cards">
+
+      <article class="screen wide">
+        <header><span class="sid">S10</span><h3>布置幕 · 常规态</h3><span class="st">常规</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>主线第 2 站;PRD「创建生客」;左栏「新对局(布置)」</dd></div>
+          <div><dt>操作</dt><dd>点击/拖拽画像入座;自定义生客(→S11);接通;快速开始;左栏切换</dd></div>
+          <div><dt>去向</dt><dd>接通 → S20;快速开始 → S21;再来一局也从 S30 回本屏</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="rail">
+              <h4>电话对练</h4><span class="btn pri">⚡ 快速开始一通</span>
+              <span class="it">▶ 进行中的通话</span>
+              <span class="it on">新对局(布置)</span>
+              <span class="it">素材库(1)</span><span class="it">策略卡(3)</span><span class="it">通话记录(2)</span>
+            </div>
+            <div class="main">
+              <h4>第 1 幕 · 对局布置</h4>
+              <div style="display:flex; gap:8px;">
+                <div style="flex:1;">
+                  <h5>生客名册(内置 P01–P03 + 自定义并入)</h5>
+                  <div class="bs" style="border-color:#333; background:#eee;">P01 代发·资金在证券 <span class="chip fill">已入座</span></div>
+                  <div class="bs" style="margin-top:4px;">P02 <span class="chip">有隐藏牌</span></div>
+                  <div class="bs" style="margin-top:4px;">P03 <span class="chip">有隐藏牌</span></div>
+                  <p><span class="btn">自定义生客</span></p>
+                </div>
+                <div style="flex:1.2;">
+                  <div class="bs"><b>客户席</b><br><span class="hint">已就座:P01——可见信息朝上,隐藏牌扣着</span></div>
+                  <h5>桌上的策略卡(只读)</h5>
+                  <div style="display:flex; gap:4px;">
+                    <div class="bs" style="flex:1;"><span class="hint">SC1 生客开场</span></div>
+                    <div class="bs" style="flex:1;"><span class="hint">SC2 需求探询</span></div>
+                    <div class="bs" style="flex:1;"><span class="hint">SC3 推进收口</span></div>
+                  </div>
+                  <p class="hint">AI 对局中自动取用;本通不选卡。</p>
+                  <p><span class="btn pri">▸ 接通电话,开始对局</span></p>
+                </div>
+                <div style="flex:.8;">
+                  <h5>产品卡(固定)</h5>
+                  <div class="bs"><span class="p w80 d"></span><br><span class="p w60 d"></span></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S11</span><h3>自定义生客面板</h3><span class="st">布置幕子面板</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>S10 内展开;PRD:预设模板 + 只改关心的属性 + 未选保持未知 + 逐条可见/隐藏</dd></div>
+          <div><dt>操作</dt><dd>选预设模板;逐条编辑属性;每条切"对 AI 可见/隐藏";留空不补全;保存</dd></div>
+          <div><dt>去向</dt><dd>保存 → 自动入座回 S10(面板收起)</dd></div>
+        </dl>
+        <div class="art">
+          <div class="tbc">
+            <span class="tag">待确认</span>
+            <span class="hint">现状:展开后与名册同屏,出现两套选人列表(票 17 条目 16 待合并);线框按现状画。</span>
+          </div>
+          <div class="bs" style="margin-top:10px;">
+            <b>自定义生客</b>
+            <h5>从预设开始</h5>
+            <div style="display:flex; gap:4px;"><span class="chip">P01 代发</span><span class="chip">P02 稳健阿姨</span><span class="chip">P03 话少</span><span class="chip">空白</span></div>
+            <h5>属性(逐条决定对 AI 可见/隐藏;留空=未知,不自动补全)</h5>
+            <div class="b" style="margin-top:3px; display:flex; gap:6px; align-items:center;"><span class="p w30 d"></span><span class="p w40"></span><span class="btn sm">可见</span><span class="btn sm pri">隐藏</span></div>
+            <div class="b" style="margin-top:3px; display:flex; gap:6px; align-items:center;"><span class="p w20 d"></span><span class="p w50"></span><span class="btn sm pri">可见</span><span class="btn sm">隐藏</span></div>
+            <div class="b" style="margin-top:3px; display:flex; gap:6px; align-items:center;"><span class="p w30 d"></span><span class="hint">(留空)</span><span class="btn sm">可见</span><span class="btn sm">隐藏</span></div>
+            <p><span class="btn pri">保存并入座</span> <span class="btn">取消</span></p>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S12</span><h3>对局中离开 · 找回</h3><span class="st">异常恢复</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>进行中的通话离开后:左栏「进行中的通话」与通话记录置顶项都可回跳</dd></div>
+          <div><dt>操作</dt><dd>点左栏「进行中的通话」或通话记录中的进行中项</dd></div>
+          <div><dt>去向</dt><dd>回到 S21 对局幕原进度;通话结束后按钮变「查看结算」→ S30</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="rail">
+              <h4>电话对练</h4><span class="btn pri">⚡ 快速开始一通</span>
+              <span class="it on">▶ 进行中的通话</span>
+              <span class="it">新对局(布置)</span>
+              <span class="it">通话记录(3)</span>
+              <div class="hint">有进行中通话时高亮可点(无计数);通话结束后此钮变「查看结算」→ S30。</div>
+            </div>
+            <div class="main">
+              <h4>通话记录</h4>
+              <div class="bs" style="margin-bottom:4px;">P01 代发·资金在证券 <span class="chip fill">进行中 · 第 5/12 轮</span> <span class="btn sm">继续接听</span></div>
+              <div class="bs" style="margin-bottom:4px;"><span class="p w30 d"></span> <span class="hint">已结束 · 取得下一步</span></div>
+              <div class="bs"><span class="p w30 d"></span> <span class="hint">已结束 · 客户明确拒绝</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+
+  <!-- ================= 第 2 组 ================= -->
+  <div class="group">
+    <h2>第 2 组 · 打一通(第 2 幕 对局)</h2>
+    <p class="gsub">对应 PRD「完成对话」:输入"喂"接通 → AI 以理财经理身份逐轮推进 → 五种结束条件;每轮一个主要动作,隐藏信息隔离。</p>
+    <div class="cards">
+
+      <article class="screen wide">
+        <header><span class="sid">S20</span><h3>对局幕 · 开场态</h3><span class="st">刚接通</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>主线第 3 站起点;对话顺序:画像就绪 → 接听 → 用户输入"喂" → AI 开场白</dd></div>
+          <div><dt>操作</dt><dd>输入"喂"并发送</dd></div>
+          <div><dt>去向</dt><dd>发送 → S22 思考中 → S21 进行中</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="rail">
+              <h4>P01(你扮演)</h4>
+              <div class="bs"><span class="hint">可见牌</span><br><span class="p w80 d"></span></div>
+              <div class="bs" style="margin-top:6px;"><span class="hint">隐藏牌(扣着)</span><br><span class="hint">? ? ?(AI 不可见,只有你知道)</span></div>
+            </div>
+            <div class="main">
+              <h4>第 2 幕 · 对局</h4>
+              <div class="track"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="hint">通话轨道 0/12:经理每轮走一格,12 格到底强制收口</div>
+              <div class="chat"><span class="hint">(对话流为空)输入"喂"作为接通后的第一句话 ▼</span></div>
+              <div class="inp">输入客户回应…… (Enter 发送)</div>
+            </div>
+            <div class="rail" style="border-right:none; border-left:1.5px solid #333;">
+              <h4>桌面明牌</h4>
+              <div class="bs"><span class="hint">SC1 生客开场</span></div>
+              <div class="bs" style="margin-top:4px;"><span class="hint">SC2</span></div>
+              <div class="bs" style="margin-top:4px;"><span class="hint">SC3</span></div>
+              <div class="hint">当前目的:—(尚未开场)</div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen wide">
+        <header><span class="sid">S21</span><h3>对局幕 · 进行中</h3><span class="st">常规</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>主线第 3 站;PRD:AI 按客户信号/目标/已发布卡逐轮推进,每轮只做一个主要动作</dd></div>
+          <div><dt>操作</dt><dd>每轮输入客户回应(Enter 发送);随时「结束并查看结果」主动收口</dd></div>
+          <div><dt>去向</dt><dd>每轮 → S22 思考中 → 回本屏;发送失败 → S23;结束 → S24</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="rail">
+              <h4>P01(你扮演)</h4>
+              <div class="bs"><span class="hint">可见牌:代发工资客户,资金主要在证券</span></div>
+              <div class="bs" style="margin-top:6px;"><span class="hint">隐藏牌(扣着):? ? ?(AI 不可见)</span></div>
+            </div>
+            <div class="main">
+              <h4>第 2 幕 · 对局</h4>
+              <div class="track"><i class="passed"></i><i class="passed"></i><i class="passed"></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></div>
+              <div class="hint">第 3/12 轮</div>
+              <div class="chat">
+                <div class="bub me">喂,哪位?</div>
+                <div class="bub">您好,我是XX银行的客户经理。想跟您同步一个近期针对代发客户的活动……</div>
+                <div class="bub me">什么活动?</div>
+              </div>
+              <div class="inp">输入客户回应…… (Enter 发送)</div>
+              <p><span class="btn">■ 结束并查看结果</span></p>
+            </div>
+            <div class="rail" style="border-right:none; border-left:1.5px solid #333;">
+              <h4>桌面明牌</h4>
+              <div class="bs" style="background:#e4e4e4;"><b>SC1 生客开场</b> <span class="chip fill">◀ 本轮在用</span><br><span class="hint">当前目的:让客户确认身份,愿意继续听</span></div>
+              <div class="bs" style="margin-top:4px;"><span class="hint">SC2 需求探询</span></div>
+              <div class="bs" style="margin-top:4px;"><span class="hint">SC3 推进收口</span></div>
+              <div class="hint">全部已发布卡;高亮 = 经理本轮取用</div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S22</span><h3>经理思考中</h3><span class="st">加载状态</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>每轮发送后、模型返回前;对话中高频出现</dd></div>
+          <div><dt>操作</dt><dd>无(等待;输入锁定)</dd></div>
+          <div><dt>去向</dt><dd>成功 → S21;失败 → S23;通话最后一步显示"正在生成对练结果…" → S30</dd></div>
+        </dl>
+        <div class="art">
+          <div class="chat" style="min-height:150px;">
+            <div class="bub me">什么活动?</div>
+            <div class="busy">◐ 理财经理正在思考…</div>
+            <div class="b" style="width:60%;"><span class="p w80"></span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S23</span><h3>发送失败</h3><span class="st">失败恢复</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>S21/S22 中模型调用或网络失败时</dd></div>
+          <div><dt>操作</dt><dd>关闭错误条;原文保留在输入框可重发</dd></div>
+          <div><dt>去向</dt><dd>重发成功 → S21;关闭 → 留在 S21</dd></div>
+        </dl>
+        <div class="art">
+          <div class="chat" style="min-height:130px;">
+            <div class="bub me">什么活动?</div>
+            <div class="err"><span>发送失败:{原因}</span><span class="btn sm">×</span></div>
+          </div>
+          <div class="inp" style="margin-top:6px;">什么活动?(原文保留,可重发)</div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S24</span><h3>通话结束触发</h3><span class="st">转折点</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>对局 → 结算的过渡;五种结束条件(其一)</dd></div>
+          <div><dt>操作</dt><dd>查看/确认结束原因;点「结束并查看结果」或自动结束</dd></div>
+          <div><dt>去向</dt><dd>先显示"正在生成对练结果…"加载 → S30 结算幕</dd></div>
+        </dl>
+        <div class="art">
+          <div class="bs">
+            <b>通话已结束:{结束原因}</b>
+            <div style="display:flex; flex-wrap:wrap; gap:4px; margin-top:6px;">
+              <span class="chip">客户明确拒绝</span><span class="chip">取得合理下一步</span><span class="chip">策略无法继续</span><span class="chip">达到 12 轮上限</span><span class="chip">用户主动收口</span>
+            </div>
+          </div>
+          <p><span class="btn pri">结束并查看结果</span></p>
+          <div class="busy">◐ 正在生成对练结果…</div>
+          <p class="hint">PRD 结束规则:先接住拒绝不纠缠;达成下一步、无法推进或轮数上限即体面收口。</p>
+        </div>
+      </article>
+
+    </div>
+  </div>
+
+  <!-- ================= 第 3 组 ================= -->
+  <div class="group">
+    <h2>第 3 组 · 看战报(第 3 幕 结算)</h2>
+    <p class="gsub">对应 PRD「解释打法」:结果 + 主要目标 + 结束原因 + 策略路径回溯到素材原文;明确不打分、不评价用户。</p>
+    <div class="cards">
+
+      <article class="screen">
+        <header><span class="sid">S30</span><h3>结算幕</h3><span class="st">常规</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>主线第 4 站;从 S24 到达,或从通话记录打开已结束通话</dd></div>
+          <div><dt>操作</dt><dd>逐条查看结果;「回放原文」在页内"完整对话"定位到该轮;再来一局</dd></div>
+          <div><dt>去向</dt><dd>再来一局 → S10 布置幕(重新入座即换画像);左栏 → 目录页</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="main">
+              <h4>第 3 幕 · 这通电话是怎样推进的</h4>
+              <div class="hint">只解释 AI 的打法,不评价你的客户表现。</div>
+              <div class="bs" style="margin-top:6px;">
+                <b>结果摘要</b>
+                <div style="margin-top:5px;"><span class="hint">本轮主要目标:</span><span class="p w70 d"></span></div>
+                <div style="margin-top:4px;"><span class="hint">沟通结果:</span><span class="p w50 d"></span></div>
+                <div style="margin-top:4px;"><span class="hint">结束原因:</span><span class="chip">取得合理下一步</span></div>
+              </div>
+              <h5>策略路径(实际使用了哪些已发布策略卡)</h5>
+              <div class="bs">
+                <b>对话第 1 轮 · SC1 生客开场</b>
+                <div style="margin-top:3px;"><span class="hint">关键表达:"<span class="p w60 d"></span>"</span></div>
+                <div style="margin-top:3px;"><span class="hint">来源:素材01 · T01–T02(原始片段内嵌展示 ▾)</span></div>
+                <p style="margin:5px 0 0;"><span class="btn sm">回放原文(页内定位到下方完整对话该轮)</span></p>
+              </div>
+              <div class="b" style="margin-top:6px;"><span class="hint">空态变体:本轮对话未引用任何策略卡。</span></div>
+              <h5>完整对话(逐轮:你(生客) / 理财经理(AI))</h5>
+              <div class="chat">
+                <div class="bub me">喂,哪位?</div>
+                <div class="bub">您好,我是XX银行的客户经理……</div>
+              </div>
+              <p><span class="btn pri">再来一局</span></p>
+            </div>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+
+  <!-- ================= 第 4 组 ================= -->
+  <div class="group">
+    <h2>第 4 组 · 养牌库(素材库)</h2>
+    <p class="gsub">对应 PRD「提炼录音」:粘贴转写稿 → 说话人区分与纠正 → 案例分析 → 策略卡草稿 → 人工发布;草稿不进对话,发布即全员上场(下一局)。前端只有粘贴;录音转写走后台(见本组末注释)。</p>
+    <div class="cards">
+
+      <article class="screen">
+        <header><span class="sid">S40</span><h3>素材库 · 空态</h3><span class="st">无数据</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>首次使用时左栏「素材库(0)」;不指路已撤回的旧入口</dd></div>
+          <div><dt>操作</dt><dd>粘贴新素材</dd></div>
+          <div><dt>去向</dt><dd>提交转写稿 → S42 分析中</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="main">
+              <h4>素材库</h4>
+              <div class="b"><span class="hint">还没有素材。在下方粘贴一段优秀电话的转写稿,生成你的第一批策略卡。</span></div>
+              <h5>+ 粘贴新素材</h5>
+              <div class="b" style="height:70px;"><span class="hint">转写稿粘贴区(每行一句,如「T01 经理:……」;允许无说话人标注)</span></div>
+              <div style="margin-top:6px;"><span class="hint">素材类型:</span> <span class="chip">顺利沟通 ▾</span></div>
+              <p><span class="btn pri">生成策略卡</span> <span class="btn">载入示例</span></p>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S41</span><h3>素材库 · 列表</h3><span class="st">常规</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>左栏「素材库(N)」;PRD story:查看已上传案例及发布状态</dd></div>
+          <div><dt>操作</dt><dd>选中素材 → 右侧载入编辑器;粘贴新素材</dd></div>
+          <div><dt>去向</dt><dd>选中 → S43;新素材 → S42</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="main">
+              <h4>素材库</h4>
+              <div style="display:flex; gap:8px;">
+                <div style="flex:1;">
+                  <div class="bs" style="border-color:#333; background:#eee;">素材01 存量生客首次触达<br><span class="hint">顺利沟通 · 3 张已发布</span></div>
+                  <div class="bs" style="margin-top:4px;">素材02 <span class="hint">软拒绝 · 0 张已发布</span></div>
+                  <div class="bs" style="margin-top:4px;"><b>+ 粘贴新素材</b></div>
+                </div>
+                <div style="flex:1.3;"><div class="b" style="min-height:120px;"><span class="hint">右侧编辑器区(见 S43)</span></div></div>
+              </div>
+              <div class="tbc" style="margin-top:10px;">
+                <span class="tag">待确认</span>
+                <span class="hint">素材类型字段(顺利沟通/软拒绝/明确拒绝)为实装新增(票 16),PRD 未提及;旧数据显示"未分类"。</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S42</span><h3>粘贴新素材 · 分析中</h3><span class="st">加载状态</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>S40/S41 的「+ 粘贴新素材」;提交后等待模型分析</dd></div>
+          <div><dt>操作</dt><dd>粘贴转写稿(或「载入示例」);选素材类型;点「生成策略卡」;等待</dd></div>
+          <div><dt>去向</dt><dd>成功 → S43;失败 → 错误条可重试(同 S23 样式)</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="main">
+              <h4>录音分析 · 新素材</h4>
+              <div class="bs" style="height:80px;"><span class="hint">转写稿粘贴区(每行一句,如「T01 经理:……」)<br>已粘贴:<span class="p w80 d"></span></span></div>
+              <div style="margin-top:6px;"><span class="hint">素材类型:</span> <span class="chip">顺利沟通 ▾</span> <span class="hint">(PRD 未提及,见待确认 3)</span></div>
+              <p><span class="btn pri">生成策略卡</span> <span class="btn">载入示例</span></p>
+              <div class="busy">◐ 正在分析转写稿,可能需要 1–2 分钟…</div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S43</span><h3>分析结果编辑(案例分析 + 策略卡)</h3><span class="st">常规/失败恢复</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>S42 成功后;PRD:人工修正偏差、区分可复用策略与个案细节、草稿/发布</dd></div>
+          <div><dt>操作</dt><dd>纠正说话人;「编辑分析」改案例 8 字段;草稿卡逐张「编辑此卡 / 确认发布此卡」;或底部「确认并发布全部草稿」</dd></div>
+          <div><dt>去向</dt><dd>发布 → S44;保存失败 → 错误条(可关闭重试)</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="main">
+              <h4>素材01 · 编辑</h4>
+              <div style="margin-bottom:6px;"><span class="hint">素材类型:</span> <span class="chip">顺利沟通 ▾</span> <span class="hint">(可改,保存草稿口径)</span></div>
+              <div class="bs" style="margin-bottom:6px;">
+                <b>说话人纠正</b>
+                <div style="display:flex; gap:6px; align-items:center; margin-top:4px;"><span class="chip">T03</span><span class="p w30 d"></span><span class="btn sm">经理 ▾</span></div>
+                <div style="display:flex; gap:6px; align-items:center; margin-top:3px;"><span class="chip">T04</span><span class="p w40 d"></span><span class="btn sm pri">客户 ▾</span></div>
+                <div class="hint">逐轮切换经理/客户,防止错误角色污染分析。</div>
+              </div>
+              <div style="display:flex; gap:8px;">
+                <div class="bs" style="flex:1;">
+                  <b>案例分析(固定结构)</b>
+                  <div class="hint">场景 / 客户状态 / 总体目标</div>
+                  <div class="b" style="margin-top:3px;"><span class="p w90"></span></div>
+                  <div class="b" style="margin-top:3px;"><span class="p w80"></span></div>
+                  <div class="hint" style="margin-top:4px;">对话阶段:阶段目的 · 客户信号 · 推进逻辑 · 关键动作 · 代表话术</div>
+                  <div class="b" style="margin-top:3px;"><span class="p w100"></span></div>
+                  <div class="hint" style="margin-top:4px;">优秀原因 / 实际结果 / 可复用条件(无法确认保持未知)</div>
+                  <p style="margin:6px 0 0;"><span class="btn sm">编辑分析</span></p>
+                </div>
+                <div class="bs" style="flex:1;">
+                  <b>策略卡 SC1 <span class="chip fill">草稿</span></b>
+                  <div class="hint">触发信号 · 适用场景 · 当前目的 · 动作链 · 表达原则 · 参考话术 · 适用条件 · 停止条件</div>
+                  <div class="b" style="margin-top:3px;"><span class="p w90"></span></div>
+                  <div class="b" style="margin-top:3px;"><span class="p w70"></span></div>
+                  <p><span class="btn">编辑此卡</span> <span class="btn pri">确认发布此卡</span></p>
+                  <div class="hint">来源片段:素材01 · T01–T02(可回看)。</div>
+                </div>
+              </div>
+              <p style="margin:8px 0 0;"><span class="btn pri">确认并发布全部草稿(2张)</span> <span class="hint">(无草稿时禁用)</span></p>
+              <div class="err" style="margin-top:8px;"><span>保存失败:{原因}</span><span class="btn sm">×</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S44</span><h3>发布后</h3><span class="st">状态变化</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>S43 发布成功后;只有发布的卡才能驱动对话(PRD)</dd></div>
+          <div><dt>操作</dt><dd>无专门提示页:卡徽标由"草稿"变"已发布",停留在素材编辑器</dd></div>
+          <div><dt>去向</dt><dd>留在素材库(<b>不自动跳对话</b>);新卡下一局出现在布置幕桌上/对局明牌</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="main">
+              <h4>素材01 · 编辑(发布后原位)</h4>
+              <div class="bs"><b>SC3 推进收口</b> <span class="chip">已发布</span> <span class="hint">(原"草稿"徽标原位变化,无弹窗/横幅/跳转)</span></div>
+              <div class="tbc" style="margin-top:10px;">
+                <span class="tag">待确认</span>
+                <span class="hint">票 16 记录"发布后提示「新卡下一局生效」",实装未见该提示文案;本图按实装画(无提示)。是否补提示,待确认(见页尾待确认 5)。</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen na">
+        <header><span class="sid">—</span><h3>后台录音摄入(非页面)</h3><span class="st">PRD:前端不做</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>PRD Out of Scope:无前端录音上传与转写等待</dd></div>
+          <div><dt>操作</dt><dd>命令行 npm run audio:ingest(非界面)</dd></div>
+          <div><dt>去向</dt><dd>生成待校对稿 → 人工校对脱敏 → 按素材库流程粘贴进入</dd></div>
+        </dl>
+        <div class="art">
+          <div class="tbc na" style="min-height:90px;">
+            <span class="tag">注释·不画界面</span>
+            录音 → 后台转写 → 带说话人待校对稿 → <b>人工校对后从 S40 粘贴进入既有素材流程</b>;原声回放与音频片段证据链不做。
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+
+  <!-- ================= 第 5 组 ================= -->
+  <div class="group">
+    <h2>第 5 组 · 查目录(左栏三视图)</h2>
+    <p class="gsub">素材库之外的两个只读目录;含空态。口径注:左栏「策略卡(N)」计已发布数,本视图含草稿并以徽标区分(实装现状,票 22)。</p>
+    <div class="cards">
+
+      <article class="screen">
+        <header><span class="sid">S50</span><h3>策略卡视图</h3><span class="st">常规+空态</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>左栏「策略卡(N)」;PRD story:区分草稿与已发布</dd></div>
+          <div><dt>操作</dt><dd>只读浏览(编辑需回所属素材 → S43)</dd></div>
+          <div><dt>去向</dt><dd>无跳转;参考来源素材标题</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="main">
+              <h4>策略卡</h4>
+              <div class="hint">已发布的卡全员上场;草稿只在所属素材里确认后才进入对局。</div>
+              <div style="display:flex; gap:6px; margin-top:6px;">
+                <div class="bs" style="flex:1;"><b>SC1 生客开场</b> <span class="chip">已发布</span><br><span class="p w80 d"></span><br><span class="hint">来自 素材01</span></div>
+                <div class="bs" style="flex:1;"><b>SC4</b> <span class="chip fill">草稿</span><br><span class="p w70 d"></span><br><span class="hint">来自 素材02</span></div>
+              </div>
+              <div class="b" style="margin-top:8px;"><span class="hint">空态变体:还没有策略卡。</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+      <article class="screen">
+        <header><span class="sid">S51</span><h3>通话记录</h3><span class="st">常规+空态</span></header>
+        <dl class="meta">
+          <div><dt>位置</dt><dd>左栏「通话记录(N)」;进行中置顶(票 18/22)</dd></div>
+          <div><dt>操作</dt><dd>点进行中项 → 回对局;点已结束项 → 看结算</dd></div>
+          <div><dt>去向</dt><dd>进行中 → S21;已结束 → S30</dd></div>
+        </dl>
+        <div class="art">
+          <div class="win">
+            <div class="main">
+              <h4>通话记录</h4>
+              <div class="bs" style="margin-bottom:4px;">P01 代发·资金在证券 <span class="chip fill">进行中</span> <span class="btn sm">继续接听</span></div>
+              <div class="bs" style="margin-bottom:4px;"><span class="p w30 d"></span> <span class="hint">已结束 · 取得合理下一步</span></div>
+              <div class="bs"><span class="p w30 d"></span> <span class="hint">已结束 · 客户明确拒绝</span></div>
+              <div class="b" style="margin-top:8px;"><span class="hint">空态变体:还没有通话。接通一通电话后会出现在这里。</span></div>
+            </div>
+          </div>
+        </div>
+      </article>
+
+    </div>
+  </div>
+
+  <!-- ================= 尾注 ================= -->
+  <div class="group">
+    <h2>待确认汇总</h2>
+    <p class="gsub">以下均未擅自补全,图中已就地标注;确认后可在下一版线框更新。</p>
+    <div class="cards">
+      <div class="tbc"><span class="tag">待确认 1</span><b>结构基准</b>:PRD 文字为四步主流程,实装为左栏+三幕(票 16 已验收)。本图按实装画并标注四步映射。</div>
+      <div class="tbc"><span class="tag">PRD 未提及</span><b>演示模式无界面标识</b>:未配密钥时脚本扮演经理,界面无任何提示(票 23 已拍板只改 README;图示按无标识画)。</div>
+      <div class="tbc"><span class="tag">待确认 3</span><b>素材类型字段</b>(顺利沟通/软拒绝/明确拒绝):实装已有(票 16),PRD 未提及;旧数据显示"未分类"。</div>
+      <div class="tbc"><span class="tag">待确认 4</span><b>自定义生客双列表</b>:展开后与名册同屏两套选人列表(票 17 条目 16 待合并);本图按现状画。</div>
+      <div class="tbc"><span class="tag">待确认 5</span><b>发布后提示缺失</b>:票 16 记录"发布后提示「新卡下一局生效」",实装未见提示,仅徽标原位变化;本图按实装画,是否补提示待定。</div>
+      <div class="tbc na"><span class="tag">不适用</span><b>权限申请</b>:PRD 明确单机、无登录/权限/麦克风,流程中不存在授权页。</div>
+      <div class="tbc na"><span class="tag">不适用</span><b>前端录音上传</b>:PRD 明确前端不做;后台 CLI 摄入仅作注释,不画界面。</div>
+    </div>
+  </div>
+
+</div>
+</body>
+</html>

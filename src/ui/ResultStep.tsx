@@ -12,9 +12,15 @@ export function ResultStep({
   }
 
   return (
-    <section className="step" aria-labelledby="result-title">
-      <h2 id="result-title">这通电话是怎样推进的</h2>
-      <p className="hint">只解释 AI 的打法,不评价你的客户表现。</p>
+    <section className="step result-act" aria-labelledby="result-title">
+      <span className="act-kicker">第三幕 / 对局复盘</span>
+      <div className="result-heading">
+        <div>
+          <h2 id="result-title">这通电话是怎样推进的</h2>
+          <p className="hint">只解释 AI 的打法,不评价你的客户表现。</p>
+        </div>
+        <span className="result-stamp" aria-hidden="true">本局<br />已复盘</span>
+      </div>
 
       <dl className="result-summary">
         <div>

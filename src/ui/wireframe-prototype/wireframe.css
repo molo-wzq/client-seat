@@ -1,4 +1,5 @@
-/* 低保真线框原型(throwaway):纯灰阶、虚线框、占位条,不追求观感。 */
+/* 低保真线框原型(throwaway):纯灰阶、虚线框、占位条,不追求观感。
+   已收敛为棋盘三幕单变体;A/B/C 变体与浮动切换条样式随组件一并删除。 */
 
 .wf-root {
   min-height: 100vh;
@@ -103,127 +104,7 @@
   margin: 10px 0;
 }
 
-/* ===== 变体 A:工作台双栏 ===== */
-.wf-a {
-  display: grid;
-  grid-template-columns: 200px 1fr 240px;
-  min-height: 100vh;
-}
-
-.wf-a .wf-side {
-  border-right: 1px solid #ccc;
-  padding: 16px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.wf-a .wf-side .wf-nav-item {
-  padding: 8px 10px;
-  border: 1px solid transparent;
-}
-
-.wf-a .wf-side .wf-nav-item.active {
-  border: 1.5px solid #333;
-  font-weight: 700;
-}
-
-.wf-a .wf-main {
-  display: flex;
-  flex-direction: column;
-  padding: 16px 24px;
-}
-
-.wf-a .wf-chat {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
-  border: 1px dashed #bbb;
-  padding: 12px;
-  margin: 12px 0;
-}
-
-.wf-a .wf-rail {
-  border-left: 1px solid #ccc;
-  padding: 16px 12px;
-}
-
-/* ===== 变体 B:首页卡片流 ===== */
-.wf-b {
-  max-width: 860px;
-  margin: 0 auto;
-  padding: 20px;
-}
-
-.wf-b .wf-topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid #ccc;
-  padding-bottom: 10px;
-  margin-bottom: 20px;
-}
-
-.wf-b .wf-hero {
-  text-align: center;
-  padding: 28px 0;
-}
-
-.wf-b .wf-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-/* ===== 变体 C:单页三区连续 ===== */
-.wf-c {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 20px 20px 90px;
-}
-
-.wf-c .wf-zone {
-  display: flex;
-  gap: 12px;
-  margin-bottom: 8px;
-}
-
-.wf-c .wf-stage-dot {
-  width: 26px;
-  height: 26px;
-  border-radius: 50%;
-  border: 1.5px solid #333;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  flex-shrink: 0;
-}
-
-.wf-c .wf-zone.done .wf-stage-dot {
-  background: #ddd;
-  border-color: #999;
-}
-
-.wf-c .wf-zone.done .wf-box {
-  opacity: 0.55;
-}
-
-.wf-c .wf-zone-body {
-  flex: 1;
-}
-
-.wf-c .wf-input {
-  position: fixed;
-  bottom: 70px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: min(680px, 90vw);
-  background: #fff;
-}
-
-/* ===== 变体 D:棋盘对练(拖拽) ===== */
+/* ===== 全局外壳与三幕 ===== */
 .wf-d-shell {
   display: grid;
   grid-template-columns: 200px 1fr;
@@ -241,6 +122,11 @@
 .wf-d-shell .wf-side .wf-nav-item {
   padding: 8px 10px;
   border: 1px solid transparent;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
 }
 
 .wf-d-shell .wf-side .wf-nav-item.active {
@@ -259,9 +145,6 @@
 }
 
 .wf-d .wf-topbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
   border-bottom: 1px solid #ccc;
   padding-bottom: 10px;
   margin-bottom: 14px;
@@ -315,27 +198,10 @@
   justify-content: flex-end;
 }
 
-.wf-d .wf-input {
-  border: 1.5px solid #333;
-  height: 44px;
-  display: flex;
-  align-items: center;
-  color: #999;
-  padding: 0 10px;
-}
-
 .wf-d .wf-d-deck {
   border: 1.5px dashed #555;
   padding: 12px;
   min-height: 300px;
-}
-
-.wf-d .wf-d-jump {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  color: #888;
-  font-size: 12px;
 }
 
 .wf-d .wf-box.active {
@@ -347,31 +213,4 @@
   display: flex;
   flex-direction: column;
   gap: 12px;
-}
-
-/* ===== 浮动切换条(非被评审设计的一部分) ===== */
-.wf-switcher {
-  position: fixed;
-  bottom: 14px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #222;
-  color: #fff;
-  padding: 8px 14px;
-  border-radius: 999px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
-  z-index: 999;
-  font-size: 13px;
-}
-
-.wf-switcher button {
-  background: none;
-  border: none;
-  color: #fff;
-  font-size: 16px;
-  cursor: pointer;
-  padding: 0 6px;
 }

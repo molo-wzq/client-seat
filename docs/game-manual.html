@@ -4846,6 +4846,52 @@
       .source-evidence-beacon,
       svg [data-node-id], svg [data-edge-from], svg [data-detail], svg [data-detail-anchor], svg [data-legend-hit], svg { transition: none !important; }
     }
+    .product-screens {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      margin: 0 0 18px;
+    }
+
+    .product-screen {
+      margin: 0;
+      overflow: hidden;
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      background: var(--panel);
+      box-shadow: 0 10px 28px rgba(2, 6, 23, 0.16);
+    }
+
+    .product-screen img {
+      display: block;
+      width: 100%;
+      height: auto;
+      aspect-ratio: 16 / 10;
+      object-fit: cover;
+      object-position: top left;
+    }
+
+    .product-screen figcaption {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-top: 1px solid var(--panel-border);
+      color: var(--text-muted);
+      font-size: 11px;
+      line-height: 1.5;
+    }
+
+    .product-screen figcaption strong {
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    @media (max-width: 760px) {
+      .product-screens { grid-template-columns: 1fr; }
+    }
+
   </style>
 </head>
 <body>
@@ -4958,6 +5004,17 @@
         <h1>「电话对练」游戏手册</h1>
       </div>
     </div>
+
+    <section class="product-screens" aria-label="电话对练实机界面">
+      <figure class="product-screen">
+        <img src="./ui-setup.png" alt="电话对练布置幕：生客名册、客户席、已发布策略卡与产品卡" loading="eager">
+        <figcaption><strong>第1幕 · 对局布置</strong><span>选择生客，确认本局资源</span></figcaption>
+      </figure>
+      <figure class="product-screen">
+        <img src="./ui-table.png" alt="电话对练对局幕：客户画像、十二格通话轨道、模拟通话与桌面明牌" loading="eager">
+        <figcaption><strong>第2幕 · 对局</strong><span>有限轮次内观察策略如何推进</span></figcaption>
+      </figure>
+    </section>
 
     <script id="archify-guided-views-data" type="application/json">[{"id":"quick-start","label":"快速开局","focus":["pick-material","extract","publish","ai-open"],"note":"从选素材到 AI 开场,三步接通。"},{"id":"in-match","label":"对局进行时","focus":["ai-open","your-turn","hidden-info"],"note":"回合制:AI 出招你接招;你的隐藏信息它看不到。"},{"id":"replay","label":"结算复盘","focus":["your-turn","settle"],"note":"看 AI 用了什么策略,从哪段素材学来的。"}]</script>
 

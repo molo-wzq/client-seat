@@ -17,6 +17,7 @@ export function MaterialsView({
 
   return (
     <section className="act" aria-labelledby="materials-title">
+      <span className="act-kicker">优秀通话沉淀</span>
       <h2 id="materials-title">素材库</h2>
       {materials.length === 0 ? (
         <p className="hint">还没有素材。在下方粘贴一段优秀电话的转写稿,生成你的第一批策略卡。</p>
@@ -63,6 +64,7 @@ export function MaterialsView({
 export function CardsView({ cards }: { cards: StrategyCard[] }) {
   return (
     <section className="act" aria-labelledby="cards-title">
+      <span className="act-kicker">已提炼的方法</span>
       <h2 id="cards-title">策略卡</h2>
       <p className="hint">已发布的卡全员上场;草稿只在所属素材里确认后才进入对局。</p>
       {cards.length === 0 ? (
@@ -101,6 +103,7 @@ export function HistoryView({
   const ended = conversations.filter((c) => c.status === "ended");
   return (
     <section className="act" aria-labelledby="history-title">
+      <span className="act-kicker">往期对练</span>
       <h2 id="history-title">通话记录</h2>
       {conversations.length === 0 ? (
         <p className="hint">还没有通话。接通一通电话后会出现在这里。</p>

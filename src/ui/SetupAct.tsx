@@ -3,6 +3,7 @@ import { SEED_PRODUCT_CARD } from "../domain/seed";
 import type { Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { PersonaStep } from "./PersonaStep";
+import { UiIcon } from "./UiIcon";
 
 export function SetupAct({
   api,
@@ -30,7 +31,8 @@ export function SetupAct({
 
   return (
     <section className="act" aria-labelledby="setup-title">
-      <h2 id="setup-title">第 1 幕 · 对局布置</h2>
+      <span className="act-kicker">第一幕 / 场景准备</span>
+      <h2 id="setup-title">第1幕 · 对局布置</h2>
       <p className="hint">把一位生客拖到客户席,或点击入座;快速开始会用默认生客直接接通。</p>
       <div className="setup-board">
         <div>
@@ -45,8 +47,12 @@ export function SetupAct({
                   onDragStart={() => setDragged(persona.id)}
                   onClick={() => seat(persona)}
                 >
-                  {persona.name}
-                  {persona.hidden.length > 0 && <span className="badge">有隐藏牌</span>}
+                  <span className="roster-avatar" aria-hidden="true">{persona.name.slice(-1)}</span>
+                  <span className="roster-copy">
+                    <strong>{persona.name}</strong>
+                    <small>{persona.visible[0] ?? "信息未知"}</small>
+                  </span>
+                  {persona.hidden.length > 0 && <span className="badge"><UiIcon name="lock" />隐藏牌</span>}
                 </button>
               </li>
             ))}
@@ -58,7 +64,7 @@ export function SetupAct({
 
         <div>
           <div
-            className="seat"
+            className={`seat${seated ? " occupied" : ""}`}
             onDragOver={(e) => e.preventDefault()}
             onDrop={() => {
               const dropped = personas.find((p) => p.id === dragged);
@@ -66,11 +72,13 @@ export function SetupAct({
               setDragged(null);
             }}
           >
+            <span className="seat-label">{seated ? "客户已入座" : "等待客户入座"}</span>
             <h3>客户席</h3>
             {seated ? (
-              <p>
-                已就座:{seated.name}——可见信息朝上,隐藏牌扣着
-              </p>
+              <div className="seated-client">
+                <span className="seated-token" aria-hidden="true">{seated.name.slice(-1)}</span>
+                <p><strong>{seated.name}</strong><br /><span>可见信息朝上 · 隐藏牌扣着</span></p>
+              </div>
             ) : (
               <p className="hint">把一位生客拖到这里,或从名册点击入座</p>
             )}
@@ -90,14 +98,16 @@ export function SetupAct({
           </ul>
           <div className="actions">
             <button onClick={() => seated && onConnect(seated.id)} disabled={connectBusy || !seated}>
-              接通电话,开始对局
+              <UiIcon name="phone" />接通电话,开始对局
             </button>
           </div>
         </div>
 
         <div>
           <h3>产品卡(固定)</h3>
-          <article className="card">
+          <article className="card product-card">
+            <span className="card-ribbon" aria-hidden="true">★</span>
+            <span className="card-code">固定产品卡</span>
             <strong>{SEED_PRODUCT_CARD.activity.name}</strong>
             <p className="hint">虚拟产品事实,AI 不得用卡外信息</p>
             <p>

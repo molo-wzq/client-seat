@@ -2,6 +2,8 @@ import { MAX_MANAGER_TURNS } from "../domain/product-core";
 import type { Conversation, ConversationResult, Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { CallStep } from "./CallStep";
+import { UiIcon } from "./UiIcon";
+import { PersonaAvatar } from "./PersonaAvatar";
 
 export function TableAct({
   api,
@@ -28,17 +30,24 @@ export function TableAct({
 
   return (
     <section className="act" aria-labelledby="table-title">
-      <h2 id="table-title">第 2 幕 · 对局</h2>
+      <span className="act-kicker">第二幕 / 通话进行中</span>
+      <h2 id="table-title">第2幕 · 对局</h2>
       <div className="table-board">
-        <div>
-          <h3>{persona?.name ?? "生客"}(你扮演)</h3>
-          <p className="hint">可见信息朝上</p>
+        <div className="player-board">
+          <span className="identity-badge customer-badge">● 客户</span>
+          <div className="player-profile">
+            <PersonaAvatar personaId={persona?.id} name={persona?.name ?? "生客"} />
+            <div>
+              <h3>{persona?.name ?? "生客"}</h3>
+              <p>你扮演 · 可见信息朝上</p>
+            </div>
+          </div>
           <ul className="info-list">
             {(persona?.visible.length ? persona.visible : ["未知(经理将在对话中发现)"]).map((line) => (
               <li key={line}>{line}</li>
             ))}
           </ul>
-          <h3>隐藏牌(扣着)</h3>
+          <h3><UiIcon name="lock" />隐藏牌(扣着)</h3>
           <p className="hint">仅你知情,AI 不可见</p>
           <ul className="info-list hidden-hand">
             {(persona?.hidden.length ? persona.hidden : ["无"]).map((line) => (
@@ -47,7 +56,7 @@ export function TableAct({
           </ul>
         </div>
 
-        <div>
+        <div className="call-board">
           <ol className="call-track" aria-label="通话轨道">
             {Array.from({ length: MAX_MANAGER_TURNS }, (_, i) => (
               <li
@@ -68,7 +77,8 @@ export function TableAct({
           />
         </div>
 
-        <div>
+        <div className="strategy-board">
+          <span className="identity-badge manager-badge">◆ AI 理财经理</span>
           <h3>桌面明牌</h3>
           <p className="hint">经理本轮亮出的策略卡(高亮 = 正在用)</p>
           <ul className="card-tiles">
@@ -79,7 +89,7 @@ export function TableAct({
               </li>
             ))}
           </ul>
-          {currentGoal && <p className="hint">当前目的:{currentGoal}</p>}
+          {currentGoal && <p className="current-goal"><span>当前目的</span>{currentGoal}</p>}
         </div>
       </div>
     </section>
