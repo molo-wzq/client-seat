@@ -2,12 +2,12 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "bank-call-coach 电话对练 · 系统架构",
+    "title": "client-seat 电话对练 · 系统架构",
     "output": "architecture.html",
     "locale": "zh-CN",
     "quality_profile": "showcase",
     "repository": {
-      "url": "https://github.com/molo-wzq/bank-call-coach.git",
+      "url": "https://github.com/molo-wzq/client-seat.git",
       "revision": "ce22152e5ef8e50f34659514f943ba5e009816ef"
     },
     "views": [
