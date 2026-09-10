@@ -17,9 +17,10 @@ data/
 # ZCode 工作区内部文件
 .zcode/
 
-# L1 素材:真实录音与未脱敏转写(含个人信息,绝不入库)
-# 录音投放目录(用户投放,转写后原始稿进 _unscreened/)
+# L1 素材:真实录音与转写/案例/复核(派生自真实客户来电,绝不入库,比赛合规)
 .scratch/phone-coaching-agent/l1/audio/
-.scratch/phone-coaching-agent/l1/transcripts/_unscreened/
+.scratch/phone-coaching-agent/l1/transcripts/
+.scratch/phone-coaching-agent/l1/cases/
+.scratch/phone-coaching-agent/l1/review/
 # L1 转写用 ffmpeg 本地二进制(不入库)
 .scratch/phone-coaching-agent/l1/tools/bin/
