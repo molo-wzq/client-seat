@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { Conversation, ConversationResult } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { CallStep } from "./CallStep";
@@ -81,5 +81,30 @@ describe("对话步骤的反馈", () => {
     expect(within(screen.getByRole("list")).queryByText("喂")).not.toBeInTheDocument();
     expect((screen.getByLabelText("客户回复") as HTMLTextAreaElement).value).toBe("喂");
     await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+
+  it("等待 AI 回复期间按 Enter 不会并发发送(按钮 disable 挡不住键盘路径)", async () => {
+    const pending = deferred<Conversation>();
+    const sendImpl = vi.fn(() => pending.promise);
+    const user = userEvent.setup();
+    render(<CallStep api={stubApi(sendImpl)} conversationId="conv-1" onFinished={() => {}} />);
+    const reply = await screen.findByLabelText("客户回复");
+
+    await user.type(reply, "喂{Enter}");
+    await user.type(reply, "再补一句{Enter}");
+
+    expect(sendImpl).toHaveBeenCalledTimes(1);
+
+    pending.resolve({
+      ...ongoingConversation(),
+      turns: [
+        { number: 1, speaker: "customer", text: "喂" },
+        { number: 2, speaker: "manager", text: "您好,我是咱们银行的客户经理。" },
+      ],
+    });
+    await screen.findByText(/我是咱们银行的客户经理/);
+    // busy 复位后可继续发送
+    await user.type(reply, "好的{Enter}");
+    expect(sendImpl).toHaveBeenCalledTimes(2);
   });
 });

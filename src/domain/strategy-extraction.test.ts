@@ -45,6 +45,22 @@ describe("转写稿解析", () => {
     const turns = numberTurns(parseTranscriptTurns("T01 经理:a\nT03 客户:b"));
     expect(turns.map((t) => t.number)).toEqual([1, 3]);
   });
+
+  it("行首数字不是轮次标注时原文完整保留(金额/数量开头不吞字)", () => {
+    const turns = parseTranscriptTurns("经理:您平时资金怎么安排?\n5万起,我当时就买了国债");
+    expect(turns[1]).toMatchObject({ speaker: "customer", text: "5万起,我当时就买了国债" });
+    expect(turns[1]?.number).toBeUndefined();
+  });
+
+  it("行首时间戳不吞进轮号,说话人正常识别", () => {
+    const turns = parseTranscriptTurns("00:01:23 经理:您好");
+    expect(turns[0]).toMatchObject({ speaker: "manager", text: "您好" });
+  });
+
+  it("数字+分隔符+说话人标签识别为轮次标注", () => {
+    const turns = parseTranscriptTurns("7. 客户:喂");
+    expect(turns[0]).toMatchObject({ number: 7, speaker: "customer", text: "喂" });
+  });
 });
 
 describe("策略提炼与人工发布", () => {
@@ -118,6 +134,15 @@ describe("策略提炼与人工发布", () => {
         cards: [{ ...publishedCard, name: "不应生效" }],
       }),
     ).rejects.toThrow(/已发布/);
+  });
+
+  it("轮次说话人非法时报错,不静默纠偏入库", async () => {
+    const { api, material } = await analyzedMaterial();
+    await expect(
+      api.updateMaterialDraft(material.id, {
+        turns: [{ number: 1, speaker: "Client" as unknown as "customer", text: "喂" }],
+      }),
+    ).rejects.toThrow(/说话人不合法/);
   });
 
   it("发布前草稿卡不进入对话检索,发布后才可检索", async () => {

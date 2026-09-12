@@ -101,7 +101,7 @@ export interface Material {
   id: string;
   title: string;
   transcript: string;
-  /** 说话人区分后的转写轮次;序号连续(1..n),允许用户纠正说话人。 */
+  /** 说话人区分后的转写轮次;序号保留转写标注值(允许跳号,严格递增),speaker 可被用户纠正。 */
   turns: MaterialTurn[];
   analysis: CaseAnalysis;
   cards: StrategyCard[];

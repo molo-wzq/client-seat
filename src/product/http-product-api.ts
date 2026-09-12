@@ -19,6 +19,11 @@ export function createHttpProductCore(baseUrl = ""): ProductCore {
           : `请求失败(HTTP ${response.status})`;
       throw new Error(message);
     }
+    // 2xx 但解析不出 JSON(空 body/被网关改写):静默返回 null 会让上层
+    // 以 null 数据渲染崩溃,这里显式报错走统一的错误展示。
+    if (body === null || typeof body !== "object") {
+      throw new Error(`接口响应不是合法 JSON(HTTP ${response.status}:${path})`);
+    }
     return body as T;
   }
 

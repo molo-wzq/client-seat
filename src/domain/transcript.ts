@@ -13,15 +13,34 @@ export interface ParsedTurn {
   number?: number;
 }
 
+/** 说话人标签判定:冒号前的短前缀是否指经理或客户(经理/理财经理/客户A/生客……)。 */
+function speakerFromLabel(label: string): Speaker | undefined {
+  if (/经\s*理|坐席|客服|顾问/.test(label)) return "manager";
+  if (/客户|生客|用户/.test(label)) return "customer";
+  return undefined;
+}
+
 /** 从一行转写中提取「T07 经理:……」式标注;无标注时返回 null 由调用方兜底。 */
 function parseLabeledLine(line: string): { turnNumber?: number; speaker?: Speaker; text: string } | null {
   let rest = line;
-  let turnNumber: number | undefined;
 
-  const turnMatch = rest.match(/^T?(\d+)\s*[.、:：]?\s*/);
-  if (turnMatch) {
-    turnNumber = Number(turnMatch[1]);
-    rest = rest.slice(turnMatch[0].length);
+  // 行首时间戳(00:01:23 经理:……)不是轮次标注,剥离后不影响说话人识别。
+  const timestamp = rest.match(/^\d{1,2}:\d{2}(?::\d{2})?\s*/);
+  if (timestamp) rest = rest.slice(timestamp[0].length);
+
+  let turnNumber: number | undefined;
+  // 轮次标注仅认两种形态:T 前缀(T07),或「数字+分隔符+说话人标签」(7. 经理:……)。
+  // 裸数字(如「5万起……」)不是标注,剥掉会丢字并让后续轮号整体错位。
+  const tMatch = rest.match(/^T\d+\s*[.、:：]?\s*/i);
+  if (tMatch) {
+    turnNumber = Number(tMatch[0].match(/\d+/)![0]);
+    rest = rest.slice(tMatch[0].length);
+  } else {
+    const numbered = rest.match(/^(\d+)\s*[.、:：]\s*(.*)$/);
+    if (numbered && speakerFromLabel((numbered[2].match(/^([^:：]{1,8})[:：]/) ?? [])[1] ?? "") !== undefined) {
+      turnNumber = Number(numbered[1]);
+      rest = numbered[2];
+    }
   }
 
   // 说话人标签:冒号前不超过 8 个字的短前缀(经理/理财经理/客户A/生客……)。
@@ -30,11 +49,9 @@ function parseLabeledLine(line: string): { turnNumber?: number; speaker?: Speake
     const label = labelMatch[1];
     const text = labelMatch[2].trim();
     if (!text) return null;
-    if (/经\s*理|坐席|客服|顾问/.test(label)) {
-      return { turnNumber, speaker: "manager", text };
-    }
-    if (/客户|生客|用户/.test(label)) {
-      return { turnNumber, speaker: "customer", text };
+    const speaker = speakerFromLabel(label);
+    if (speaker) {
+      return { turnNumber, speaker, text };
     }
     // 冒号前不是说话人标签(如“目的是:……”),整行按内容处理。
     return { turnNumber, text: rest.trim() };

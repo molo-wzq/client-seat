@@ -74,15 +74,20 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
   }
 
   private managerTurnFromText(content: string): ManagerTurnOutput {
+    let raw: unknown;
     try {
-      const raw = parseJsonObject(content) as Partial<ManagerTurnOutput>;
-      return this.managerTurnFromRaw(raw);
+      raw = parseJsonObject(content);
     } catch {
       // 容错:模型偶尔输出纯文本。文本本身仍是有效的经理话术,
       // 降级为无策略引用、无元数据的一轮,不让通话中断(策略追溯缺失可见)。
+      // 但以 { 开头却解析失败的内容是被截断的 JSON,不是话术,播出即污染对话。
+      if (content.trimStart().startsWith("{")) throw new Error("模型 JSON 输出不完整(可能被长度截断)");
       console.warn("[adapter] 模型未返回 JSON,按纯对话处理:", content.slice(0, 80));
       return { reply: content.trim() };
     }
+    // 可解析为 JSON 但缺 reply:整段 JSON 不是可播出的话术,必须报错,
+    // 不能把结构化输出当对话播出(shouldEnd 等元数据也会被静默丢弃)。
+    return this.managerTurnFromRaw(raw as Partial<ManagerTurnOutput>);
   }
 
   private managerTurnFromRaw(raw: Partial<ManagerTurnOutput>): ManagerTurnOutput {
@@ -108,21 +113,31 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     messages: Array<{ role: string; content: string }>,
     extraBody?: Record<string, unknown>,
   ): Promise<{ content: string; reasoning: string }> {
-    const response = await fetch(`${this.config.baseUrl}/chat/completions`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.config.apiKey}`,
-      },
-      // 推理型模型的思考 token 也计入预算;预算太小会导致输出被截断或为空。
-      body: JSON.stringify({
-        model: this.config.model,
-        messages,
-        temperature: 0.7,
-        max_tokens: 16384,
-        ...extraBody,
-      }),
-    });
+    let response: Response;
+    try {
+      response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+        // 网关挂起时无超时会让通话轮次永久悬挂;推理长尾预留充足预算。
+        signal: AbortSignal.timeout(120_000),
+        // 推理型模型的思考 token 也计入预算;预算太小会导致输出被截断或为空。
+        body: JSON.stringify({
+          model: this.config.model,
+          messages,
+          temperature: 0.7,
+          max_tokens: 16384,
+          ...extraBody,
+        }),
+      });
+    } catch (error) {
+      if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+        throw new Error("语言模型调用超时(120 秒)");
+      }
+      throw error;
+    }
     if (!response.ok) {
       const body = await response.text().catch(() => "");
       throw new Error(`语言模型调用失败(HTTP ${response.status}):${body.slice(0, 300)}`);
@@ -209,14 +224,21 @@ function asOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
-/** 说话人区分结果归一:无法辨认说话人的轮次按客户处理,由用户在界面上纠正。 */
-function normalizeTurns(raw: unknown): Array<{ speaker: "manager" | "customer"; text: string }> {
+/**
+ * 说话人区分结果归一:无法辨认说话人的轮次按客户处理,由用户在界面上纠正。
+ * 转写标注的轮次号(如 T07)原样保留,保证策略卡 turnRange 与轮次可对回。
+ */
+function normalizeTurns(raw: unknown): Array<{ speaker: "manager" | "customer"; text: string; number?: number }> {
   if (!Array.isArray(raw)) return [];
   return raw
     .filter(isRecord)
     .map((turn) => ({
       speaker: turn.speaker === "manager" ? ("manager" as const) : ("customer" as const),
       text: asString(turn.text, ""),
+      number:
+        typeof turn.number === "number" && Number.isInteger(turn.number) && turn.number > 0
+          ? turn.number
+          : undefined,
     }))
     .filter((turn) => turn.text.length > 0);
 }

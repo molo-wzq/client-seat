@@ -10,7 +10,16 @@ export function loadEnvFile(): void {
   for (const line of fs.readFileSync(envFile, "utf8").split(/\r?\n/)) {
     const match = line.match(/^([A-Z0-9_]+)=(.*)$/);
     if (match && !process.env[match[1]]) {
-      process.env[match[1]] = match[2].trim();
+      process.env[match[1]] = stripQuotes(match[2].trim());
     }
   }
+}
+
+/** 按 dotenv 惯例剥离值两侧成对的引号:KEY="value" 的值不应含引号。 */
+function stripQuotes(value: string): string {
+  const double = value.match(/^"(.*)"$/s);
+  if (double) return double[1];
+  const single = value.match(/^'(.*)'$/s);
+  if (single) return single[1];
+  return value;
 }

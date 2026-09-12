@@ -53,7 +53,9 @@ export function CallStep({
 
   async function send() {
     const customerText = text.trim();
-    if (!customerText || !conversation || ended) return;
+    // busy 守卫对 Enter 快捷键同样生效:发送按钮会 disable,但键盘路径必须显式拦,
+    // 否则模型响应等待期内可并发触发 sendCustomerTurn,乐观更新互相覆盖。
+    if (!customerText || !conversation || ended || busy) return;
     // 乐观更新:客户话立即上屏,模型 5–15 秒的等待不显得卡死;失败回滚。
     const previous = conversation;
     applyConversation({

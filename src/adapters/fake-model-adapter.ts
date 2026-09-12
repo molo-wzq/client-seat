@@ -52,6 +52,19 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
   private async scriptTurn(input: ManagerTurnInput): Promise<ManagerTurnOutput> {
     const { customerText, history, persona } = input;
 
+    // 客户明确要求结束(含第一句就拒绝):先接住,礼貌收口,不推销。
+    // 首句即拒绝时也必须走这里——SC1 停止条件明言反感即收口。
+    if (EXPLICIT_END.test(customerText)) {
+      return {
+        reply: "好的,那先不打扰您了。之后有适合您的活动我随时联系您,再见。",
+        recognizedSignal: "客户明确要求结束",
+        currentGoal: "体面收口",
+        shouldEnd: true,
+        endReason: "客户明确要求结束,理财经理礼貌收口",
+        outcomeSummary: "通话在客户要求下结束,未取得下一步承诺",
+      };
+    }
+
     // 第一轮:SC1 生客开场——自报身份、征询时机、身份依据,并一句话说清具体来意。
     if (history.length === 0) {
       const hasPayrollBasis = persona.visible.some((line) => /代发/.test(line));
@@ -62,18 +75,6 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
         recognizedSignal: "电话刚接通,客户应答",
         currentGoal: "让客户确认这是本行客户经理的正常服务来电,愿意继续听下去",
         usedCardId: SEED_CARD_IDS.opening,
-      };
-    }
-
-    // 客户明确要求结束:先接住,礼貌收口,不再推销。
-    if (EXPLICIT_END.test(customerText)) {
-      return {
-        reply: "好的,那先不打扰您了。之后有适合您的活动我随时联系您,再见。",
-        recognizedSignal: "客户明确要求结束",
-        currentGoal: "体面收口",
-        shouldEnd: true,
-        endReason: "客户明确要求结束,理财经理礼貌收口",
-        outcomeSummary: "通话在客户要求下结束,未取得下一步承诺",
       };
     }
 

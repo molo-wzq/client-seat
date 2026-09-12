@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, ConversationResult, Material, Persona } from "./domain/types";
 import type { ProductCore } from "./domain/product-core";
 import { BusyHint } from "./ui/BusyHint";
@@ -60,16 +60,26 @@ export function App({ api }: { api: ProductCore }) {
   const seatedPersona = personas.find((p) => p.id === conversation?.personaId) ?? null;
   // 目录按创建时间倒序;取最近一通进行中的通话,用于离开对局后找回。
   const ongoingCall = conversations.find((c) => c.status === "ongoing") ?? null;
+  // 快速开始/接通/找回进行中通话都会进入对局,共用一个互斥位:
+  // refreshCatalog 需数百毫秒,期间交错点击会让两次 enterTable 按完成顺序互相覆盖。
+  const entryBusy = quickBusy || connectBusy;
+  const enteringRef = useRef(false);
 
   async function resumeOngoing() {
-    if (ongoingCall) await openHistory(ongoingCall);
+    if (ongoingCall && !entryBusy) await openHistory(ongoingCall);
   }
 
   async function enterTable(next: Conversation) {
-    setConversation(next);
-    setResult(null);
-    await refreshCatalog().catch(() => undefined);
-    setView("table");
+    if (enteringRef.current) return;
+    enteringRef.current = true;
+    try {
+      setConversation(next);
+      setResult(null);
+      await refreshCatalog().catch(() => undefined);
+      setView("table");
+    } finally {
+      enteringRef.current = false;
+    }
   }
 
   async function quickStart() {
@@ -133,7 +143,7 @@ export function App({ api }: { api: ProductCore }) {
         onNavigate={setView}
         onResumeOngoing={() => void resumeOngoing()}
         onQuickStart={() => void quickStart()}
-        quickBusy={quickBusy}
+        quickBusy={entryBusy}
       />
       <main className="app-main">
         {quickBusy && <BusyHint text="正在准备对话…" />}
@@ -164,7 +174,7 @@ export function App({ api }: { api: ProductCore }) {
                 publishedCards={publishedCards}
                 onConnect={(personaId) => void connect(personaId)}
                 onCatalogChange={() => void refreshCatalog()}
-                connectBusy={connectBusy}
+                connectBusy={entryBusy}
               />
             )}
             {view === "table" && conversation && (

@@ -16,6 +16,10 @@ loadEnvFile();
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.env.PORT || 5175);
+if (!Number.isInteger(PORT) || PORT < 0 || PORT > 65535) {
+  console.error(`[phone-coach] PORT 配置不合法:${process.env.PORT}(需要 0–65535 的整数)`);
+  process.exit(1);
+}
 const DATA_FILE = path.join(ROOT, "data", "db.json");
 
 // 对话/文案分析共用 LLM 配置;转写走独立 CLI(server/audio-intake.ts),不在此组合根。

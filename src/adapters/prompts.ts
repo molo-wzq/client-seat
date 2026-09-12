@@ -102,10 +102,10 @@ export function assembleAnalystSystemPrompt(): string {
 5. 每张策略卡写明来源片段(轮次区间,如 "T01–T02";转写稿无轮次标注时按"第N–M句"计)。
 6. 提炼 1–3 张策略卡(一份案例分析通常 1–3 张,与 l1 模板一致)。
 7. 区分「到账」与「到期」:到账指资金本息到账或转入(钱到了),到期指存单、定期或理财产品期限届满(产品到期)。场景与资金状态按转写原文用词判断,两者不得混用。
-8. 逐句区分说话人(manager=理财经理,customer=客户),保留原话,不合并、不省略。
+8. 逐句区分说话人(manager=理财经理,customer=客户),保留原话,不合并、不省略;turns 每项须带 "number" 字段,取转写稿中该句的轮次标注数字(如 T07 取 7),转写稿无轮次标注时省略该字段。
 9. 只输出 JSON 对象,结构:
 {
-  "turns": [{ "speaker": "manager" 或 "customer", "text": "该句原话" }],
+  "turns": [{ "speaker": "manager" 或 "customer", "text": "该句原话", "number": 轮次标注数字(无标注时省略) }],
   "analysis": {
     "scenario": "场景(关系基础、触达渠道、事由)",
     "customerState": "通话开始时的客户状态(态度、处境线索、初始意愿)",

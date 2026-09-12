@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
 import { createInProcessProductCore } from "../product/in-process-product-api";
 import { RecordingAdapter } from "../test/recording-adapter";
+import type { ManagerTurnInput, ManagerTurnOutput } from "../domain/ports";
 import { MAX_MANAGER_TURNS } from "./product-core";
+import { FakeModelAdapter } from "../adapters/fake-model-adapter";
 import { SEED_CARD_IDS, SEED_PERSONA, SEED_PERSONAS, SEED_TRANSCRIPT } from "./seed";
+
+/** 慢适配器:制造模型响应延迟,放大并发请求的竞态窗口。 */
+class SlowAdapter extends FakeModelAdapter {
+  override async generateManagerTurn(input: ManagerTurnInput): Promise<ManagerTurnOutput> {
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    return super.generateManagerTurn(input);
+  }
+}
 
 /** 产品卡事实签名:未了解需求前不应出现。 */
 const PRODUCT_FACTS = /立减金|参考年化|2%|3%/;
@@ -103,6 +113,35 @@ describe("策略驱动的自适应对话", () => {
     const reply = after.turns.at(-1)!.text;
     expect(reply).toMatch(/不打扰|再见/);
     expect(reply).not.toMatch(/立减金|报名/);
+  });
+
+  it("客户第一句即明确拒绝时直接礼貌收口,不做开场推销", async () => {
+    const { api } = await setup();
+    const { say } = await publishedConversation(api);
+
+    const after = await say("不用了,别打了");
+    expect(after.status).toBe("ended");
+    expect(after.endReason).toContain("客户");
+    expect(after.turns.at(-1)!.text).toMatch(/不打扰|再见/);
+    // 不做开场推销:没有自报身份式的开场话术,也没有产品权益。
+    expect(after.turns.at(-1)!.text).not.toMatch(/代发客户|方便简单聊两句|立减金/);
+  });
+
+  it("同一通话并发发送两条客户发言,轮次不丢失、序号连续", async () => {
+    const api = createInProcessProductCore({ adapter: new SlowAdapter() });
+    await api.publishMaterialCards((await api.analyzeTranscript({ transcript: SEED_TRANSCRIPT })).id);
+    const conversation = await api.startConversation(SEED_PERSONA.id);
+
+    // 双击发送/重试的并发形态:两个请求基于同一旧快照,若不串行化会互相覆盖丢轮次。
+    await Promise.all([
+      api.sendCustomerTurn(conversation.id, "喂"),
+      api.sendCustomerTurn(conversation.id, "我的钱都在股市"),
+    ]);
+
+    const fresh = await api.getConversation(conversation.id);
+    expect(fresh.turns).toHaveLength(4);
+    expect(fresh.turns.map((t) => t.number)).toEqual([1, 2, 3, 4]);
+    expect(fresh.turns.map((t) => t.speaker)).toEqual(["customer", "manager", "customer", "manager"]);
   });
 
   it("了解需求后进入产品介绍,事实全部来自虚拟产品卡", async () => {

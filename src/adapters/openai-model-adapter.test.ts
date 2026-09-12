@@ -113,3 +113,76 @@ describe("JSON 输出模式(票 12)", () => {
     expect(bodies[1].response_format).toBeUndefined();
   });
 });
+
+describe("对话输出校验", () => {
+  it("合法 JSON 缺 reply 字段时报错,不把 JSON 当话术播出", async () => {
+    stubChat({
+      choices: [
+        {
+          finish_reason: "stop",
+          message: { content: '{"signal":"无","goal":"收口","shouldEnd":true}' },
+        },
+      ],
+    });
+    await expect(adapter.generateManagerTurn(managerInput())).rejects.toThrow(/reply/);
+  });
+
+  it("被截断的 JSON 输出报错,不当纯文本播出", async () => {
+    stubChat({
+      choices: [
+        {
+          finish_reason: "length",
+          message: { content: '{"signal":"无","reply":"您好' },
+        },
+      ],
+    });
+    await expect(adapter.generateManagerTurn(managerInput())).rejects.toThrow(/不完整/);
+  });
+
+  it("纯文本输出降级为无元数据的一轮对话", async () => {
+    stubChat({
+      choices: [
+        {
+          finish_reason: "stop",
+          message: { content: "您好,我是客户经理,方便聊两句吗?" },
+        },
+      ],
+    });
+    const out = await adapter.generateManagerTurn(managerInput());
+    expect(out.reply).toBe("您好,我是客户经理,方便聊两句吗?");
+    expect(out.shouldEnd).toBeFalsy();
+  });
+});
+
+describe("分析输出的轮次标注", () => {
+  it("保留模型回传的轮次号,跳号标注可对回来源区间", async () => {
+    stubChat({
+      choices: [
+        {
+          finish_reason: "stop",
+          message: {
+            content: JSON.stringify({
+              turns: [
+                { speaker: "manager", text: "您好", number: 1 },
+                { speaker: "customer", text: "喂", number: 3 },
+              ],
+              analysis: {
+                scenario: "s",
+                customerState: "c",
+                overallGoal: "g",
+                stages: [],
+                strengths: [],
+                weaknesses: [],
+                actualResult: "r",
+                reusableConditions: [],
+              },
+              cards: [{ id: "sc-1", name: "n" }],
+            }),
+          },
+        },
+      ],
+    });
+    const out = await adapter.analyzeTranscript("T01 经理:您好\nT03 客户:喂");
+    expect(out.turns?.map((t) => t.number)).toEqual([1, 3]);
+  });
+});

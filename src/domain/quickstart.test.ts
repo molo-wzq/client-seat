@@ -62,4 +62,18 @@ describe("快速开始", () => {
     expect(saved?.cards.every((c) => c.status === "published")).toBe(true);
     expect(conversation.status).toBe("ongoing");
   });
+
+  it("库内已占用种子卡 id 时重新分配,不产生跨素材重复 id", async () => {
+    const { api, storage } = setup();
+    // 默认分析路径:标题取自 scenario,与种子标题不同;伪适配器恰好占用 sc-c01-* 固定 id。
+    const material = await api.analyzeTranscript({ transcript: SEED_TRANSCRIPT });
+    await api.quickStart();
+    await api.publishMaterialCards(material.id);
+
+    const materials = await storage.listMaterials();
+    const allIds = materials.flatMap((m) => m.cards.map((c) => c.id));
+    expect(new Set(allIds).size).toBe(allIds.length);
+    const seed = materials.find((m) => m.id === "seed-c01");
+    expect(seed?.cards.map((c) => c.id)).not.toContain("sc-c01-1");
+  });
 });

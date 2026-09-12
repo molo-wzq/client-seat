@@ -28,6 +28,9 @@ describe("素材库与通话列表", () => {
   it("listConversations 按创建时间倒序返回全部通话", async () => {
     const { api } = setup();
     const first = await api.startConversation(SEED_PERSONAS[0]!.id);
+    // ISO 时间戳为毫秒精度:同毫秒创建的两通通话只能靠次级键(无法预测),
+    // 隔开时间让「后创建在前」的断言确定成立。
+    await new Promise((resolve) => setTimeout(resolve, 2));
     const second = await api.startConversation(SEED_PERSONAS[1]!.id);
     const list = await api.listConversations();
     expect(list.map((c) => c.id)).toEqual([second.id, first.id]);

@@ -55,6 +55,26 @@ export function createProductCore(deps: {
 }): ProductCore {
   const { copywriting, dialogue, storage } = deps;
 
+  /**
+   * 按实体 id 串行化读-改-写:await 模型调用可达数秒,期间同一实体的并发
+   * 请求若都基于旧快照整体覆盖写,先到的更新会被静默丢弃(丢轮次/丢编辑)。
+   * 前序任务失败不阻塞后续任务。
+   */
+  const tails = new Map<string, Promise<unknown>>();
+  function serialize<T>(key: string, task: () => Promise<T>): Promise<T> {
+    const previous = tails.get(key) ?? Promise.resolve();
+    const run = previous.then(task, task);
+    const tail = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    tails.set(key, tail);
+    void tail.then(() => {
+      if (tails.get(key) === tail) tails.delete(key);
+    });
+    return run;
+  }
+
   async function requireMaterial(materialId: string): Promise<Material> {
     const material = await storage.getMaterial(materialId);
     if (!material) throw new NotFoundError(`素材不存在:${materialId}`);
@@ -88,6 +108,57 @@ export function createProductCore(deps: {
     return { id: persona.id, name: persona.name, visible: persona.visible };
   }
 
+  /**
+   * 卡 id 必须全局唯一(结果页按 id 追溯):与库内冲突的 id 重新分配。
+   * analyzeTranscript 与 quickStart 的种子入库共用同一规则。
+   */
+  function allocateCardIds(
+    materialId: string,
+    cards: Array<Omit<StrategyCard, "status">>,
+    libraryIds?: Set<string>,
+  ): string[] {
+    const existingIds = libraryIds ?? new Set<string>();
+    return cards.map((card, index) => {
+      let id = card.id && !existingIds.has(card.id) ? card.id : "";
+      if (!id) {
+        id = `${materialId.slice(0, 6)}-sc-${index + 1}`;
+        while (existingIds.has(id)) id += "-alt";
+      }
+      existingIds.add(id);
+      return id;
+    });
+  }
+
+  async function collectCardIds(): Promise<Set<string>> {
+    return new Set((await storage.listMaterials()).flatMap((m) => m.cards.map((c) => c.id)));
+  }
+
+  async function publishCardsLocked(materialId: string, cardIds: string[]): Promise<Material> {
+    const material = await requireMaterial(materialId);
+    for (const cardId of cardIds) {
+      const card = material.cards.find((c) => c.id === cardId);
+      if (!card) throw new NotFoundError(`策略卡不存在:${cardId}`);
+    }
+    material.cards = material.cards.map((c) =>
+      cardIds.includes(c.id) ? { ...c, status: "published" as const } : c,
+    );
+    await storage.saveMaterial(material);
+    return material;
+  }
+
+  async function startConversationLocked(personaId: string): Promise<Conversation> {
+    await requirePersona(personaId);
+    const conversation: Conversation = {
+      id: randomId(),
+      personaId,
+      status: "ongoing",
+      turns: [],
+      createdAt: new Date().toISOString(),
+    };
+    await storage.saveConversation(conversation);
+    return conversation;
+  }
+
   return {
     async analyzeTranscript({ title, transcript, kind }) {
       const text = transcript.trim();
@@ -97,7 +168,7 @@ export function createProductCore(deps: {
       const { analysis, cards, turns: adapterTurns } = await copywriting.analyzeTranscript(text);
       // 标题取场景首句,避免长句截断在词中间。
       const materialTitle =
-        title?.trim() || analysis.scenario.split(/[。;;,,]/)[0]?.slice(0, 30) || "未命名素材";
+        title?.trim() || analysis.scenario.split(/[。；;，,、]/)[0]?.slice(0, 30) || "未命名素材";
 
       // 说话人区分:适配器结果优先,缺省时按转写解析兜底;两者都允许用户再纠正。
       // 轮次序号保留转写标注(T07)或顺序落号,是策略来源的追溯坐标。
@@ -105,32 +176,21 @@ export function createProductCore(deps: {
         adapterTurns?.length ? adapterTurns : parseTranscriptTurns(text),
       );
 
-      // 卡 id 必须全局唯一(结果页按 id 追溯):模型给的 id 冲突时重新分配。
-      const existingIds = new Set(
-        (await storage.listMaterials()).flatMap((m) => m.cards.map((c) => c.id)),
-      );
       const materialId = randomId();
+      const cardIds = allocateCardIds(materialId, cards, await collectCardIds());
       const material = {
         id: materialId,
         title: materialTitle,
         transcript: text,
         turns,
         analysis,
-        cards: cards.map((card, index) => {
-          let id = card.id && !existingIds.has(card.id) ? card.id : "";
-          if (!id) {
-            id = `${materialId.slice(0, 6)}-sc-${index + 1}`;
-            while (existingIds.has(id)) id += "-alt";
-          }
-          existingIds.add(id);
-          return {
-            ...card,
-            id,
-            status: "draft" as const,
-            // 来源指向所属素材(id 定位,标题供人读),保证结果页追溯口径一致。
-            sourceExcerpt: { ...card.sourceExcerpt, materialTitle, materialId },
-          };
-        }),
+        cards: cards.map((card, index) => ({
+          ...card,
+          id: cardIds[index] as string,
+          status: "draft" as const,
+          // 来源指向所属素材(id 定位,标题供人读),保证结果页追溯口径一致。
+          sourceExcerpt: { ...card.sourceExcerpt, materialTitle, materialId },
+        })),
         createdAt: new Date().toISOString(),
         ...(kind ? { kind } : {}),
       } satisfies Material;
@@ -146,84 +206,81 @@ export function createProductCore(deps: {
     },
 
     async publishCards(materialId, cardIds) {
-      const material = await requireMaterial(materialId);
-      for (const cardId of cardIds) {
-        const card = material.cards.find((c) => c.id === cardId);
-        if (!card) throw new NotFoundError(`策略卡不存在:${cardId}`);
-      }
-      material.cards = material.cards.map((c) =>
-        cardIds.includes(c.id) ? { ...c, status: "published" as const } : c,
-      );
-      await storage.saveMaterial(material);
-      return material;
+      return serialize(`material:${materialId}`, () => publishCardsLocked(materialId, cardIds));
     },
 
     async updateMaterialDraft(materialId, patch) {
-      const material = await requireMaterial(materialId);
+      return serialize(`material:${materialId}`, async () => {
+        const material = await requireMaterial(materialId);
 
-      if (patch.turns) {
-        if (!Array.isArray(patch.turns) || patch.turns.length === 0) {
-          throw new Error("轮次数据不合法");
+        if (patch.turns) {
+          if (!Array.isArray(patch.turns) || patch.turns.length === 0) {
+            throw new Error("轮次数据不合法");
+          }
+          // 序号必须唯一且为正整数:它是对话结果回溯素材片段的坐标,不重排。
+          const seen = new Set<number>();
+          for (const turn of patch.turns) {
+            if (
+              typeof turn.number !== "number" ||
+              !Number.isInteger(turn.number) ||
+              turn.number < 1 ||
+              seen.has(turn.number)
+            ) {
+              throw new Error(`轮次序号不合法:${JSON.stringify(turn.number)}`);
+            }
+            seen.add(turn.number);
+            if (typeof turn.text !== "string" || !turn.text.trim()) {
+              throw new Error("轮次内容不能为空");
+            }
+            // 说话人只认 manager/customer:拼写错误静默纠偏会把经理话当客户话入库。
+            if (turn.speaker !== "manager" && turn.speaker !== "customer") {
+              throw new Error(`轮次说话人不合法:${JSON.stringify(turn.speaker)}`);
+            }
+          }
+          material.turns = patch.turns.map((turn) => ({
+            number: turn.number,
+            speaker: turn.speaker,
+            text: turn.text,
+          }));
         }
-        // 序号必须唯一且为正整数:它是对话结果回溯素材片段的坐标,不重排。
-        const seen = new Set<number>();
-        for (const turn of patch.turns) {
+
+        if (patch.analysis) {
+          const { analysis } = patch;
           if (
-            typeof turn.number !== "number" ||
-            !Number.isInteger(turn.number) ||
-            turn.number < 1 ||
-            seen.has(turn.number)
+            typeof analysis !== "object" ||
+            analysis === null ||
+            typeof analysis.scenario !== "string" ||
+            typeof analysis.overallGoal !== "string" ||
+            !Array.isArray(analysis.stages)
           ) {
-            throw new Error(`轮次序号不合法:${JSON.stringify(turn.number)}`);
+            throw new Error("分析数据不合法");
           }
-          seen.add(turn.number);
-          if (typeof turn.text !== "string" || !turn.text.trim()) {
-            throw new Error("轮次内容不能为空");
+          material.analysis = analysis;
+        }
+
+        if (patch.cards) {
+          if (!Array.isArray(patch.cards)) throw new Error("策略卡数据不合法");
+          for (const incoming of patch.cards) {
+            const current = material.cards.find((c) => c.id === incoming.id);
+            if (!current) throw new NotFoundError(`策略卡不存在:${incoming.id}`);
+            if (current.status === "published") {
+              throw new Error(`策略卡已发布,不可修改:${current.name}`);
+            }
           }
+          material.cards = material.cards.map((card) => {
+            const incoming = patch.cards?.find((c) => c.id === card.id);
+            return incoming ? { ...card, ...incoming, status: "draft" as const } : card;
+          });
         }
-        material.turns = patch.turns.map((turn) => ({
-          number: turn.number,
-          speaker: turn.speaker === "customer" ? ("customer" as const) : ("manager" as const),
-          text: turn.text,
-        }));
-      }
 
-      if (patch.analysis) {
-        const { analysis } = patch;
-        if (
-          typeof analysis !== "object" ||
-          analysis === null ||
-          typeof analysis.scenario !== "string" ||
-          typeof analysis.overallGoal !== "string" ||
-          !Array.isArray(analysis.stages)
-        ) {
-          throw new Error("分析数据不合法");
+        if (patch.kind !== undefined) {
+          if (!isMaterialKind(patch.kind)) throw new ValidationError("素材类型不合法");
+          material.kind = patch.kind;
         }
-        material.analysis = analysis;
-      }
 
-      if (patch.cards) {
-        if (!Array.isArray(patch.cards)) throw new Error("策略卡数据不合法");
-        for (const incoming of patch.cards) {
-          const current = material.cards.find((c) => c.id === incoming.id);
-          if (!current) throw new NotFoundError(`策略卡不存在:${incoming.id}`);
-          if (current.status === "published") {
-            throw new Error(`策略卡已发布,不可修改:${current.name}`);
-          }
-        }
-        material.cards = material.cards.map((card) => {
-          const incoming = patch.cards?.find((c) => c.id === card.id);
-          return incoming ? { ...card, ...incoming, status: "draft" as const } : card;
-        });
-      }
-
-      if (patch.kind !== undefined) {
-        if (!isMaterialKind(patch.kind)) throw new ValidationError("素材类型不合法");
-        material.kind = patch.kind;
-      }
-
-      await storage.saveMaterial(material);
-      return material;
+        await storage.saveMaterial(material);
+        return material;
+      });
     },
 
     async listMaterials() {
@@ -252,16 +309,7 @@ export function createProductCore(deps: {
     },
 
     async startConversation(personaId) {
-      await requirePersona(personaId);
-      const conversation: Conversation = {
-        id: randomId(),
-        personaId,
-        status: "ongoing",
-        turns: [],
-        createdAt: new Date().toISOString(),
-      };
-      await storage.saveConversation(conversation);
-      return conversation;
+      return startConversationLocked(personaId);
     },
 
     async getConversation(conversationId) {
@@ -270,98 +318,122 @@ export function createProductCore(deps: {
 
     async listConversations() {
       const conversations = await storage.listConversations();
-      return [...conversations].sort((a, b) => (a.createdAt < b.createdAt ? 1 : -1));
+      // 创建时间倒序;同毫秒创建时以 id 作次级键,保证比较器一致、排序稳定。
+      return [...conversations].sort((a, b) =>
+        a.createdAt === b.createdAt
+          ? a.id === b.id
+            ? 0
+            : a.id < b.id
+              ? 1
+              : -1
+          : a.createdAt < b.createdAt
+            ? 1
+            : -1,
+      );
     },
 
     async quickStart() {
-      if ((await listPublishedCards()).length === 0) {
-        const existing = (await storage.listMaterials()).find(
-          (m) => m.title === SEED_MATERIAL_TITLE,
-        );
-        if (existing) {
-          // 种子素材已在库但卡未发布:直接发布其草稿卡。
-          const draftIds = existing.cards.filter((c) => c.status === "draft").map((c) => c.id);
-          if (draftIds.length > 0) await this.publishCards(existing.id, draftIds);
-        } else {
-          const seed = buildSeedMaterial();
-          const materialId = SEED_MATERIAL_ID;
-          await storage.saveMaterial({
-            ...seed,
-            id: materialId,
-            createdAt: new Date().toISOString(),
-            cards: seed.cards.map((card) => ({
-              ...card,
-              status: "published" as const,
-              sourceExcerpt: { ...card.sourceExcerpt, materialId },
-            })),
-          });
+      return serialize("quickstart", async () => {
+        if ((await listPublishedCards()).length === 0) {
+          // 按 id 优先、标题兜底(旧数据)定位已入库的种子素材。
+          const existing =
+            (await storage.getMaterial(SEED_MATERIAL_ID)) ??
+            (await storage.listMaterials()).find((m) => m.title === SEED_MATERIAL_TITLE);
+          if (existing) {
+            // 种子素材已在库但卡未发布:直接发布其草稿卡。
+            const draftIds = existing.cards.filter((c) => c.status === "draft").map((c) => c.id);
+            if (draftIds.length > 0) await publishCardsLocked(existing.id, draftIds);
+          } else {
+            // 卡 id 与库内去重(与 analyzeTranscript 同规则):
+            // 分析其他素材可能已占用 sc-c01-* 固定 id,直接插入会产生跨素材重复 id。
+            const seed = buildSeedMaterial();
+            const materialId = SEED_MATERIAL_ID;
+            const cardIds = allocateCardIds(materialId, seed.cards, await collectCardIds());
+            await storage.saveMaterial({
+              ...seed,
+              id: materialId,
+              createdAt: new Date().toISOString(),
+              cards: seed.cards.map((card, index) => ({
+                ...card,
+                id: cardIds[index] as string,
+                status: "published" as const,
+                sourceExcerpt: { ...card.sourceExcerpt, materialId },
+              })),
+            });
+          }
         }
-      }
-      const persona = SEED_PERSONAS[0];
-      if (!persona) throw new Error("缺少内置画像,无法快速开始");
-      return this.startConversation(persona.id);
+        const persona = SEED_PERSONAS[0];
+        if (!persona) throw new Error("缺少内置画像,无法快速开始");
+        return startConversationLocked(persona.id);
+      });
     },
 
     async sendCustomerTurn(conversationId, text) {
-      const conversation = await requireConversation(conversationId);
-      if (conversation.status === "ended") throw new Error("通话已结束");
-      const customerText = text.trim();
-      if (!customerText) throw new Error("客户发言为空");
+      // 串行化同一通话的读-改-写:双击发送/重试/多标签页并发时,
+      // 两个请求基于同一旧快照生成相同轮次号,后写覆盖先写会静默丢轮次。
+      return serialize(`conversation:${conversationId}`, async () => {
+        const conversation = await requireConversation(conversationId);
+        if (conversation.status === "ended") throw new Error("通话已结束");
+        const customerText = text.trim();
+        if (!customerText) throw new Error("客户发言为空");
 
-      const persona = toVisiblePersona(await requirePersona(conversation.personaId));
+        const persona = toVisiblePersona(await requirePersona(conversation.personaId));
 
-      const history = conversation.turns;
-      const publishedCards = await listPublishedCards();
-      const output = await dialogue.generateManagerTurn({
-        persona,
-        publishedCards,
-        product: SEED_PRODUCT_CARD,
-        history,
-        customerText,
+        const history = conversation.turns;
+        const publishedCards = await listPublishedCards();
+        const output = await dialogue.generateManagerTurn({
+          persona,
+          publishedCards,
+          product: SEED_PRODUCT_CARD,
+          history,
+          customerText,
+        });
+
+        const nextNumber = conversation.turns.length + 1;
+        const customerTurn: ConversationTurn = {
+          number: nextNumber,
+          speaker: "customer",
+          text: customerText,
+        };
+        // 模型声称使用的卡必须是本轮检索到的已发布卡:检索边界落到数据上。
+        const retrievable = output.usedCardId
+          ? publishedCards.some((c) => c.id === output.usedCardId)
+          : false;
+        const managerTurn: ConversationTurn = {
+          number: nextNumber + 1,
+          speaker: "manager",
+          text: output.reply,
+          usedCardId: retrievable ? output.usedCardId : undefined,
+          recognizedSignal: output.recognizedSignal,
+          currentGoal: output.currentGoal,
+        };
+        conversation.turns = [...conversation.turns, customerTurn, managerTurn];
+
+        const managerTurnCount = conversation.turns.filter((t) => t.speaker === "manager").length;
+        if (output.shouldEnd) {
+          conversation.status = "ended";
+          conversation.endReason = output.endReason || "通话结束";
+          conversation.outcomeSummary = output.outcomeSummary || "未知";
+        } else if (managerTurnCount >= MAX_MANAGER_TURNS) {
+          conversation.status = "ended";
+          conversation.endReason = "达到轮数上限,理财经理体面收口";
+          conversation.outcomeSummary = "未知";
+        }
+        await storage.saveConversation(conversation);
+        return conversation;
       });
-
-      const nextNumber = conversation.turns.length + 1;
-      const customerTurn: ConversationTurn = {
-        number: nextNumber,
-        speaker: "customer",
-        text: customerText,
-      };
-      // 模型声称使用的卡必须是本轮检索到的已发布卡:检索边界落到数据上。
-      const retrievable = output.usedCardId
-        ? publishedCards.some((c) => c.id === output.usedCardId)
-        : false;
-      const managerTurn: ConversationTurn = {
-        number: nextNumber + 1,
-        speaker: "manager",
-        text: output.reply,
-        usedCardId: retrievable ? output.usedCardId : undefined,
-        recognizedSignal: output.recognizedSignal,
-        currentGoal: output.currentGoal,
-      };
-      conversation.turns = [...conversation.turns, customerTurn, managerTurn];
-
-      const managerTurnCount = conversation.turns.filter((t) => t.speaker === "manager").length;
-      if (output.shouldEnd) {
-        conversation.status = "ended";
-        conversation.endReason = output.endReason || "通话结束";
-        conversation.outcomeSummary = output.outcomeSummary || "未知";
-      } else if (managerTurnCount >= MAX_MANAGER_TURNS) {
-        conversation.status = "ended";
-        conversation.endReason = "达到轮数上限,理财经理体面收口";
-        conversation.outcomeSummary = "未知";
-      }
-      await storage.saveConversation(conversation);
-      return conversation;
     },
 
     async finishConversation(conversationId) {
-      const conversation = await requireConversation(conversationId);
-      if (conversation.status === "ended") return conversation;
-      conversation.status = "ended";
-      conversation.endReason = "客户主动结束通话";
-      conversation.outcomeSummary = conversation.outcomeSummary || "未知";
-      await storage.saveConversation(conversation);
-      return conversation;
+      return serialize(`conversation:${conversationId}`, async () => {
+        const conversation = await requireConversation(conversationId);
+        if (conversation.status === "ended") return conversation;
+        conversation.status = "ended";
+        conversation.endReason = "客户主动结束通话";
+        conversation.outcomeSummary = conversation.outcomeSummary || "未知";
+        await storage.saveConversation(conversation);
+        return conversation;
+      });
     },
 
     async getResult(conversationId) {

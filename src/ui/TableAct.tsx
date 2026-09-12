@@ -43,15 +43,16 @@ export function TableAct({
             </div>
           </div>
           <ul className="info-list">
-            {(persona?.visible.length ? persona.visible : ["未知(经理将在对话中发现)"]).map((line) => (
-              <li key={line}>{line}</li>
+            {(persona?.visible.length ? persona.visible : ["未知(经理将在对话中发现)"]).map((line, i) => (
+              // 自定义画像允许重复属性行:内容不唯一,key 以位置区分。
+              <li key={`${i}-${line}`}>{line}</li>
             ))}
           </ul>
           <h3><UiIcon name="lock" />隐藏牌(扣着)</h3>
           <p className="hint">仅你知情,AI 不可见</p>
           <ul className="info-list hidden-hand">
-            {(persona?.hidden.length ? persona.hidden : ["无"]).map((line) => (
-              <li key={line}>{line}</li>
+            {(persona?.hidden.length ? persona.hidden : ["无"]).map((line, i) => (
+              <li key={`${i}-${line}`}>{line}</li>
             ))}
           </ul>
         </div>
