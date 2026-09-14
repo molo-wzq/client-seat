@@ -20,6 +20,8 @@ export function CallStep({
   const [busy, setBusy] = useState(false);
   const [busyHint, setBusyHint] = useState("理财经理正在思考…");
   const [error, setError] = useState<string | null>(null);
+  // 流式话术(票 29):话术增量先拼在这里逐字上屏,done 事件落地后被权威会话替换。
+  const [streamingReply, setStreamingReply] = useState<string | null>(null);
   const logRef = useRef<HTMLOListElement>(null);
 
   function applyConversation(next: Conversation) {
@@ -45,7 +47,7 @@ export function CallStep({
   useEffect(() => {
     // jsdom 未实现 Element.scrollTo,用可选调用兜底。
     logRef.current?.scrollTo?.({ top: logRef.current.scrollHeight });
-  }, [conversation?.turns.length]);
+  }, [conversation?.turns.length, streamingReply]);
 
   const ended = conversation?.status === "ended";
   const managerTurnCount =
@@ -72,15 +74,25 @@ export function CallStep({
     setText("");
     setBusy(true);
     setBusyHint("理财经理正在思考…");
+    setStreamingReply(null);
     setError(null);
     try {
-      applyConversation(await api.sendCustomerTurn(conversationId, customerText));
+      // 优先走流式接口:话术逐字上屏(票 29);旧桩 API 没有该方法时回退整体返回。
+      if (typeof api.sendCustomerTurnStream === "function") {
+        const next = await api.sendCustomerTurnStream(conversationId, customerText, (delta) => {
+          setStreamingReply((current) => (current ?? "") + delta);
+        });
+        applyConversation(next);
+      } else {
+        applyConversation(await api.sendCustomerTurn(conversationId, customerText));
+      }
     } catch (e) {
       applyConversation(previous);
       setText(customerText);
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      setStreamingReply(null);
     }
   }
 
@@ -122,6 +134,22 @@ export function CallStep({
             <p>{turn.text}</p>
           </li>
         ))}
+        {streamingReply !== null ? (
+          // 流式话术气泡:首字到达即替换思考气泡,done 后由权威轮次接管。
+          <li className="turn turn-manager typing" aria-hidden="true">
+            <span className="who">理财经理(AI)</span>
+            <p>
+              {streamingReply}
+              <span className="stream-caret" aria-hidden="true" />
+            </p>
+          </li>
+        ) : busy && !ended ? (
+          // 思考中的占位气泡:纯视觉反馈,语义由下方 BusyHint(role=status)承担。
+          <li className="turn turn-manager typing" aria-hidden="true">
+            <span className="who">理财经理(AI)</span>
+            <p className="typing-dots"><span /><span /><span /></p>
+          </li>
+        ) : null}
       </ol>
       {busy && <BusyHint text={busyHint} />}
       {!ended && (
@@ -141,7 +169,7 @@ export function CallStep({
             placeholder="作为客户回应……"
           />
           <div className="actions">
-            <span className="turn-count">
+            <span className="turn-count" key={managerTurnCount}>
               经理第 {managerTurnCount}/{MAX_MANAGER_TURNS} 轮
             </span>
             <button onClick={send} disabled={busy || !text.trim()}>

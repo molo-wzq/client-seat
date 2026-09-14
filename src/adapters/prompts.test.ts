@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assembleAnalystSystemPrompt, assembleManagerSystemPrompt } from "./prompts";
+import { assembleAnalystSystemPrompt, assembleManagerMetaPrompt, assembleManagerSystemPrompt } from "./prompts";
 import {
   SEED_CARDS,
   SEED_PERSONA,
@@ -76,5 +76,30 @@ describe("分析提示词:场景读法(票 14)", () => {
     expect(prompt).toContain("期限届满");
     expect(prompt).toContain("不得混用");
     expect(prompt).toMatch(/按转写原文用词判断/);
+  });
+});
+
+describe("两段式输出契约(票 29)", () => {
+  it("经理话术提示词要求纯文本输出,不再索要 JSON", () => {
+    const prompt = promptFor(P03_VISIBLE);
+    expect(prompt).not.toContain("只输出 JSON");
+    expect(prompt).toMatch(/不加「理财经理:」等称谓前缀/);
+    expect(prompt).toMatch(/不输出 JSON/);
+  });
+
+  it("元数据裁判提示词给出卡清单并只索要 JSON", () => {
+    const prompt = assembleManagerMetaPrompt({ publishedCards: SEED_CARDS });
+    expect(prompt).toContain("usedCardId 只能取这里的 id");
+    for (const card of SEED_CARDS) {
+      expect(prompt).toContain(card.id);
+      expect(prompt).toContain(card.name);
+    }
+    expect(prompt).toContain("只输出 JSON");
+    expect(prompt).not.toContain("reply");
+  });
+
+  it("无已发布卡时裁判提示词写明空库", () => {
+    const prompt = assembleManagerMetaPrompt({ publishedCards: [] });
+    expect(prompt).toContain("无已发布策略卡");
   });
 });

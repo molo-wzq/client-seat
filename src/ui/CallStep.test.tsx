@@ -108,3 +108,49 @@ describe("对话步骤的反馈", () => {
     expect(sendImpl).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("流式话术上屏(票 29)", () => {
+  it("话术增量逐段出现在流式气泡,完成后被权威轮次替换", async () => {
+    const finalConversation = () => ({
+      ...ongoingConversation(),
+      turns: [
+        { number: 1, speaker: "customer" as const, text: "喂" },
+        { number: 2, speaker: "manager" as const, text: "您好,我是咱们银行的客户经理。" },
+      ],
+    });
+    // 增量同步推完,但权威会话挂起:让流式中间态可断言。
+    const pending = deferred<Conversation>();
+    const api = {
+      getConversation: async () => ongoingConversation(),
+      sendCustomerTurnStream: async (
+        _id: string,
+        _text: string,
+        onDelta: (d: string) => void,
+      ) => {
+        onDelta("您好,我是");
+        onDelta("咱们银行的客户经理。");
+        return pending.promise;
+      },
+      finishConversation: async () => ({ ...ongoingConversation(), status: "ended" as const }),
+      getResult: async () => ({}) as never,
+    } as unknown as ProductCore;
+
+    const user = userEvent.setup();
+    render(<CallStep api={api} conversationId="conv-1" onFinished={() => {}} />);
+    const reply = await screen.findByLabelText("客户回复");
+    await user.type(reply, "喂");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    // 增量已拼进流式气泡,busy 仍持续(等待提示在场)。
+    expect(await screen.findByText("您好,我是咱们银行的客户经理。")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeInTheDocument();
+
+    pending.resolve(finalConversation());
+    // done 落地:权威轮次出现,流式气泡被替换(文本不重复出现两次),busy 复位。
+    await waitFor(() => {
+      const log = screen.getByRole("list");
+      expect(within(log).getAllByText(/咱们银行的客户经理/)).toHaveLength(1);
+    });
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+});

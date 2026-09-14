@@ -46,6 +46,39 @@ export function createRequestListener(deps: {
     }
   }
 
+  /**
+   * 流式轮次端点(票 29):SSE 三类事件——
+   * `delta` {text} 话术增量、`done` {conversation} 权威会话、`error` {error}。
+   * 响应头一旦写出就只能走 SSE 错误事件,不能再回退到 JSON 错误码。
+   */
+  async function respondTurnStream(
+    req: http.IncomingMessage,
+    res: http.ServerResponse,
+    conversationId: string,
+    text: string,
+  ): Promise<void> {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    const writeEvent = (event: string, data: unknown): void => {
+      // 客户端断开后继续写只会堆积异常;静默放弃,由核心层自然完成或超时。
+      if (res.destroyed || res.writableEnded) return;
+      res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+    };
+    try {
+      const conversation = await core.sendCustomerTurnStream(conversationId, text, (delta) => {
+        writeEvent("delta", { text: delta });
+      });
+      writeEvent("done", conversation);
+    } catch (error) {
+      writeEvent("error", { error: (error as Error).message });
+    }
+    if (!res.destroyed && !res.writableEnded) res.end();
+  }
+
   async function handleApi(
     req: http.IncomingMessage,
     res: http.ServerResponse,
@@ -125,6 +158,17 @@ export function createRequestListener(deps: {
       respondJson(res, 200, conversation);
       return;
     }
+    // 流式轮次(票 29):SSE 增量上屏。必须先于 /turns 正则匹配(它也能匹配此路径的父段)。
+    const turnStreamMatch = pathname.match(/^\/api\/conversations\/([^/]+)\/turns\/stream$/);
+    if (req.method === "POST" && turnStreamMatch) {
+      await respondTurnStream(
+        req,
+        res,
+        safeDecodeSegment(turnStreamMatch[1]),
+        (body as { text?: string }).text || "",
+      );
+      return;
+    }
     const turnMatch = pathname.match(/^\/api\/conversations\/([^/]+)\/turns$/);
     if (req.method === "POST" && turnMatch) {
       const conversation = await core.sendCustomerTurn(
@@ -150,8 +194,7 @@ export function createRequestListener(deps: {
   }
 }
 
-/** 路径段解码:非法百分号编码按"资源不存在"处理(404),不落 500。 */
-function safeDecodeSegment(segment: string): string {
+/** 路径段解码:非法百分号编码按"资源不存在"处理(404),不落 500。 */function safeDecodeSegment(segment: string): string {
   try {
     return decodeURIComponent(segment);
   } catch {

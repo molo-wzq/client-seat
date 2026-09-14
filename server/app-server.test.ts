@@ -130,3 +130,51 @@ describe("http 契约:成功与业务错误码", () => {
     expect((json as { status?: string }).status).toBe("ongoing");
   });
 });
+
+describe("流式轮次端点(票 29)", () => {
+  it("SSE 依次输出 delta 与 done,done 携带权威会话", async () => {
+    const start = await request("/api/quickstart", "POST", {});
+    const conversationId = String((start.json as { id?: string }).id ?? "");
+
+    const response = await fetch(`${base}/api/conversations/${conversationId}/turns/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "喂" }),
+    });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+
+    const raw = await response.text();
+    const events = raw
+      .split("\n\n")
+      .filter(Boolean)
+      .map((block) => {
+        const eventName = block.match(/^event: (.+)$/m)?.[1];
+        const data = block.match(/^data: (.+)$/m)?.[1];
+        return { eventName, data: data ? (JSON.parse(data) as Record<string, unknown>) : null };
+      });
+
+    // 伪适配器整段话术单次回调 → 恰一个 delta,随后 done。
+    const deltas = events.filter((e) => e.eventName === "delta");
+    const done = events.find((e) => e.eventName === "done");
+    expect(deltas.length).toBe(1);
+    expect(typeof deltas[0]?.data?.text).toBe("string");
+    expect((done?.data as { turns?: unknown[] })?.turns?.length).toBe(2);
+    expect((done?.data as { status?: string })?.status).toBe("ongoing");
+    // done 事件是最后一条:客户端读到它即可安全关流。
+    expect(events.at(-1)?.eventName).toBe("done");
+  });
+
+  it("流中错误以 error 事件送达,不落 JSON 错误码", async () => {
+    const response = await fetch(`${base}/api/conversations/not-exists/turns/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: "喂" }),
+    });
+    // 响应头已按 SSE 写出(200),错误只能走事件通道。
+    expect(response.status).toBe(200);
+    const raw = await response.text();
+    expect(raw).toMatch(/event: error/);
+    expect(raw).toMatch(/不存在/);
+  });
+});

@@ -1,5 +1,11 @@
 import { buildSeedMaterial, SEED_MATERIAL_ID, SEED_MATERIAL_TITLE, SEED_PERSONAS, SEED_PRODUCT_CARD } from "./seed";
 import { randomId } from "./ports";
+import {
+  compareConversationsByRecency,
+  NO_RETENTION,
+  purgeExpiredConversations,
+  type ConversationRetentionPolicy,
+} from "./conversation-retention";
 import { numberTurns, parseTranscriptTurns, resolveTurnRange } from "./transcript";
 import type { CopywritingPort, DialoguePort, ProductStorage } from "./ports";
 import type {
@@ -44,6 +50,15 @@ export interface ProductCore {
   getConversation(conversationId: string): Promise<Conversation>;
   listConversations(): Promise<Conversation[]>;
   sendCustomerTurn(conversationId: string, text: string): Promise<Conversation>;
+  /**
+   * 流式变体(票 29):话术增量经 onReplyDelta 逐段上屏,
+   * 返回值与 sendCustomerTurn 相同(完整会话,含元数据与结束状态)。
+   */
+  sendCustomerTurnStream(
+    conversationId: string,
+    text: string,
+    onReplyDelta: (delta: string) => void,
+  ): Promise<Conversation>;
   finishConversation(conversationId: string): Promise<Conversation>;
   getResult(conversationId: string): Promise<ConversationResult>;
 }
@@ -52,8 +67,14 @@ export function createProductCore(deps: {
   copywriting: CopywritingPort;
   dialogue: DialoguePort;
   storage: ProductStorage;
+  /** 对话存储上限(最大存储时间/条数);缺省不限制,保持既有行为。 */
+  retention?: ConversationRetentionPolicy;
+  /** 时钟注入:保留策略与 createdAt 共用同一时间源,测试可固定。 */
+  now?: () => Date;
 }): ProductCore {
   const { copywriting, dialogue, storage } = deps;
+  const retention = deps.retention ?? NO_RETENTION;
+  const now = deps.now ?? (() => new Date());
 
   /**
    * 按实体 id 串行化读-改-写:await 模型调用可达数秒,期间同一实体的并发
@@ -153,10 +174,77 @@ export function createProductCore(deps: {
       personaId,
       status: "ongoing",
       turns: [],
-      createdAt: new Date().toISOString(),
+      createdAt: now().toISOString(),
     };
     await storage.saveConversation(conversation);
+    // 存储上限在开新通话的落库点执行:所有新对话入口都过这里,不依赖 UI/HTTP 层。
+    // 刚保存的这通是最新记录,不会被两条规则命中。
+    await purgeExpiredConversations(storage, now(), retention);
     return conversation;
+  }
+
+  /** 通话轮次生成(票 29 抽出):普通与流式两个接口共用同一读-改-写与落库路径。 */
+  function sendCustomerTurnStreaming(
+    conversationId: string,
+    text: string,
+    onReplyDelta?: (delta: string) => void,
+  ): Promise<Conversation> {
+    // 串行化同一通话的读-改-写:双击发送/重试/多标签页并发时,
+    // 两个请求基于同一旧快照生成相同轮次号,后写覆盖先写会静默丢轮次。
+    return serialize(`conversation:${conversationId}`, async () => {
+      const conversation = await requireConversation(conversationId);
+      if (conversation.status === "ended") throw new Error("通话已结束");
+      const customerText = text.trim();
+      if (!customerText) throw new Error("客户发言为空");
+
+      const persona = toVisiblePersona(await requirePersona(conversation.personaId));
+
+      const history = conversation.turns;
+      const publishedCards = await listPublishedCards();
+      const output = await dialogue.generateManagerTurn(
+        {
+          persona,
+          publishedCards,
+          product: SEED_PRODUCT_CARD,
+          history,
+          customerText,
+        },
+        onReplyDelta,
+      );
+
+      const nextNumber = conversation.turns.length + 1;
+      const customerTurn: ConversationTurn = {
+        number: nextNumber,
+        speaker: "customer",
+        text: customerText,
+      };
+      // 模型声称使用的卡必须是本轮检索到的已发布卡:检索边界落到数据上。
+      const retrievable = output.usedCardId
+        ? publishedCards.some((c) => c.id === output.usedCardId)
+        : false;
+      const managerTurn: ConversationTurn = {
+        number: nextNumber + 1,
+        speaker: "manager",
+        text: output.reply,
+        usedCardId: retrievable ? output.usedCardId : undefined,
+        recognizedSignal: output.recognizedSignal,
+        currentGoal: output.currentGoal,
+      };
+      conversation.turns = [...conversation.turns, customerTurn, managerTurn];
+
+      const managerTurnCount = conversation.turns.filter((t) => t.speaker === "manager").length;
+      if (output.shouldEnd) {
+        conversation.status = "ended";
+        conversation.endReason = output.endReason || "通话结束";
+        conversation.outcomeSummary = output.outcomeSummary || "未知";
+      } else if (managerTurnCount >= MAX_MANAGER_TURNS) {
+        conversation.status = "ended";
+        conversation.endReason = "达到轮数上限,理财经理体面收口";
+        conversation.outcomeSummary = "未知";
+      }
+      await storage.saveConversation(conversation);
+      return conversation;
+    });
   }
 
   return {
@@ -318,18 +406,8 @@ export function createProductCore(deps: {
 
     async listConversations() {
       const conversations = await storage.listConversations();
-      // 创建时间倒序;同毫秒创建时以 id 作次级键,保证比较器一致、排序稳定。
-      return [...conversations].sort((a, b) =>
-        a.createdAt === b.createdAt
-          ? a.id === b.id
-            ? 0
-            : a.id < b.id
-              ? 1
-              : -1
-          : a.createdAt < b.createdAt
-            ? 1
-            : -1,
-      );
+      // 创建时间倒序(比较器与保留策略共享单一定义),排序稳定。
+      return [...conversations].sort(compareConversationsByRecency);
     },
 
     async quickStart() {
@@ -369,59 +447,11 @@ export function createProductCore(deps: {
     },
 
     async sendCustomerTurn(conversationId, text) {
-      // 串行化同一通话的读-改-写:双击发送/重试/多标签页并发时,
-      // 两个请求基于同一旧快照生成相同轮次号,后写覆盖先写会静默丢轮次。
-      return serialize(`conversation:${conversationId}`, async () => {
-        const conversation = await requireConversation(conversationId);
-        if (conversation.status === "ended") throw new Error("通话已结束");
-        const customerText = text.trim();
-        if (!customerText) throw new Error("客户发言为空");
+      return sendCustomerTurnStreaming(conversationId, text);
+    },
 
-        const persona = toVisiblePersona(await requirePersona(conversation.personaId));
-
-        const history = conversation.turns;
-        const publishedCards = await listPublishedCards();
-        const output = await dialogue.generateManagerTurn({
-          persona,
-          publishedCards,
-          product: SEED_PRODUCT_CARD,
-          history,
-          customerText,
-        });
-
-        const nextNumber = conversation.turns.length + 1;
-        const customerTurn: ConversationTurn = {
-          number: nextNumber,
-          speaker: "customer",
-          text: customerText,
-        };
-        // 模型声称使用的卡必须是本轮检索到的已发布卡:检索边界落到数据上。
-        const retrievable = output.usedCardId
-          ? publishedCards.some((c) => c.id === output.usedCardId)
-          : false;
-        const managerTurn: ConversationTurn = {
-          number: nextNumber + 1,
-          speaker: "manager",
-          text: output.reply,
-          usedCardId: retrievable ? output.usedCardId : undefined,
-          recognizedSignal: output.recognizedSignal,
-          currentGoal: output.currentGoal,
-        };
-        conversation.turns = [...conversation.turns, customerTurn, managerTurn];
-
-        const managerTurnCount = conversation.turns.filter((t) => t.speaker === "manager").length;
-        if (output.shouldEnd) {
-          conversation.status = "ended";
-          conversation.endReason = output.endReason || "通话结束";
-          conversation.outcomeSummary = output.outcomeSummary || "未知";
-        } else if (managerTurnCount >= MAX_MANAGER_TURNS) {
-          conversation.status = "ended";
-          conversation.endReason = "达到轮数上限,理财经理体面收口";
-          conversation.outcomeSummary = "未知";
-        }
-        await storage.saveConversation(conversation);
-        return conversation;
-      });
+    async sendCustomerTurnStream(conversationId, text, onReplyDelta) {
+      return sendCustomerTurnStreaming(conversationId, text, onReplyDelta);
     },
 
     async finishConversation(conversationId) {

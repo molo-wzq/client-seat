@@ -54,9 +54,16 @@ export interface ManagerTurnOutput {
   outcomeSummary?: string;
 }
 
-/** 对话生成:根据客户最新信号与已发布策略生成经理下一轮。 */
+/**
+ * 对话生成:根据客户最新信号与已发布策略生成经理下一轮。
+ * onReplyDelta:话术增量回调(流式上屏用);适配器不支持流式时忽略,
+ * 话术完整出现在返回值里,两层契约不变。
+ */
 export interface DialoguePort {
-  generateManagerTurn(input: ManagerTurnInput): Promise<ManagerTurnOutput>;
+  generateManagerTurn(
+    input: ManagerTurnInput,
+    onReplyDelta?: (delta: string) => void,
+  ): Promise<ManagerTurnOutput>;
 }
 
 /**
@@ -64,7 +71,7 @@ export interface DialoguePort {
  * 由 server/storage-contract.test.ts 参数化共同约束:
  * - 读(get/list)返回快照拷贝,调用方改动返回值不污染已存数据;
  * - 写 resolve 后即持久可见;并发写按调用顺序完成,不丢更新;
- * - 不存在返回 null / 空数组。
+ * - 不存在返回 null / 空数组;删除不存在的 id 不报错。
  */
 export interface ProductStorage {
   saveMaterial(material: Material): Promise<void>;
@@ -73,6 +80,8 @@ export interface ProductStorage {
   saveConversation(conversation: Conversation): Promise<void>;
   getConversation(id: string): Promise<Conversation | null>;
   listConversations(): Promise<Conversation[]>;
+  /** 批量删除对话(对话存储上限策略用);空列表为无操作。 */
+  deleteConversations(ids: string[]): Promise<void>;
   savePersona(persona: Persona): Promise<void>;
   listPersonas(): Promise<Persona[]>;
 }

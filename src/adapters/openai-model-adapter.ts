@@ -1,4 +1,8 @@
-import { assembleAnalystSystemPrompt, assembleManagerSystemPrompt } from "./prompts";
+import {
+  assembleAnalystSystemPrompt,
+  assembleManagerMetaPrompt,
+  assembleManagerSystemPrompt,
+} from "./prompts";
 import type {
   CopywritingPort,
   DialoguePort,
@@ -49,7 +53,16 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     };
   }
 
-  async generateManagerTurn(input: ManagerTurnInput): Promise<ManagerTurnOutput> {
+  /**
+   * 两段式生成(票 29):
+   * 1. 话术调用(流式纯文本)——首字即可上屏,推理模型的思考 token 不占用户等待;
+   * 2. 元数据调用(json_object)——裁判提取 signal/goal/usedCardId/shouldEnd 等。
+   * 元数据失败只降级(丢高亮/自动收口),不丢整轮对话。
+   */
+  async generateManagerTurn(
+    input: ManagerTurnInput,
+    onReplyDelta?: (delta: string) => void,
+  ): Promise<ManagerTurnOutput> {
     const messages: Array<{ role: string; content: string }> = [
       { role: "system", content: assembleManagerSystemPrompt(input) },
     ];
@@ -58,44 +71,43 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     }
     messages.push({ role: "user", content: input.customerText });
 
-    // 网关支持 response_format=json_object(票 12 探测:HTTP 200 且输出可解析)。
-    // 规则 10 要求只输出 JSON;纯文本降级路径仍保留作最后兜底。
-    const { content, reasoning } = await this.chat(messages, {
-      response_format: { type: "json_object" },
+    const { content: streamedReply } = await this.chatStream(messages, onReplyDelta);
+    const reply = cleanReplyText(streamedReply);
+
+    const meta = await this.extractManagerMeta(input, reply).catch((error) => {
+      // 降级而非失败:话术已经生成且播给用户,此时抛错会回滚整轮;
+      // 丢的只是策略卡高亮与自动收口信号,12 轮硬上限仍然兜底。
+      console.warn("[adapter] 元数据提取失败,本轮降级为无元数据:", (error as Error).message);
+      return null;
     });
-    if (content.trim()) return this.managerTurnFromText(content);
-    // 推理模型偶发把最终 JSON 落在 reasoning_content 而 content 为空:
-    // 能解析出结构化输出则采用;思维链文本绝不能当作对话播出。
-    if (reasoning.trim()) {
-      const raw = parseJsonObject(reasoning) as Partial<ManagerTurnOutput>;
-      return this.managerTurnFromRaw(raw);
-    }
-    throw new Error("语言模型返回为空");
+    if (!meta) return { reply };
+    return { reply, ...meta };
   }
 
-  private managerTurnFromText(content: string): ManagerTurnOutput {
-    let raw: unknown;
-    try {
-      raw = parseJsonObject(content);
-    } catch {
-      // 容错:模型偶尔输出纯文本。文本本身仍是有效的经理话术,
-      // 降级为无策略引用、无元数据的一轮,不让通话中断(策略追溯缺失可见)。
-      // 但以 { 开头却解析失败的内容是被截断的 JSON,不是话术,播出即污染对话。
-      if (content.trimStart().startsWith("{")) throw new Error("模型 JSON 输出不完整(可能被长度截断)");
-      console.warn("[adapter] 模型未返回 JSON,按纯对话处理:", content.slice(0, 80));
-      return { reply: content.trim() };
-    }
-    // 可解析为 JSON 但缺 reply:整段 JSON 不是可播出的话术,必须报错,
-    // 不能把结构化输出当对话播出(shouldEnd 等元数据也会被静默丢弃)。
-    return this.managerTurnFromRaw(raw as Partial<ManagerTurnOutput>);
-  }
-
-  private managerTurnFromRaw(raw: Partial<ManagerTurnOutput>): ManagerTurnOutput {
-    if (!raw.reply || typeof raw.reply !== "string") {
-      throw new Error("模型返回缺少 reply 字段");
-    }
+  /** 第二次调用:裁判提取元数据。任何失败由调用方 catch 后降级。 */
+  private async extractManagerMeta(
+    input: ManagerTurnInput,
+    reply: string,
+  ): Promise<Omit<ManagerTurnOutput, "reply">> {
+    const recentHistory = input.history.slice(-8);
+    const dialogue = [
+      ...recentHistory.map(
+        (turn) => `${turn.speaker === "customer" ? "客户" : "经理"}:${turn.text}`,
+      ),
+      `客户:${input.customerText}`,
+      `经理(刚说):${reply}`,
+    ].join("\n");
+    const { content, reasoning } = await this.chat(
+      [
+        { role: "system", content: assembleManagerMetaPrompt(input) },
+        { role: "user", content: `对话记录:\n${dialogue}\n\n请输出元数据 JSON。` },
+      ],
+      { response_format: { type: "json_object" } },
+    );
+    const source = content.trim() ? content : reasoning;
+    const raw = parseJsonObject(source) as Partial<ManagerTurnOutput> & { signal?: unknown; goal?: unknown };
+    if (!isRecord(raw)) throw new Error("元数据输出不是 JSON 对象");
     return {
-      reply: raw.reply,
       recognizedSignal:
         asOptionalString((raw as Record<string, unknown>).signal) ??
         asOptionalString(raw.recognizedSignal),
@@ -107,6 +119,90 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
       endReason: asOptionalString(raw.endReason),
       outcomeSummary: asOptionalString(raw.outcomeSummary),
     };
+  }
+
+  /**
+   * 流式话术调用:stream=true 读 SSE,reasoning_content 增量只累计不回调
+   * (思维链绝不能当话术播出),content 增量逐段交给 onReplyDelta。
+   */
+  private async chatStream(
+    messages: Array<{ role: string; content: string }>,
+    onReplyDelta?: (delta: string) => void,
+  ): Promise<{ content: string; reasoning: string }> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+        signal: AbortSignal.timeout(120_000),
+        body: JSON.stringify({
+          model: this.config.model,
+          messages,
+          temperature: 0.7,
+          max_tokens: 16384,
+          stream: true,
+        }),
+      });
+    } catch (error) {
+      if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+        throw new Error("语言模型调用超时(120 秒)");
+      }
+      throw error;
+    }
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`语言模型调用失败(HTTP ${response.status}):${body.slice(0, 300)}`);
+    }
+    if (!response.body) throw new Error("语言模型网关未返回流式响应体");
+
+    let content = "";
+    let reasoning = "";
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      // SSE 事件以空行分隔;残包留回 buffer 等下一个 chunk。
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
+      for (const event of events) {
+        for (const line of event.split("\n")) {
+          if (!line.startsWith("data:")) continue;
+          const payload = line.slice(5).trim();
+          if (!payload || payload === "[DONE]") continue;
+          let parsed: {
+            choices?: Array<{ delta?: { content?: string; reasoning_content?: string } }>;
+          };
+          try {
+            parsed = JSON.parse(payload);
+          } catch {
+            continue; // 半截 JSON(理论上不会出现,残包已在 buffer 层拦截)
+          }
+          const delta = parsed.choices?.[0]?.delta;
+          if (!delta) continue;
+          if (delta.reasoning_content) reasoning += delta.reasoning_content;
+          if (delta.content) {
+            content += delta.content;
+            onReplyDelta?.(delta.content);
+          }
+        }
+      }
+    }
+    if (!content.trim() && !reasoning.trim()) {
+      console.warn("[adapter] 语言模型流式返回缺少内容");
+      throw new Error("语言模型返回为空");
+    }
+    // 纯文本模式下思维链不是可播出的话术:content 为空同样按空处理。
+    if (!content.trim()) {
+      console.warn("[adapter] 话术内容为空(仅思维链),拒绝播出");
+      throw new Error("语言模型返回为空");
+    }
+    return { content, reasoning };
   }
 
   private async chat(
@@ -160,6 +256,18 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
 }
 
 const DEFAULT_MATERIAL_TITLE = "未命名素材";
+
+/**
+ * 话术净化:尽管规则 10 明令禁止,模型偶发仍会带「理财经理:」称谓前缀、
+ * 包裹引号或首尾空白——这些不是电话里说出来的话,直接播出会污染对话。
+ */
+export function cleanReplyText(reply: string): string {
+  return reply
+    .trim()
+    .replace(/^(?:理财经理|经理|AI|客服|话术)\s*[:：]\s*/, "")
+    .replace(/^["「『“]+|["」』”]+$/g, "")
+    .trim();
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;

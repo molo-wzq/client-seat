@@ -41,9 +41,14 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
     };
   }
 
-  async generateManagerTurn(input: ManagerTurnInput): Promise<ManagerTurnOutput> {
+  async generateManagerTurn(
+    input: ManagerTurnInput,
+    onReplyDelta?: (delta: string) => void,
+  ): Promise<ManagerTurnOutput> {
     // 模型只能引用本轮检索到的已发布卡:不在候选集内的卡不标注为已使用。
     const output = await this.scriptTurn(input);
+    // 伪实现整段话术一次回调:流式 UI 路径与真实适配器共用同一契约。
+    if (onReplyDelta) onReplyDelta(output.reply);
     if (!output.usedCardId) return output;
     const retrievable = input.publishedCards.some((c) => c.id === output.usedCardId);
     return retrievable ? output : { ...output, usedCardId: undefined };

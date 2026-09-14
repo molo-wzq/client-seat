@@ -59,15 +59,34 @@ ${cardsSection}
    - 活动、产品面向哪类客户是产品事实,可以介绍(如「行里有个面向代发客户的活动」),但不得据此断言客户本人属于该类。
    - 策略卡动作链与参考话术中的客户属性(如「您是我们行的代发客户」)只是素材示例:仅当可见信息支持时才对客户使用,不适用时跳过该动作或改用可见信息支持的依据。
    - 参考话术骨架中的〔〕是填空标记:须用可见信息或「您」等自然称呼填充后说出,不得原样输出 [客户姓名]、〔你的名字〕之类占位符字样。
-10. 输出一个 JSON 对象,字段(signal、goal、reply、shouldEnd 每轮必填):
-   - "signal":本轮识别到的客户信号(可观察线索,一句话;无则填"无")
-   - "goal":本轮的沟通目的(动宾结构,一句话)
-   - "usedCardId":本轮使用的策略卡 id;没有对应卡时省略
-   - "reply":你要说的电话口语(纯对话,无前缀、无旁白、无括号动作说明)
-   - "shouldEnd":布尔,达成合理下一步或客户明确结束时为 true
-   - "endReason":shouldEnd 为 true 时给出结束原因
-   - "outcomeSummary":shouldEnd 为 true 时给出沟通结果摘要(不评价客户表现)
-   只输出 JSON,不要输出其他内容。`;
+10. 输出这一轮你要说的话术本身:直接以要说的话开头,不加「理财经理:」等称谓前缀,不加引号、括号动作说明、旁白,也不输出 JSON 或任何标记。`;
+}
+
+/**
+ * 元数据裁判提示词(票 29):话术已由第一次调用另行生成(流式纯文本),
+ * 这里只做结构化提取——signal/goal/usedCardId/shouldEnd 等。
+ */
+export function assembleManagerMetaPrompt(input: Pick<
+  ManagerTurnInput,
+  "publishedCards"
+>): string {
+  const cards = input.publishedCards.length
+    ? input.publishedCards.map((card) => `- id:${card.id}｜${card.name}｜目的:${card.currentPurpose}`).join("\n")
+    : "(无已发布策略卡)";
+  return `你是银行电话对练的裁判。理财经理刚说了一句话术,请结合对话上下文提取结构化元数据。
+
+已发布策略卡(usedCardId 只能取这里的 id;判断不出所用卡时省略该字段):
+${cards}
+
+只输出一个 JSON 对象,字段如下:
+- "signal":本轮客户话语中可观察到的信号(一句话;无则填"无")
+- "goal":经理这句话术正在执行的沟通目的(动宾结构,一句话)
+- "usedCardId":这句话术在执行的策略卡 id;没有对应卡时省略
+- "shouldEnd":布尔;客户明确要求结束、或已达成合理下一步(报名/加微信)时为 true
+- "endReason":shouldEnd 为 true 时给出结束原因
+- "outcomeSummary":shouldEnd 为 true 时给出沟通结果摘要(不评价客户表现)
+
+只输出 JSON,不要输出其他内容。`;
 }
 
 function formatCard(card: {
