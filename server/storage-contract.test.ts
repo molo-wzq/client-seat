@@ -94,6 +94,20 @@ for (const [name, create] of factories) {
       await storage.saveMaterial(material("m1", "新"));
       expect((await storage.getMaterial("m1"))?.title).toBe("新-m1");
     });
+
+    it("deleteConversations 批量删除;不存在的 id 与空列表不报错", async () => {
+      const storage = fresh();
+      await storage.saveConversation(conversation("c1"));
+      await storage.saveConversation(conversation("c2"));
+
+      await storage.deleteConversations(["c1", "none"]);
+
+      expect(await storage.getConversation("c1")).toBeNull();
+      expect((await storage.listConversations()).map((c) => c.id)).toEqual(["c2"]);
+      // 空列表为无操作,不影响其余数据。
+      await storage.deleteConversations([]);
+      expect((await storage.listConversations()).map((c) => c.id)).toEqual(["c2"]);
+    });
   });
 }
 
@@ -104,6 +118,17 @@ describe("FileStorage 磁盘行为", () => {
     await first.saveMaterial(material("m1"));
     const second = new FileStorage(file);
     expect((await second.getMaterial("m1"))?.title).toBe("素材-m1");
+  });
+
+  it("删除对话后重建实例仍是删除态(保留策略的清理持久生效)", async () => {
+    const file = tempDbFile();
+    const first = new FileStorage(file);
+    await first.saveConversation(conversation("c1"));
+    await first.saveConversation(conversation("c2"));
+    await first.deleteConversations(["c1"]);
+
+    const second = new FileStorage(file);
+    expect((await second.listConversations()).map((c) => c.id)).toEqual(["c2"]);
   });
 
   it("旧格式素材(缺 turns)加载时按转写补齐轮次", async () => {

@@ -28,6 +28,9 @@ export class InMemoryStorage implements ProductStorage {
   async listConversations(): Promise<Conversation[]> {
     return [...this.conversations.values()].map((c) => structuredClone(c));
   }
+  async deleteConversations(ids: string[]): Promise<void> {
+    for (const id of ids) this.conversations.delete(id);
+  }
   async savePersona(persona: Persona): Promise<void> {
     this.personas.set(persona.id, structuredClone(persona));
   }

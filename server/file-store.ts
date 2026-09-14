@@ -58,6 +58,12 @@ export class FileStorage implements ProductStorage {
   async listConversations(): Promise<Conversation[]> {
     return [...this.conversations.values()].map((c) => structuredClone(c));
   }
+  /** 批量删除(对话存储上限策略用):空列表不触发落盘。 */
+  async deleteConversations(ids: string[]): Promise<void> {
+    if (ids.length === 0) return;
+    for (const id of ids) this.conversations.delete(id);
+    await this.flush();
+  }
 
   async savePersona(persona: Persona): Promise<void> {
     this.personas.set(persona.id, structuredClone(persona));

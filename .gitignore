@@ -17,6 +17,12 @@ data/
 # ZCode 工作区内部文件
 .zcode/
 
+# 海选提交压缩包（本地生成，不入库）
+submission/
+
+# 本地导出物(项目概览 PDF 等,生成品不入库)
+output/
+
 # L1 素材:真实录音与转写/案例/复核(派生自真实客户来电,绝不入库,比赛合规)
 .scratch/phone-coaching-agent/l1/audio/
 .scratch/phone-coaching-agent/l1/transcripts/
