@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import type { ConversationResult } from "../domain/types";
 
 export function ResultStep({
@@ -7,8 +8,19 @@ export function ResultStep({
   result: ConversationResult;
   onRestart: () => void;
 }) {
+  // 回放原文时在完整对话里闪烁定位目标轮次;同轮连续点击也要能重触发,
+  // 所以先清空再在下一帧置回,动画由 CSS 的 li.flash 承担。
+  const [flashTurn, setFlashTurn] = useState<number | null>(null);
+  const flashTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+
   function scrollToTurn(turnNumber: number) {
     document.getElementById(`result-turn-${turnNumber}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    window.clearTimeout(flashTimer.current);
+    setFlashTurn(null);
+    requestAnimationFrame(() => setFlashTurn(turnNumber));
+    flashTimer.current = window.setTimeout(() => setFlashTurn(null), 1800);
   }
 
   return (
@@ -86,7 +98,11 @@ export function ResultStep({
       <h3>完整对话</h3>
       <ol className="result-log">
         {result.turns.map((turn) => (
-          <li key={turn.number} id={`result-turn-${turn.number}`}>
+          <li
+            key={turn.number}
+            id={`result-turn-${turn.number}`}
+            className={`${turn.speaker === "manager" ? "manager" : "customer"}${flashTurn === turn.number ? " flash" : ""}`}
+          >
             <span className="who">
               {turn.speaker === "customer" ? "你(生客)" : "理财经理(AI)"}:
             </span>

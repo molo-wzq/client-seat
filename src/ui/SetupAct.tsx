@@ -2,6 +2,7 @@ import { useState } from "react";
 import { SEED_PRODUCT_CARD } from "../domain/seed";
 import type { Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
+import { PersonaAvatar } from "./PersonaAvatar";
 import { PersonaStep } from "./PersonaStep";
 import { UiIcon } from "./UiIcon";
 
@@ -22,6 +23,9 @@ export function SetupAct({
 }) {
   const [seated, setSeated] = useState<Persona | null>(null);
   const [dragged, setDragged] = useState<string | null>(null);
+  // 拖拽悬停在客户席上时高亮邀请;dragleave 在经过子元素时也会触发,
+  // 需确认 relatedTarget 真正离开了席位才熄灭,否则高亮会闪烁。
+  const [dragOver, setDragOver] = useState(false);
   const [customizing, setCustomizing] = useState(false);
 
   function seat(persona: Persona) {
@@ -38,20 +42,22 @@ export function SetupAct({
         <div>
           <h3>生客名册</h3>
           <ul className="roster">
-            {personas.map((persona) => (
+            {personas.map((persona, i) => (
               <li key={persona.id}>
                 <button
                   type="button"
-                  className={`roster-card${seated?.id === persona.id ? " seated" : ""}`}
+                  className={`roster-card${seated?.id === persona.id ? " seated" : ""}${dragged === persona.id ? " dragging" : ""}`}
                   draggable
                   onDragStart={() => setDragged(persona.id)}
+                  onDragEnd={() => setDragged(null)}
                   onClick={() => seat(persona)}
                 >
-                  <span className="roster-avatar" aria-hidden="true">{persona.name.slice(-1)}</span>
+                  <PersonaAvatar personaId={persona.id} name={persona.name} />
                   <span className="roster-copy">
                     <strong>{persona.name}</strong>
                     <small>{persona.visible[0] ?? "信息未知"}</small>
                   </span>
+                  <span className="roster-code" aria-hidden="true">C-{String(i + 1).padStart(2, "0")}</span>
                   {persona.hidden.length > 0 && <span className="badge"><UiIcon name="lock" />隐藏牌</span>}
                 </button>
               </li>
@@ -63,24 +69,54 @@ export function SetupAct({
         </div>
 
         <div>
+          {/* 票据编号沿用名册卡口径(C-0N):入座卡与名册卡可互相对上。 */}
           <div
-            className={`seat${seated ? " occupied" : ""}`}
-            onDragOver={(e) => e.preventDefault()}
+            className={`seat${seated ? " occupied" : ""}${dragOver ? " drag-over" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setDragOver(true);
+            }}
+            onDragLeave={(e) => {
+              if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragOver(false);
+            }}
             onDrop={() => {
+              setDragOver(false);
               const dropped = personas.find((p) => p.id === dragged);
               if (dropped) seat(dropped);
               setDragged(null);
             }}
           >
-            <span className="seat-label">{seated ? "客户已入座" : "等待客户入座"}</span>
-            <h3>客户席</h3>
             {seated ? (
-              <div className="seated-client">
-                <span className="seated-token" aria-hidden="true">{seated.name.slice(-1)}</span>
-                <p><strong>{seated.name}</strong><br /><span>可见信息朝上 · 隐藏牌扣着</span></p>
-              </div>
+              <>
+                <span className="seat-label">客户席 · 已入座</span>
+                <div className="seated-client">
+                  <PersonaAvatar personaId={seated.id} name={seated.name} />
+                  <div className="seated-copy">
+                    <h3>{seated.name}</h3>
+                    <span className="seated-legend">
+                      <i className="dot dot-vis" aria-hidden="true" />
+                      可见信息朝上 · AI 可见
+                    </span>
+                    <span className="seated-legend">
+                      <i className="dot dot-hid" aria-hidden="true" />
+                      隐藏牌扣着{seated.hidden.length > 0 ? ` · ${seated.hidden.length} 张` : " · 无"}
+                    </span>
+                  </div>
+                  <span className="seat-stamp" aria-hidden="true">已入座</span>
+                  <span className="roster-code seat-code" aria-hidden="true">
+                    {(() => {
+                      const index = personas.findIndex((p) => p.id === seated.id);
+                      return `SEAT · C-${String(index >= 0 ? index + 1 : 0).padStart(2, "0")}`;
+                    })()}
+                  </span>
+                </div>
+              </>
             ) : (
-              <p className="hint">把一位生客拖到这里,或从名册点击入座</p>
+              <>
+                <span className="seat-label">等待客户入座</span>
+                <h3>客户席</h3>
+                <p className="hint">把一位生客拖到这里,或从名册点击入座</p>
+              </>
             )}
           </div>
           <h3>桌上的策略卡(只读,全部已发布)</h3>
@@ -107,10 +143,25 @@ export function SetupAct({
           <h3>产品卡(固定)</h3>
           <article className="card product-card">
             <span className="card-ribbon" aria-hidden="true">★</span>
-            <span className="card-code">固定产品卡</span>
+            <span className="card-code">固定产品卡 · P-01</span>
             <strong>{SEED_PRODUCT_CARD.activity.name}</strong>
             <p className="hint">虚拟产品事实,AI 不得用卡外信息</p>
-            <p>
+            {/* 手绘图表 doodle:呼应概念图的产品卡插画。 */}
+            <svg className="product-doodle" viewBox="0 0 96 52" aria-hidden="true">
+              <path d="M6 44 C 20 40 26 36 34 30 S 50 26 58 20 74 12 88 8" />
+              <path d="M6 48 C 26 46 40 43 52 39 S 78 33 90 28" />
+              <path d="M78 6 L88 8 L86 17" />
+            </svg>
+            {/* 分档权益是产品卡事实,列出便于对局时核对经理话术。 */}
+            <ul className="product-tiers" aria-label="分档权益">
+              {SEED_PRODUCT_CARD.activity.tiers.map((tier) => (
+                <li key={tier.amount}>
+                  <span>{tier.amount}</span>
+                  <span>{tier.reward}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="product-foot">
               {SEED_PRODUCT_CARD.activity.deadline} · {SEED_PRODUCT_CARD.flexibleProduct.name}
             </p>
           </article>

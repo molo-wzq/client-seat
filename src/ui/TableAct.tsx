@@ -90,7 +90,8 @@ export function TableAct({
               </li>
             ))}
           </ul>
-          {currentGoal && <p className="current-goal"><span>当前目的</span>{currentGoal}</p>}
+          {/* key 绑定目的文本:经理更换目的时 remount,重播 goal-in 滑入动画。 */}
+          {currentGoal && <p className="current-goal" key={currentGoal}><span>当前目的</span>{currentGoal}</p>}
         </div>
       </div>
     </section>

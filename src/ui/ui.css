@@ -752,10 +752,11 @@ body {
   min-width: 320px;
   background-color: var(--page-paper);
   background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='p'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' seed='3'/><feColorMatrix type='matrix' values='0 0 0 0 0.45 0 0 0 0 0.38 0 0 0 0 0.28 0 0 0 0.05 0'/></filter><rect width='180' height='180' filter='url(%23p)'/></svg>"),
     linear-gradient(rgba(93, 71, 48, 0.035) 1px, transparent 1px),
     linear-gradient(90deg, rgba(93, 71, 48, 0.025) 1px, transparent 1px),
     radial-gradient(circle at 20% 10%, rgba(255, 255, 255, 0.48), transparent 28%);
-  background-size: 17px 17px, 19px 19px, auto;
+  background-size: 180px 180px, 17px 17px, 19px 19px, auto;
   font-family: "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
   overflow-x: hidden;
 }
@@ -780,7 +781,7 @@ button {
   border: 1px solid #092116;
   border-radius: 5px;
   background: linear-gradient(180deg, #194631, var(--felt-deep));
-  box-shadow: 0 2px 0 #08170f, 0 5px 12px rgba(31, 24, 17, 0.13);
+  box-shadow: 0 2px 0 #08170f, 0 5px 12px rgba(31, 24, 17, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.14);
   font-weight: 650;
   letter-spacing: 0.01em;
   transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
@@ -833,8 +834,27 @@ h3 svg,
   color: var(--paper-white);
   background-color: var(--wood);
   background-image:
+    /* 木板拼缝:每块板末端一条深缝 + 受光亮线 */
+    repeating-linear-gradient(
+      180deg,
+      transparent 0 148px,
+      rgba(10, 4, 1, 0.5) 148px 150px,
+      rgba(255, 246, 230, 0.06) 150px 151px,
+      transparent 151px 156px
+    ),
+    /* 节疤:三处椭圆暗芯 */
+    radial-gradient(ellipse 16px 12px at 22% 26%, rgba(0, 0, 0, 0.24) 0 28%, transparent 68%),
+    radial-gradient(ellipse 10px 8px at 80% 52%, rgba(0, 0, 0, 0.18) 0 30%, transparent 70%),
+    radial-gradient(ellipse 14px 10px at 28% 79%, rgba(0, 0, 0, 0.2) 0 28%, transparent 68%),
+    /* 细木纹:疏密交替的深浅条纹 */
+    repeating-linear-gradient(
+      93deg,
+      transparent 0 6px,
+      rgba(28, 14, 6, 0.15) 6px 7px,
+      transparent 7px 13px,
+      rgba(255, 246, 230, 0.04) 13px 14px
+    ),
     linear-gradient(90deg, rgba(255, 255, 255, 0.025), transparent 15%, rgba(0, 0, 0, 0.1) 72%, transparent),
-    repeating-linear-gradient(4deg, transparent 0 17px, rgba(22, 11, 5, 0.16) 18px, transparent 20px),
     linear-gradient(120deg, #3d281b, #563b27 48%, #382317);
   box-shadow: inset -1px 0 rgba(255, 255, 255, 0.08), 8px 0 24px rgba(45, 30, 17, 0.18);
   gap: 20px;
@@ -981,9 +1001,16 @@ h3 svg,
   background-color: var(--felt-deep);
   background-image:
     radial-gradient(circle at 15% 5%, rgba(255, 255, 255, 0.07), transparent 26%),
+    /* 呢绒织纹:横向暗线 × 纵向亮线交叉成布面 */
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.028) 0 1px, transparent 1px 3px),
     repeating-linear-gradient(35deg, rgba(255,255,255,.012) 0 1px, transparent 1px 4px),
     linear-gradient(135deg, #153929, #0d291c);
-  box-shadow: inset 0 0 0 4px rgba(88, 58, 35, 0.58), inset 0 0 0 6px rgba(229, 216, 198, 0.1), 0 12px 24px rgba(55, 39, 25, 0.16);
+  box-shadow:
+    inset 0 0 0 4px rgba(88, 58, 35, 0.58),
+    inset 0 0 0 6px rgba(229, 216, 198, 0.1),
+    inset 0 0 64px rgba(0, 0, 0, 0.38),
+    0 12px 24px rgba(55, 39, 25, 0.16);
   font-size: 14px;
 }
 
@@ -1109,8 +1136,10 @@ h3 svg,
 }
 
 .seat.occupied {
-  border-style: solid;
-  border-color: var(--warm-yellow);
+  position: relative;
+  border-style: double;
+  border-width: 3px;
+  border-color: #d6bd68;
   background:
     linear-gradient(112deg, rgba(255, 255, 255, 0.32), transparent 42%),
     var(--card-paper);
@@ -1118,6 +1147,7 @@ h3 svg,
   box-shadow:
     inset 0 0 0 3px var(--felt-deep),
     inset 0 0 0 5px rgba(244, 208, 111, 0.78),
+    inset 0 0 18px rgba(74, 53, 31, 0.07),
     0 8px 18px rgba(0, 0, 0, 0.24);
 }
 
@@ -1125,36 +1155,78 @@ h3 svg,
   color: var(--brick-muted);
 }
 
-.seat.occupied .seated-client span {
-  color: #675f55;
-}
-
-.seat.occupied .seated-token {
-  border-color: var(--brick-muted);
-  background: var(--felt-deep);
-  color: var(--paper-white);
+/* 入座卡(票 29 后的席位优化):真实头像 + 票据编号 + 已入座印章 + 可见/隐藏图例 */
+.seat .persona-avatar {
+  width: 64px;
+  height: 64px;
+  flex: 0 0 64px;
+  font-size: 20px;
 }
 
 .seated-client {
   display: flex;
   align-items: center;
   gap: 14px;
-  margin-top: 18px;
+  margin-top: 10px;
 }
 
-.seated-token {
-  width: 54px;
-  background: var(--paper-white);
+.seated-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
 }
 
-.seated-client p {
+.seated-copy h3 {
   margin: 0;
-  line-height: 1.6;
+  font-size: 17px;
+  line-height: 1.4;
 }
 
-.seated-client span {
-  color: #c8bbab;
+.seated-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: #675f55;
   font-size: 12px;
+  line-height: 1.5;
+}
+
+.seated-legend .dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.dot-vis {
+  background: #347b58;
+}
+
+.dot-hid {
+  border: 1px solid #45423e;
+  background: #1d201e;
+}
+
+.seat-stamp {
+  margin-left: auto;
+  align-self: center;
+  padding: 3px 8px;
+  border: 2px double var(--brick-red);
+  color: var(--brick-red);
+  font-family: "Songti SC", "STZhongsong", "SimSun", serif;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  white-space: nowrap;
+  transform: rotate(6deg);
+  opacity: 0.85;
+}
+
+.seat-code {
+  top: 7px;
+  right: 9px;
 }
 
 .setup-board .card-tiles {
@@ -1214,17 +1286,8 @@ h3 svg,
 }
 
 .product-card::after {
-  content: "↗";
-  display: grid;
-  place-items: center;
-  width: 68px;
-  height: 68px;
-  margin: 20px auto 6px;
-  border: 2px solid #bb7734;
-  border-radius: 50%;
-  color: #bb7734;
-  font-size: 36px;
-  font-weight: 800;
+  /* 手绘图表 doodle 已由 SetupAct 内联 SVG(.product-doodle)承担,此占位停用。 */
+  content: none;
 }
 
 .card-ribbon {
@@ -1268,8 +1331,11 @@ h3 svg,
   background-color: var(--felt-deep);
   background-image:
     radial-gradient(circle at 50% 18%, rgba(255,255,255,.055), transparent 32%),
+    /* 呢绒织纹:与布置幕同一套布面 */
+    repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.1) 0 1px, transparent 1px 3px),
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.028) 0 1px, transparent 1px 3px),
     repeating-linear-gradient(120deg, rgba(255,255,255,.012) 0 1px, transparent 1px 5px);
-  box-shadow: inset 0 0 0 1px #806346, 0 12px 24px rgba(55,39,25,.18);
+  box-shadow: inset 0 0 0 1px #806346, inset 0 0 64px rgba(0, 0, 0, 0.38), 0 12px 24px rgba(55,39,25,.18);
 }
 
 .player-board,
@@ -1517,11 +1583,12 @@ select {
   padding: clamp(24px, 4vw, 50px);
   border: 1px solid #aa9a84;
   background:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='p'><feTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' seed='3'/><feColorMatrix type='matrix' values='0 0 0 0 0.45 0 0 0 0 0.38 0 0 0 0 0.28 0 0 0 0.05 0'/></filter><rect width='180' height='180' filter='url(%23p)'/></svg>"),
     linear-gradient(90deg, rgba(124, 96, 59, .035) 1px, transparent 1px),
     linear-gradient(rgba(124, 96, 59, .035) 1px, transparent 1px),
     #eee3d3;
-  background-size: 24px 24px;
-  box-shadow: 0 16px 35px rgba(65, 48, 31, .2);
+  background-size: 180px 180px, 24px 24px, 24px 24px, auto;
+  box-shadow: inset 0 0 46px rgba(74, 53, 31, 0.14), 0 16px 35px rgba(65, 48, 31, .2);
 }
 
 .result-act::before {
@@ -1742,6 +1809,756 @@ select {
   .result-stamp { display: none; }
   .call-track { gap: 2px; padding: 5px; }
   .track-cell { font-size: 9px; }
+}
+
+/* --------------------------------------------------------------------------
+   美术打磨 · art polish
+   票据编号系统 / 印泥印章 / 策略卡深蓝横幅 / 纸卡做旧暗角。
+   基准: docs/design/ui-asset-library-v1.md §3(等宽编号、卡规格)与 §5(纹理)。
+   -------------------------------------------------------------------------- */
+
+:root {
+  --font-mono: "Roboto Mono", Consolas, monospace;
+}
+
+/* --- 名册卡:右上等宽编号(CLIENT #xx 语式) --- */
+.roster-code {
+  position: absolute;
+  top: 6px;
+  right: 9px;
+  color: #8a6d4e;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  letter-spacing: 0.1em;
+}
+
+/* 名册卡复用真实画像头像(与客户席/对局幕同一来源,自定义画像回退文字)。 */
+.roster-card .persona-avatar {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  border-width: 2px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.18);
+  font-size: 15px;
+}
+
+/* --- 产品卡手绘 doodle(替代字符占位) --- */
+.product-doodle {
+  display: block;
+  width: 96px;
+  height: 52px;
+  margin: 12px auto 4px;
+  fill: none;
+  stroke: #bb7734;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  opacity: 0.85;
+  transform: rotate(-1.5deg);
+}
+
+/* --- 策略卡砖:横幅编号 CASE / 0N(计数器生成,DOM 零侵入) --- */
+.card-tiles {
+  counter-reset: case-no;
+}
+
+.setup-board .card-tile::before,
+.strategy-board .card-tile::before {
+  content: "✦ CASE / " counter(case-no, decimal-leading-zero);
+  counter-increment: case-no;
+  font-family: var(--font-mono);
+  letter-spacing: 0.1em;
+}
+
+/* 大字水印编号:填充卡面中部的空档,卡牌式观感(active 徽章在右上,互不遮挡)。 */
+.setup-board .card-tile::after,
+.strategy-board .card-tile::after {
+  content: counter(case-no, decimal-leading-zero);
+  position: absolute;
+  right: 8px;
+  bottom: 2px;
+  color: rgba(165, 60, 43, 0.13);
+  font-family: "Songti SC", "STZhongsong", "SimSun", serif;
+  font-size: 46px;
+  font-weight: 800;
+  line-height: 1.1;
+  pointer-events: none;
+}
+
+/* --- 产品卡:分档权益票据行 + 页脚 --- */
+.product-tiers {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.product-tiers li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 2px;
+  border-top: 1px dashed #c9b795;
+  font-size: 11.5px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+
+.product-tiers li:first-child {
+  border-top: 0;
+}
+
+.product-tiers li span:first-child {
+  flex: 0 0 auto;
+  color: #8a5a18;
+}
+
+.product-foot {
+  margin: 10px 0 0;
+  padding-top: 7px;
+  border-top: 1px solid #c9b795;
+  color: #866d4e;
+  font-size: 11px;
+  text-align: center;
+  letter-spacing: 0.03em;
+}
+
+/* --- 策略卡列表:深蓝横幅承托卡名(基准 §5-7) + 等宽编号 --- */
+.cards .card {
+  overflow: hidden;
+}
+
+.cards .card header {
+  margin: 0 -16px 12px;
+  padding: 9px 13px;
+  background: linear-gradient(180deg, #31589e, #2c4f92);
+  box-shadow: 0 2px 5px rgba(31, 42, 74, 0.25);
+}
+
+.cards .card header strong {
+  color: #fff6e8;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.cards .card .card-code {
+  margin-bottom: 11px;
+}
+
+/* --- 通话气泡:等宽轮次号 T01(挂在 .who 前,思考气泡同样计数) --- */
+.call-log {
+  counter-reset: call-turn;
+}
+
+.turn {
+  counter-increment: call-turn;
+}
+
+.turn .who::before {
+  content: "T" counter(call-turn, decimal-leading-zero);
+  margin-right: 7px;
+  color: #a08a6d;
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+/* --- 复盘摘要:票据式 NO. 标签 --- */
+.result-summary {
+  counter-reset: sum-no;
+}
+
+.result-summary > div {
+  counter-increment: sum-no;
+}
+
+.result-summary > div::before {
+  content: "NO." counter(sum-no);
+  display: block;
+  margin-bottom: 7px;
+  color: #8a6d4e;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}
+
+/* --- 复盘对话:编号列 + 说话人着色(经理蓝 / 客户绿) --- */
+.result-log {
+  counter-reset: rturn;
+}
+
+.result-log li {
+  counter-increment: rturn;
+}
+
+.result-log li::before {
+  content: "T" counter(rturn, decimal-leading-zero);
+  margin-right: 9px;
+  color: #9b8b74;
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+.result-log li.manager .who {
+  color: #234c89;
+}
+
+.result-log li.customer .who {
+  color: var(--felt-deep);
+}
+
+/* --- 目录列表:票据存根编号(新增动作行不编号) --- */
+.catalog-list {
+  counter-reset: cat-no;
+}
+
+.catalog-list li:not(:last-child) .catalog-item {
+  position: relative;
+  padding-left: 58px;
+  counter-increment: cat-no;
+}
+
+.catalog-list li:not(:last-child) .catalog-item::before {
+  content: "N°" counter(cat-no, decimal-leading-zero);
+  position: absolute;
+  left: 15px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: #8a6d4e;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+}
+
+/* --- 印章:印泥红 + 油墨晕染(index.html 内 feTurbulence 滤镜) --- */
+.result-stamp {
+  border-color: var(--brick-red);
+  color: var(--brick-red);
+  text-shadow: 0 0 1.5px rgba(204, 9, 43, 0.45);
+  filter: url(#stamp-ink);
+}
+
+/* --- 纸卡做旧暗角:边缘微暗的档案纸感 --- */
+.roster-card {
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.18), inset 0 0 18px rgba(74, 53, 31, 0.08);
+}
+
+.strategy-path li {
+  box-shadow: 0 6px 14px rgba(74, 53, 31, 0.12), inset 0 0 16px rgba(74, 53, 31, 0.07);
+}
+
+.result-summary {
+  box-shadow: inset 0 0 22px rgba(74, 53, 31, 0.08);
+}
+
+.cards .card {
+  box-shadow: 0 7px 14px rgba(74, 53, 31, 0.13), inset 0 0 16px rgba(74, 53, 31, 0.07);
+}
+
+.setup-board .card-tile,
+.strategy-board .card-tile {
+  box-shadow:
+    inset 0 0 0 2px var(--card-paper),
+    inset 0 0 0 3px rgba(165, 60, 43, 0.44),
+    inset 0 0 14px rgba(74, 53, 31, 0.06),
+    0 3px 6px rgba(0, 0, 0, 0.18);
+}
+
+/* --------------------------------------------------------------------------
+   交互特效强化 · motion layer
+   所有动效集中在此;上方 prefers-reduced-motion 守卫统一降级。
+   -------------------------------------------------------------------------- */
+
+:root {
+  --motion-fast: 130ms;
+  --motion-mid: 240ms;
+  --motion-slow: 420ms;
+  --ease-out: cubic-bezier(0.16, 0.84, 0.44, 1);
+  --ease-pop: cubic-bezier(0.2, 0.9, 0.3, 1.25);
+}
+
+/* --- 幕间切换:新视图整体入场 --- */
+.app-main > .act,
+.app-main > .step,
+.app-main > .catalog-error,
+.act > .step {
+  animation: act-enter var(--motion-slow) var(--ease-out) both;
+}
+
+@keyframes act-enter {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+
+/* --- 发牌入场:名册 / 卡砖 / 策略卡墙 --- */
+.roster-card,
+.card-tile,
+.cards .card {
+  animation: deal-in 300ms var(--ease-out) backwards;
+}
+
+.roster li:nth-child(2) .roster-card,
+.card-tiles li:nth-child(2),
+.cards .card:nth-child(2) {
+  animation-delay: 50ms;
+}
+
+.roster li:nth-child(3) .roster-card,
+.card-tiles li:nth-child(3),
+.cards .card:nth-child(3) {
+  animation-delay: 100ms;
+}
+
+.roster li:nth-child(4) .roster-card,
+.card-tiles li:nth-child(4),
+.cards .card:nth-child(4) {
+  animation-delay: 150ms;
+}
+
+.roster li:nth-child(5) .roster-card,
+.card-tiles li:nth-child(5),
+.cards .card:nth-child(5) {
+  animation-delay: 200ms;
+}
+
+.roster li:nth-child(6) .roster-card,
+.card-tiles li:nth-child(6),
+.cards .card:nth-child(6) {
+  animation-delay: 250ms;
+}
+
+.roster li:nth-child(n + 7) .roster-card,
+.card-tiles li:nth-child(n + 7),
+.cards .card:nth-child(n + 7) {
+  animation-delay: 300ms;
+}
+
+@keyframes deal-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) rotate(-2deg) scale(0.96);
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.72);
+  }
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+
+/* --- 名册卡:悬浮拾起、拖拽离手 --- */
+.roster-card {
+  transition: transform var(--motion-fast) var(--ease-out), box-shadow var(--motion-fast) ease,
+    border-color var(--motion-fast) ease;
+}
+
+.roster-card:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.24);
+}
+
+.roster-card:active:not(:disabled) {
+  transform: translateY(0) scale(0.99);
+}
+
+.roster-card.dragging {
+  opacity: 0.55;
+  transform: rotate(-3deg) translateY(2px) scale(0.97);
+  box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+}
+
+/* --- 客户席:拖拽悬停邀请、入座弹出、头像翻面 --- */
+.seat {
+  transition: background 160ms ease, border-color 160ms ease, transform 160ms var(--ease-out),
+    box-shadow 160ms ease;
+}
+
+.seat.drag-over {
+  border-color: var(--warm-yellow);
+  background: rgba(244, 208, 111, 0.12);
+  transform: scale(1.02);
+  animation: seat-ready 1.1s ease-in-out infinite;
+}
+
+@keyframes seat-ready {
+  50% {
+    box-shadow: 0 0 0 4px rgba(244, 208, 111, 0.26), inset 0 0 24px rgba(244, 208, 111, 0.14);
+  }
+}
+
+.seated-client {
+  animation: pop-in 320ms var(--ease-pop) backwards;
+}
+
+.seat .persona-avatar {
+  animation: token-flip 420ms var(--ease-out) backwards;
+}
+
+@keyframes token-flip {
+  from {
+    opacity: 0;
+    transform: rotateY(90deg) scale(0.7);
+  }
+}
+
+/* --- 通话气泡:左右滑入 --- */
+.turn {
+  animation: turn-in var(--motion-mid) var(--ease-out) backwards;
+}
+
+.turn-customer {
+  --turn-from: 16px;
+}
+
+.turn-manager {
+  --turn-from: -16px;
+}
+
+@keyframes turn-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) translateX(var(--turn-from, 0));
+  }
+}
+
+/* --- AI 思考中的打字气泡 --- */
+.turn.typing {
+  padding-bottom: 13px;
+}
+
+/* 流式话术(票 29):话术逐字上屏,末尾跟一个电话拨号呼吸光标 */
+.stream-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  margin-left: 3px;
+  vertical-align: -0.15em;
+  background: #234c89;
+  animation: caret-blink 0.9s steps(1) infinite;
+}
+
+@keyframes caret-blink {
+  50% {
+    opacity: 0;
+  }
+}
+
+.typing-dots {
+  display: inline-flex;
+  gap: 5px;
+  margin: 4px 0 0;
+  padding: 2px 0;
+}
+
+.typing-dots span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #234c89;
+  opacity: 0.45;
+  animation: typing-bounce 1.05s ease-in-out infinite;
+}
+
+.typing-dots span:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.typing-dots span:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+@keyframes typing-bounce {
+  30% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+
+/* --- 通话轨道:走过一格按压点亮,当前格呼吸 --- */
+.track-cell {
+  transition: background 200ms ease, border-color 200ms ease, color 200ms ease;
+}
+
+.track-cell.passed {
+  animation: cell-press 320ms var(--ease-pop);
+}
+
+.track-cell.passed[aria-current="step"] {
+  animation: cell-press 320ms var(--ease-pop), cell-live 1.7s ease-in-out infinite;
+}
+
+@keyframes cell-press {
+  0% {
+    transform: scale(1.28);
+  }
+
+  55% {
+    transform: scale(0.94);
+  }
+}
+
+@keyframes cell-live {
+  50% {
+    box-shadow: inset 0 -3px rgba(164, 104, 38, 0.24), 0 0 10px rgba(244, 208, 111, 0.6);
+  }
+}
+
+/* --- 策略卡:在用发光呼吸,徽章弹出 --- */
+.card-tile {
+  transition: transform 200ms var(--ease-pop), box-shadow 200ms ease, background 200ms ease,
+    border-color 200ms ease;
+}
+
+.card-tile.active {
+  animation: deal-in 300ms var(--ease-out) backwards, card-glow 2.4s ease-in-out infinite;
+}
+
+@keyframes card-glow {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px var(--brick-muted), 0 0 0 5px var(--warm-yellow), 0 8px 18px rgba(0, 0, 0, 0.35);
+  }
+
+  50% {
+    box-shadow: 0 0 0 2px var(--brick-muted), 0 0 0 5px var(--warm-yellow), 0 8px 18px rgba(0, 0, 0, 0.35),
+      0 0 20px 3px rgba(244, 208, 111, 0.55);
+  }
+}
+
+.card-tile .badge {
+  animation: pop-in 240ms var(--ease-pop) backwards;
+}
+
+/* --- 当前目的:更新时重新滑入(TableAct 按 goal 文本 remount) --- */
+.current-goal {
+  animation: goal-in 360ms var(--ease-out);
+}
+
+@keyframes goal-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+/* --- 回合计数:推进时轻弹 --- */
+.turn-count {
+  display: inline-flex;
+  animation: pop-badge 260ms var(--ease-pop);
+}
+
+@keyframes pop-badge {
+  0% {
+    transform: scale(1.15);
+  }
+}
+
+/* --- 结束提示入场 --- */
+.ended-note {
+  animation: rise-in 300ms var(--ease-out);
+}
+
+/* --- 复盘页:印章砸落、摘要错落展开、策略路径滑入 --- */
+.result-stamp {
+  animation: stamp-slam 520ms cubic-bezier(0.2, 1.3, 0.4, 1) 220ms both;
+}
+
+@keyframes stamp-slam {
+  0% {
+    opacity: 0;
+    transform: rotate(5deg) scale(2.2);
+  }
+
+  55% {
+    opacity: 1;
+    transform: rotate(5deg) scale(0.9);
+  }
+
+  75% {
+    transform: rotate(5deg) scale(1.06);
+  }
+
+  100% {
+    transform: rotate(5deg) scale(1);
+  }
+}
+
+.result-summary > div {
+  animation: rise-in var(--motion-slow) var(--ease-out) backwards;
+}
+
+.result-summary > div:nth-child(2) {
+  animation-delay: 90ms;
+}
+
+.result-summary > div:nth-child(3) {
+  animation-delay: 180ms;
+}
+
+.strategy-path li {
+  animation: rise-in 340ms var(--ease-out) backwards;
+}
+
+.strategy-path li:nth-child(2) {
+  animation-delay: 80ms;
+}
+
+.strategy-path li:nth-child(3) {
+  animation-delay: 160ms;
+}
+
+.strategy-path li:nth-child(n + 4) {
+  animation-delay: 240ms;
+}
+
+/* --- 回放原文:目标轮次闪烁定位 --- */
+.result-log li {
+  border-radius: 3px;
+  transition: background 200ms ease;
+}
+
+.result-log li.flash {
+  animation: turn-flash 1.7s ease-out;
+}
+
+@keyframes turn-flash {
+  0% {
+    background: rgba(244, 208, 111, 0.65);
+  }
+
+  100% {
+    background: transparent;
+  }
+}
+
+/* --- 错误提示:抖动入场 --- */
+.error {
+  animation: error-in 340ms var(--ease-out);
+}
+
+@keyframes error-in {
+  0% {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+
+  35% {
+    transform: translateX(5px);
+  }
+
+  65% {
+    transform: translateX(-2px);
+  }
+}
+
+/* --- 加载提示:呼吸边框 --- */
+.busy-hint {
+  animation: rise-in 200ms var(--ease-out), busy-breathe 1.5s ease-in-out 200ms infinite;
+}
+
+@keyframes busy-breathe {
+  50% {
+    border-color: #d8b98a;
+  }
+}
+
+/* --- 左栏导航:悬浮轻推、当前项黄条长出 --- */
+.rail-item {
+  transition: background 150ms ease, color 150ms ease, transform 150ms var(--ease-out),
+    border-color 150ms ease;
+}
+
+.rail-item:hover:not(:disabled) {
+  background: rgba(15, 45, 31, 0.6);
+  color: #fff;
+  transform: translateX(2px);
+}
+
+.rail-item.current {
+  animation: rail-in 300ms var(--ease-out);
+}
+
+@keyframes rail-in {
+  from {
+    background: rgba(22, 13, 8, 0.2);
+    box-shadow: inset 0 0 var(--warm-yellow);
+  }
+}
+
+/* --- 快速开始:等待接通时听筒晃动(拨号感) --- */
+.quick-start:disabled svg {
+  transform-origin: 50% 20%;
+  animation: phone-ring 0.9s ease-in-out infinite;
+}
+
+@keyframes phone-ring {
+  15% {
+    transform: rotate(-13deg);
+  }
+
+  30% {
+    transform: rotate(11deg);
+  }
+
+  45% {
+    transform: rotate(-9deg);
+  }
+
+  60% {
+    transform: rotate(7deg);
+  }
+
+  75% {
+    transform: rotate(-4deg);
+  }
+}
+
+/* --- 目录/画像列表:悬浮轻抬 --- */
+.catalog-item {
+  transition: transform 140ms var(--ease-out), box-shadow 140ms ease, border-color 140ms ease,
+    background 140ms ease;
+}
+
+.catalog-item:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 5px 12px rgba(74, 53, 31, 0.16);
+}
+
+.persona-list .persona {
+  transition: border-color 140ms ease, transform 140ms var(--ease-out);
+}
+
+.persona-list .persona:hover {
+  transform: translateY(-1px);
+}
+
+/* --- 通话记录/素材轮次:主题化滚动条 --- */
+.call-log,
+.material-turns {
+  scrollbar-width: thin;
+  scrollbar-color: #b9ad9d transparent;
+}
+
+.call-log::-webkit-scrollbar,
+.material-turns::-webkit-scrollbar {
+  width: 8px;
+}
+
+.call-log::-webkit-scrollbar-thumb,
+.material-turns::-webkit-scrollbar-thumb {
+  border: 2px solid rgba(242, 233, 221, 0.9);
+  border-radius: 99px;
+  background: #b9ad9d;
 }
 
 @media (prefers-reduced-motion: reduce) {

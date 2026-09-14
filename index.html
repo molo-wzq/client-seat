@@ -7,6 +7,13 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- 印章油墨滤镜:feTurbulence 位移让印章边缘带手工盖印的晕染(被 .result-stamp 引用)。 -->
+    <svg width="0" height="0" style="position:absolute" aria-hidden="true" focusable="false">
+      <filter id="stamp-ink" x="-10%" y="-10%" width="120%" height="120%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.055" numOctaves="3" seed="7" result="noise" />
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.2" />
+      </filter>
+    </svg>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

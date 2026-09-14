@@ -71,8 +71,9 @@ export function CardsView({ cards }: { cards: StrategyCard[] }) {
         <p>还没有策略卡。</p>
       ) : (
         <div className="cards">
-          {cards.map((card) => (
+          {cards.map((card, i) => (
             <article key={card.id} className="card">
+              <span className="card-code" aria-hidden="true">CASE / {String(i + 1).padStart(2, "0")}</span>
               <header>
                 <strong>{card.name}</strong>
                 <span className={`badge badge-${card.status}`}>{card.status === "draft" ? "草稿" : "已发布"}</span>
