@@ -38,28 +38,6 @@ body {
   font-size: 14px;
 }
 
-.stepper {
-  display: flex;
-  gap: 8px;
-  margin: 16px 0 20px;
-}
-
-.step-chip {
-  padding: 4px 12px;
-  border: 1px solid var(--line);
-  border-radius: 999px;
-  font-size: 13px;
-  color: var(--muted);
-  background: #fff;
-}
-
-.step-chip.current {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: var(--accent-soft);
-  font-weight: 600;
-}
-
 .step h2 {
   margin: 0 0 4px;
   font-size: 20px;
@@ -1050,19 +1028,6 @@ h3 svg,
   border-color: var(--warm-yellow);
   background: #f4ead8;
   box-shadow: 0 0 0 2px var(--felt-deep), 0 0 0 4px var(--warm-yellow), 0 7px 14px rgba(0,0,0,.28);
-}
-
-.roster-avatar,
-.seated-token {
-  display: grid;
-  place-items: center;
-  aspect-ratio: 1;
-  border: 2px solid #26392f;
-  border-radius: 50%;
-  background: #c7bca8;
-  color: var(--felt-deep);
-  font-size: 16px;
-  font-weight: 800;
 }
 
 .roster-copy {
