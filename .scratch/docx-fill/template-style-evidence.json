@@ -1,0 +1,71 @@
+{
+  "input": "C:\\Users\\65198\\Downloads\\1.docx",
+  "fonts_by_char_count": {
+    "\u4eff\u5b8b_GB2312": 392,
+    "\u6977\u4f53_GB2312": 56,
+    "\u9ed1\u4f53": 6
+  },
+  "direct_run_formatting_runs": 42,
+  "direct_paragraph_formatting_paragraphs": 25,
+  "heading_like_paragraphs_not_heading_style": [],
+  "examples": {
+    "direct_paragraph_formatting": [
+      {
+        "para_index": 1,
+        "text": "\u4e8c\u3001\u4f5c\u54c1\u60c5\u51b5",
+        "style": "Heading 1"
+      },
+      {
+        "para_index": 2,
+        "text": "\uff08\u4e00\uff09\u5e94\u7528\u573a\u666f\u53ca\u95ee\u9898",
+        "style": "Heading 1"
+      },
+      {
+        "para_index": 3,
+        "text": "\u7b80\u8981\u8bf4\u660e\u4f5c\u54c1\u5e94\u7528\u4e8e\u4ec0\u4e48\u5de5\u4f5c\u573a\u666f\uff0c\u5f53\u524d\u4e3b\u8981\u5b58\u5728\u4ec0\u4e48\u75db\u70b9\u3001\u96be\u70b9\u6216\u5835\u70b9\u3002",
+        "style": "Body Text"
+      },
+      {
+        "para_index": 4,
+        "text": "\u5efa\u8bae\u4e0d\u8d85\u8fc7200\u5b57\u3002",
+        "style": "Body Text"
+      },
+      {
+        "para_index": 5,
+        "text": "\uff08\u4e8c\uff09AI\u667a\u80fd\u4f53\u89e3\u51b3\u65b9\u6848",
+        "style": "Heading 1"
+      }
+    ],
+    "direct_run_formatting": [
+      {
+        "para_index": 1,
+        "run_text": "\u4e8c\u3001\u4f5c\u54c1\u60c5\u51b5",
+        "style": "Heading 1"
+      },
+      {
+        "para_index": 2,
+        "run_text": "\uff08",
+        "style": "Heading 1"
+      },
+      {
+        "para_index": 2,
+        "run_text": "\u4e00",
+        "style": "Heading 1"
+      },
+      {
+        "para_index": 2,
+        "run_text": "\uff09",
+        "style": "Heading 1"
+      },
+      {
+        "para_index": 2,
+        "run_text": "\u5e94\u7528\u573a\u666f\u53ca\u95ee\u9898",
+        "style": "Heading 1"
+      }
+    ]
+  },
+  "notes": [
+    "Direct formatting is not always wrong, but it often causes inconsistent output when templates change.",
+    "Heading-like paragraphs not using Heading styles can break TOC and accessibility."
+  ]
+}
