@@ -103,3 +103,28 @@ describe("两段式输出契约(票 29)", () => {
     expect(prompt).toContain("无已发布策略卡");
   });
 });
+
+describe("KYC 探询质量(票 30)", () => {
+  it("规则 4 给出资金现状最小清单,行外资金优先", () => {
+    const prompt = promptFor(P03_VISIBLE);
+    expect(prompt).toContain("行外资金");
+    expect(prompt).toContain("他行存款/他行理财/证券/定期");
+    expect(prompt).toContain("闲置资金大概多少");
+    expect(prompt).toMatch(/优先摸清/);
+  });
+
+  it("规则 11 探询纪律:一次一问、线索后追问一层、空转即收手", () => {
+    const prompt = promptFor(P03_VISIBLE);
+    expect(prompt).toContain("一次只问一个问题");
+    expect(prompt).toContain("先接住确认,再顺着追问一层");
+    expect(prompt).toContain("不拿到一个线索就急着推产品");
+    expect(prompt).toContain("连续两轮没有新信息就停止追问");
+  });
+
+  it("分析提示词要求探询类动作链写明维度与追问", () => {
+    const prompt = assembleAnalystSystemPrompt();
+    expect(prompt).toContain("问的是哪个维度");
+    expect(prompt).toContain("客户给出线索后追问什么");
+    expect(prompt).toContain("这类空动作的卡不可复用");
+  });
+});
