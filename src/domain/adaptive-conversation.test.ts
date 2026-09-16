@@ -264,3 +264,34 @@ describe("策略驱动的自适应对话", () => {
     expect(p02Turns).not.toEqual(p03Turns);
   });
 });
+
+describe("重新生成经理回复(票 31)", () => {
+  it("重摇替换最后一轮经理话术,不追加客户轮、轮次号保持连续", async () => {
+    const { api } = await setup();
+    const { conversation, say } = await publishedConversation(api);
+    await say("喂");
+    const before = await api.getConversation(conversation.id);
+    const customerCount = before.turns.filter((t) => t.speaker === "customer").length;
+
+    const after = await api.regenerateManagerTurn(conversation.id);
+
+    expect(after.turns.length).toBe(before.turns.length);
+    expect(after.turns.filter((t) => t.speaker === "customer").length).toBe(customerCount);
+    expect(after.turns.at(-1)?.speaker).toBe("manager");
+    expect(after.turns.at(-1)?.number).toBe(before.turns.at(-1)?.number);
+    expect(after.turns.at(-2)?.speaker).toBe("customer");
+  });
+
+  it("最后一轮不是经理话术时报错,不动数据", async () => {
+    const { api } = await setup();
+    const { conversation } = await publishedConversation(api);
+    await expect(api.regenerateManagerTurn(conversation.id)).rejects.toThrow(/不是经理回复/);
+  });
+
+  it("通话已结束后不可重摇", async () => {
+    const { api } = await setup();
+    const { conversation, say } = await publishedConversation(api);
+    await say("不用了,谢谢");
+    await expect(api.regenerateManagerTurn(conversation.id)).rejects.toThrow(/已结束/);
+  });
+});

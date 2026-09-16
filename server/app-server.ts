@@ -184,6 +184,13 @@ export function createRequestListener(deps: {
       respondJson(res, 200, conversation);
       return;
     }
+    // 重新生成经理回复(票 31):丢弃最后一轮经理话术,以同一客户发言重摇。
+    const regenerateMatch = pathname.match(/^\/api\/conversations\/([^/]+)\/regenerate$/);
+    if (req.method === "POST" && regenerateMatch) {
+      const conversation = await core.regenerateManagerTurn(safeDecodeSegment(regenerateMatch[1]));
+      respondJson(res, 200, conversation);
+      return;
+    }
     const resultMatch = pathname.match(/^\/api\/conversations\/([^/]+)\/result$/);
     if (req.method === "GET" && resultMatch) {
       const result = await core.getResult(safeDecodeSegment(resultMatch[1]));

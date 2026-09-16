@@ -70,6 +70,7 @@ export function createHttpProductCore(baseUrl = ""): ProductCore {
     conversationId: string,
     text: string,
     onReplyDelta: (delta: string) => void,
+    signal?: AbortSignal,
   ): Promise<Conversation> {
     const response = await fetch(
       `${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/turns/stream`,
@@ -77,6 +78,7 @@ export function createHttpProductCore(baseUrl = ""): ProductCore {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text }),
+        signal,
       },
     );
     if (!response.ok) {
@@ -118,8 +120,12 @@ export function createHttpProductCore(baseUrl = ""): ProductCore {
         method: "POST",
         body: JSON.stringify({ text }),
       }),
-    sendCustomerTurnStream: (conversationId, text, onReplyDelta) =>
-      requestTurnStream(conversationId, text, onReplyDelta),
+    sendCustomerTurnStream: (conversationId, text, onReplyDelta, signal) =>
+      requestTurnStream(conversationId, text, onReplyDelta, signal),
+    regenerateManagerTurn: (conversationId) =>
+      request(`/conversations/${encodeURIComponent(conversationId)}/regenerate`, {
+        method: "POST",
+      }),
     finishConversation: (conversationId) =>
       request(`/conversations/${encodeURIComponent(conversationId)}/finish`, { method: "POST" }),
     getResult: (conversationId) =>

@@ -2029,6 +2029,90 @@ select {
     0 3px 6px rgba(0, 0, 0, 0.18);
 }
 
+/* --- 快捷回复 chips(票 31):客户典型信号一键发送 --- */
+.quick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.chip {
+  min-height: 0;
+  padding: 5px 12px;
+  border: 1px dashed #a79a87;
+  border-radius: 999px;
+  background: #fbf5ea;
+  color: #4c453b;
+  font-size: 12.5px;
+  font-weight: 500;
+  box-shadow: 0 2px 4px rgba(74, 53, 31, 0.08);
+  animation: rise-in 240ms var(--ease-out) backwards;
+  transition: transform 130ms var(--ease-out), border-color 130ms ease, background 130ms ease;
+}
+
+.chip:nth-child(2) { animation-delay: 40ms; }
+.chip:nth-child(3) { animation-delay: 80ms; }
+.chip:nth-child(4) { animation-delay: 120ms; }
+
+.chip:hover:not(:disabled) {
+  transform: translateY(-1px);
+  border-color: var(--brick-muted);
+  border-style: solid;
+  background: #fff8ea;
+}
+
+.chip:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.chip:disabled {
+  opacity: 0.55;
+}
+
+/* --- 经理话术悬浮复制(票 31) --- */
+.turn-copy {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 0;
+  padding: 3px 7px;
+  border: 1px solid #c3b7a4;
+  border-radius: 4px;
+  background: #f6efe3;
+  color: #6b6357;
+  font-size: 11px;
+  font-weight: 500;
+  box-shadow: 0 2px 5px rgba(74, 53, 31, 0.12);
+  opacity: 0;
+  transition: opacity 140ms ease;
+}
+
+.turn-copy svg {
+  width: 13px;
+  height: 13px;
+}
+
+.turn:hover .turn-copy,
+.turn-copy:focus-visible {
+  opacity: 1;
+}
+
+/* 触屏无 hover:复制键常显 */
+@media (hover: none) {
+  .turn-copy { opacity: 1; }
+}
+
+/* --- 停止生成(票 31):流式进行中,发送键切换为砖红停止键 --- */
+button.danger {
+  border-color: #7e101f;
+  background: linear-gradient(180deg, #d14242, var(--brick-muted));
+  box-shadow: 0 2px 0 #68111b, inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
 /* --------------------------------------------------------------------------
    交互特效强化 · motion layer
    所有动效集中在此;上方 prefers-reduced-motion 守卫统一降级。

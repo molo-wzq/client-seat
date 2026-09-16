@@ -3,6 +3,21 @@ import { MAX_MANAGER_TURNS } from "../domain/product-core";
 import type { Conversation, ConversationResult } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { BusyHint } from "./BusyHint";
+import { UiIcon } from "./UiIcon";
+
+/**
+ * 快捷回复(票 31):客户角色的典型信号一键发送。
+ * 按对话局势切三组——接通时 / 探询期 / 经理报出产品后,和策略卡的信号语义对齐。
+ */
+function quickReplies(conversation: Conversation | null): string[] {
+  const turns = conversation?.turns ?? [];
+  const lastManager = [...turns].reverse().find((t) => t.speaker === "manager");
+  if (!lastManager) return ["喂", "喂,你好,哪位?", "你谁啊?"];
+  if (/立减金|收益|报名|活动|万/.test(lastManager.text)) {
+    return ["怎么参加?", "再考虑一下吧", "帮我报上吧", "不用了,谢谢"];
+  }
+  return ["还行,你说", "我平时闲钱都在股市", "暂时不用,谢谢", "你们这个安全吗?"];
+}
 
 export function CallStep({
   api,
@@ -22,7 +37,12 @@ export function CallStep({
   const [error, setError] = useState<string | null>(null);
   // 流式话术(票 29):话术增量先拼在这里逐字上屏,done 事件落地后被权威会话替换。
   const [streamingReply, setStreamingReply] = useState<string | null>(null);
+  const [copiedTurn, setCopiedTurn] = useState<number | null>(null);
   const logRef = useRef<HTMLOListElement>(null);
+  const abortRef = useRef<AbortController | null>(null);
+  const copyTimer = useRef<number | undefined>(undefined);
+
+  useEffect(() => () => window.clearTimeout(copyTimer.current), []);
 
   function applyConversation(next: Conversation) {
     setConversation(next);
@@ -52,9 +72,12 @@ export function CallStep({
   const ended = conversation?.status === "ended";
   const managerTurnCount =
     conversation?.turns.filter((t) => t.speaker === "manager").length ?? 0;
+  // 重新生成只在"最后一轮是经理话术且通话进行中"可用。
+  const canRegenerate =
+    !ended && conversation?.turns.at(-1)?.speaker === "manager";
 
-  async function send() {
-    const customerText = text.trim();
+  async function send(override?: string) {
+    const customerText = (override ?? text).trim();
     // busy 守卫对 Enter 快捷键同样生效:发送按钮会 disable,但键盘路径必须显式拦,
     // 否则模型响应等待期内可并发触发 sendCustomerTurn,乐观更新互相覆盖。
     if (!customerText || !conversation || ended || busy) return;
@@ -76,12 +99,19 @@ export function CallStep({
     setBusyHint("理财经理正在思考…");
     setStreamingReply(null);
     setError(null);
+    const controller = new AbortController();
+    abortRef.current = controller;
     try {
       // 优先走流式接口:话术逐字上屏(票 29);旧桩 API 没有该方法时回退整体返回。
       if (typeof api.sendCustomerTurnStream === "function") {
-        const next = await api.sendCustomerTurnStream(conversationId, customerText, (delta) => {
-          setStreamingReply((current) => (current ?? "") + delta);
-        });
+        const next = await api.sendCustomerTurnStream(
+          conversationId,
+          customerText,
+          (delta) => {
+            setStreamingReply((current) => (current ?? "") + delta);
+          },
+          controller.signal,
+        );
         applyConversation(next);
       } else {
         applyConversation(await api.sendCustomerTurn(conversationId, customerText));
@@ -89,11 +119,48 @@ export function CallStep({
     } catch (e) {
       applyConversation(previous);
       setText(customerText);
-      setError((e as Error).message);
+      // 用户主动停止不算错误:不打扰,不提示。
+      if (!(controller.signal.aborted && (e as Error).name === "AbortError")) {
+        setError((e as Error).message);
+      }
     } finally {
+      abortRef.current = null;
       setBusy(false);
       setStreamingReply(null);
     }
+  }
+
+  /** 停止生成:断开流;服务端可能仍落库该轮,以下次刷新为准。 */
+  function stop() {
+    abortRef.current?.abort();
+  }
+
+  /** 重新生成经理回复(票 31):换掉最后一轮经理话术,不重复客户轮。 */
+  async function regenerate() {
+    if (!conversation || ended || busy) return;
+    const last = conversation.turns.at(-1);
+    if (!last || last.speaker !== "manager") return;
+    setBusy(true);
+    setBusyHint("正在重新生成经理回复…");
+    setError(null);
+    try {
+      applyConversation(await api.regenerateManagerTurn(conversationId));
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyTurn(turnNumber: number, turnText: string) {
+    try {
+      await navigator.clipboard.writeText(turnText);
+    } catch {
+      return; // 剪贴板被浏览器策略拦截时静默放弃,复制不是关键路径
+    }
+    setCopiedTurn(turnNumber);
+    window.clearTimeout(copyTimer.current);
+    copyTimer.current = window.setTimeout(() => setCopiedTurn(null), 1600);
   }
 
   async function finish() {
@@ -132,6 +199,18 @@ export function CallStep({
               {turn.speaker === "customer" ? "你(生客)" : "理财经理(AI)"}
             </span>
             <p>{turn.text}</p>
+            {turn.speaker === "manager" && (
+              <button
+                type="button"
+                className="turn-copy"
+                onClick={() => void copyTurn(turn.number, turn.text)}
+                aria-label={`复制第${turn.number}轮经理话术`}
+                title="复制话术"
+              >
+                <UiIcon name="copy" />
+                {copiedTurn === turn.number ? "已复制" : ""}
+              </button>
+            )}
           </li>
         ))}
         {streamingReply !== null ? (
@@ -154,6 +233,19 @@ export function CallStep({
       {busy && <BusyHint text={busyHint} />}
       {!ended && (
         <div className="reply-box">
+          <div className="quick-chips" role="group" aria-label="快捷回复">
+            {quickReplies(conversation).map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                className="chip"
+                disabled={busy}
+                onClick={() => void send(chip)}
+              >
+                {chip}
+              </button>
+            ))}
+          </div>
           <label htmlFor="customer-reply">客户回复</label>
           <textarea
             id="customer-reply"
@@ -169,11 +261,26 @@ export function CallStep({
             placeholder="作为客户回应……"
           />
           <div className="actions">
-            <span className="turn-count" key={managerTurnCount}>
+            <span className="turn-count">
               经理第 {managerTurnCount}/{MAX_MANAGER_TURNS} 轮
             </span>
-            <button onClick={send} disabled={busy || !text.trim()}>
-              发送
+            {canRegenerate && (
+              <button type="button" className="ghost" onClick={() => void regenerate()} disabled={busy}>
+                <UiIcon name="refresh" />重新生成
+              </button>
+            )}
+            <button
+              onClick={() => (busy ? stop() : void send())}
+              disabled={!busy && !text.trim()}
+              className={busy ? "danger" : undefined}
+            >
+              {busy ? (
+                <>
+                  <UiIcon name="stop" />停止
+                </>
+              ) : (
+                "发送"
+              )}
             </button>
           </div>
         </div>

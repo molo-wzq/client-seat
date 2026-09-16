@@ -178,3 +178,23 @@ describe("流式轮次端点(票 29)", () => {
     expect(raw).toMatch(/不存在/);
   });
 });
+
+describe("重新生成路由(票 31)", () => {
+  it("POST /regenerate 重摇最后一轮经理话术 → 200,轮次结构不变", async () => {
+    const start = await request("/api/quickstart", "POST", {});
+    const conversationId = String((start.json as { id?: string }).id ?? "");
+    const sent = await request(`/api/conversations/${conversationId}/turns`, "POST", { text: "喂" });
+    const before = (sent.json as { turns?: Array<{ speaker: string }> }).turns;
+
+    const { status, json } = await request(`/api/conversations/${conversationId}/regenerate`, "POST", {});
+    const turns = (json as { turns?: Array<{ speaker: string; number: number }> }).turns;
+    expect(status).toBe(200);
+    expect(turns?.length).toBe(before?.length);
+    expect(turns?.at(-1)?.speaker).toBe("manager");
+  });
+
+  it("不存在的通话 → 404", async () => {
+    const { status } = await request("/api/conversations/not-exists/regenerate", "POST", {});
+    expect(status).toBe(404);
+  });
+});

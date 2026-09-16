@@ -58,7 +58,14 @@ export interface ProductCore {
     conversationId: string,
     text: string,
     onReplyDelta: (delta: string) => void,
+    /** 中止信号(停止生成):客户端断流用;服务端生成是否随之取消由实现决定。 */
+    signal?: AbortSignal,
   ): Promise<Conversation>;
+  /**
+   * 重新生成经理回复(票 31):丢弃最后一轮经理话术,以同一客户发言重摇。
+   * 不追加新的客户轮;最后一轮不是经理话术或通话已结束时报错。
+   */
+  regenerateManagerTurn(conversationId: string): Promise<Conversation>;
   finishConversation(conversationId: string): Promise<Conversation>;
   getResult(conversationId: string): Promise<ConversationResult>;
 }
@@ -183,7 +190,10 @@ export function createProductCore(deps: {
     return conversation;
   }
 
-  /** 通话轮次生成(票 29 抽出):普通与流式两个接口共用同一读-改-写与落库路径。 */
+  /**
+   * 通话轮次生成(票 29 抽出、票 31 复用):普通/流式/重新生成共用同一落库路径。
+   * 前置条件:conversation.turns 以客户轮结尾,经理轮追加在其后。
+   */
   function sendCustomerTurnStreaming(
     conversationId: string,
     text: string,
@@ -197,54 +207,65 @@ export function createProductCore(deps: {
       const customerText = text.trim();
       if (!customerText) throw new Error("客户发言为空");
 
-      const persona = toVisiblePersona(await requirePersona(conversation.personaId));
-
-      const history = conversation.turns;
-      const publishedCards = await listPublishedCards();
-      const output = await dialogue.generateManagerTurn(
-        {
-          persona,
-          publishedCards,
-          product: SEED_PRODUCT_CARD,
-          history,
-          customerText,
-        },
-        onReplyDelta,
-      );
-
-      const nextNumber = conversation.turns.length + 1;
       const customerTurn: ConversationTurn = {
-        number: nextNumber,
+        number: conversation.turns.length + 1,
         speaker: "customer",
         text: customerText,
       };
-      // 模型声称使用的卡必须是本轮检索到的已发布卡:检索边界落到数据上。
-      const retrievable = output.usedCardId
-        ? publishedCards.some((c) => c.id === output.usedCardId)
-        : false;
-      const managerTurn: ConversationTurn = {
-        number: nextNumber + 1,
-        speaker: "manager",
-        text: output.reply,
-        usedCardId: retrievable ? output.usedCardId : undefined,
-        recognizedSignal: output.recognizedSignal,
-        currentGoal: output.currentGoal,
-      };
-      conversation.turns = [...conversation.turns, customerTurn, managerTurn];
-
-      const managerTurnCount = conversation.turns.filter((t) => t.speaker === "manager").length;
-      if (output.shouldEnd) {
-        conversation.status = "ended";
-        conversation.endReason = output.endReason || "通话结束";
-        conversation.outcomeSummary = output.outcomeSummary || "未知";
-      } else if (managerTurnCount >= MAX_MANAGER_TURNS) {
-        conversation.status = "ended";
-        conversation.endReason = "达到轮数上限,理财经理体面收口";
-        conversation.outcomeSummary = "未知";
-      }
-      await storage.saveConversation(conversation);
-      return conversation;
+      conversation.turns = [...conversation.turns, customerTurn];
+      return appendManagerTurn(conversation, onReplyDelta);
     });
+  }
+
+  /** 以最后一轮客户发言为输入生成经理轮,追加、判收口、落库。 */
+  async function appendManagerTurn(
+    conversation: Conversation,
+    onReplyDelta?: (delta: string) => void,
+  ): Promise<Conversation> {
+    const customerTurn = conversation.turns.at(-1);
+    if (!customerTurn || customerTurn.speaker !== "customer") {
+      throw new Error("最后一轮不是客户发言,无法生成经理回复");
+    }
+
+    const persona = toVisiblePersona(await requirePersona(conversation.personaId));
+    const publishedCards = await listPublishedCards();
+    const output = await dialogue.generateManagerTurn(
+      {
+        persona,
+        publishedCards,
+        product: SEED_PRODUCT_CARD,
+        history: conversation.turns.slice(0, -1),
+        customerText: customerTurn.text,
+      },
+      onReplyDelta,
+    );
+
+    // 模型声称使用的卡必须是本轮检索到的已发布卡:检索边界落到数据上。
+    const retrievable = output.usedCardId
+      ? publishedCards.some((c) => c.id === output.usedCardId)
+      : false;
+    const managerTurn: ConversationTurn = {
+      number: customerTurn.number + 1,
+      speaker: "manager",
+      text: output.reply,
+      usedCardId: retrievable ? output.usedCardId : undefined,
+      recognizedSignal: output.recognizedSignal,
+      currentGoal: output.currentGoal,
+    };
+    conversation.turns = [...conversation.turns, managerTurn];
+
+    const managerTurnCount = conversation.turns.filter((t) => t.speaker === "manager").length;
+    if (output.shouldEnd) {
+      conversation.status = "ended";
+      conversation.endReason = output.endReason || "通话结束";
+      conversation.outcomeSummary = output.outcomeSummary || "未知";
+    } else if (managerTurnCount >= MAX_MANAGER_TURNS) {
+      conversation.status = "ended";
+      conversation.endReason = "达到轮数上限,理财经理体面收口";
+      conversation.outcomeSummary = "未知";
+    }
+    await storage.saveConversation(conversation);
+    return conversation;
   }
 
   return {
@@ -451,7 +472,22 @@ export function createProductCore(deps: {
     },
 
     async sendCustomerTurnStream(conversationId, text, onReplyDelta) {
+      // signal 仅浏览器端断流用;进程内路径无传输可断,忽略。
       return sendCustomerTurnStreaming(conversationId, text, onReplyDelta);
+    },
+
+    async regenerateManagerTurn(conversationId) {
+      return serialize(`conversation:${conversationId}`, async () => {
+        const conversation = await requireConversation(conversationId);
+        if (conversation.status === "ended") throw new Error("通话已结束,无法重新生成");
+        const last = conversation.turns.at(-1);
+        if (!last || last.speaker !== "manager") {
+          throw new Error("最后一轮不是经理回复,无法重新生成");
+        }
+        // 丢弃旧经理轮,回到"以客户发言结尾"的状态,复用同一生成路径。
+        conversation.turns = conversation.turns.slice(0, -1);
+        return appendManagerTurn(conversation);
+      });
     },
 
     async finishConversation(conversationId) {

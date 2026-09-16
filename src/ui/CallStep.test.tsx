@@ -50,8 +50,8 @@ describe("对话步骤的反馈", () => {
     const pending = deferred<Conversation>();
     await renderAndType(() => pending.promise);
 
-    // 请求未返回,客户话已出现在通话记录,且显示加载提示
-    expect(screen.getByText("喂")).toBeInTheDocument();
+    // 请求未返回,客户话已出现在通话记录(chips 里也有「喂」,按列表范围断言),且显示加载提示
+    expect(within(screen.getByRole("list")).getByText("喂")).toBeInTheDocument();
     expect(screen.getByRole("status")).toHaveTextContent("理财经理正在思考…");
     expect((screen.getByLabelText("客户回复") as HTMLTextAreaElement).value).toBe("");
   });
@@ -152,5 +152,40 @@ describe("流式话术上屏(票 29)", () => {
       expect(within(log).getAllByText(/咱们银行的客户经理/)).toHaveLength(1);
     });
     await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
+  });
+});
+
+describe("快捷回复与消息操作(票 31)", () => {
+  it("点击快捷回复 chip 直接发送该句,经理回复上屏", async () => {
+    const sendImpl = async () => ({
+      ...ongoingConversation(),
+      turns: [
+        { number: 1, speaker: "customer" as const, text: "喂" },
+        { number: 2, speaker: "manager" as const, text: "您好,我是咱们银行的客户经理。" },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<CallStep api={stubApi(sendImpl)} conversationId="conv-1" onFinished={() => {}} />);
+    // 空会话 → 开场 chips
+    const chip = await screen.findByRole("button", { name: "喂" });
+    await user.click(chip);
+    expect(await screen.findByText(/我是咱们银行的客户经理/)).toBeInTheDocument();
+  });
+
+  it("经理话术带复制按钮,点击后短暂显示已复制", async () => {
+    const sendImpl = async () => ({
+      ...ongoingConversation(),
+      turns: [
+        { number: 1, speaker: "customer" as const, text: "喂" },
+        { number: 2, speaker: "manager" as const, text: "您好,方便聊两句吗?" },
+      ],
+    });
+    const user = userEvent.setup();
+    render(<CallStep api={stubApi(sendImpl)} conversationId="conv-1" onFinished={() => {}} />);
+    const chip = await screen.findByRole("button", { name: "喂" });
+    await user.click(chip);
+    const copyBtn = await screen.findByRole("button", { name: /复制第2轮/ });
+    await user.click(copyBtn);
+    expect(copyBtn).toHaveTextContent("已复制");
   });
 });
