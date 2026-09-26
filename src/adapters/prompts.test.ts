@@ -128,3 +128,26 @@ describe("KYC 探询质量(票 30)", () => {
     expect(prompt).toContain("这类空动作的卡不可复用");
   });
 });
+
+describe("拒绝计数与挂断门槛(客户拒绝三次再挂电话)", () => {
+  it("规则5:软拒绝与明确拒绝累计计数,前两次接住继续、不收口", () => {
+    const prompt = promptFor(P03_VISIBLE);
+    expect(prompt).toContain("软拒绝(再考虑/暂时不用/到时候看)与明确拒绝(不用了/别打了/要挂了)都算");
+    expect(prompt).toContain("累计第一次、第二次拒绝");
+    expect(prompt).toContain("不得收口挂断");
+    // 策略卡停止条件与三次门槛冲突时,以硬性规则为准。
+    expect(prompt).toContain("以本条为准");
+  });
+
+  it("规则6:累计第三次拒绝才礼貌收口挂断", () => {
+    const prompt = promptFor(P03_VISIBLE);
+    expect(prompt).toContain("客户累计第三次拒绝");
+    expect(prompt).toContain("礼貌收口挂断");
+  });
+
+  it("裁判提示词:shouldEnd 以累计三次拒绝或达成下一步为准", () => {
+    const prompt = assembleManagerMetaPrompt({ publishedCards: SEED_CARDS });
+    expect(prompt).toContain("客户累计拒绝达到三次");
+    expect(prompt).toContain("不足三次一律为 false");
+  });
+});

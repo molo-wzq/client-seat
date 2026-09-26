@@ -80,7 +80,7 @@ suite("真实模型冒烟", () => {
     expectNoPlaceholderTokens(output.reply);
   });
 
-  it("规则6回归:明确拒绝收口含一句渠道表达,无后续钩子(票13,demo-05 同场景)", { timeout: 300_000 }, async () => {
+  it("规则5/6回归:客户累计第三次拒绝才收口挂断,收口含一句渠道表达,无后续钩子", { timeout: 300_000 }, async () => {
     const adapter = createAdapter();
     const refusal = await adapter.generateManagerTurn({
       ...openingManagerTurnInput(SEED_PERSONA_P03.visible),
@@ -91,10 +91,22 @@ suite("真实模型冒烟", () => {
           speaker: "manager",
           text: "您好,我是咱们银行的客户经理。您现在方便简单聊两句吗?",
         },
+        { number: 3, speaker: "customer", text: "暂时不考虑,你说的这个我不需要。" },
+        {
+          number: 4,
+          speaker: "manager",
+          text: "理解理解,那不着急。我就想着跟您说一声这个活动,您有需要随时找我。",
+        },
+        { number: 5, speaker: "customer", text: "不用了,别再介绍了。" },
+        {
+          number: 6,
+          speaker: "manager",
+          text: "好的,理解您。那我就顺口问一句,您平时闲置资金一般都放哪儿?就当了解,不说产品。",
+        },
       ],
       customerText: "不需要,你不用再打过来了。",
     });
-    // 明确拒绝:接住收口,且按补充规则留一句渠道/身份表达。
+    // 累计第三次拒绝:接住收口,且按补充规则留一句渠道/身份表达。
     expect(refusal.shouldEnd).toBe(true);
     expect(refusal.reply).toMatch(/随时找我|随时联系|联系我|加微信/);
     // 渠道句以一句话带过:整轮仍守规则 1 的三句上限。
@@ -103,5 +115,42 @@ suite("真实模型冒烟", () => {
     // 一句为限的约束反面:不得带「过阵子再联系」类后续钩子。
     expectNoFollowUpHook(refusal.reply);
     expectNoPlaceholderTokens(refusal.reply);
+  });
+
+  it("规则5回归:前两次拒绝不挂断,通话继续", { timeout: 300_000 }, async () => {
+    const adapter = createAdapter();
+    const first = await adapter.generateManagerTurn({
+      ...openingManagerTurnInput(SEED_PERSONA_P03.visible),
+      history: [
+        { number: 1, speaker: "customer", text: "喂,哪位?" },
+        {
+          number: 2,
+          speaker: "manager",
+          text: "您好,我是咱们银行的客户经理。您现在方便简单聊两句吗?",
+        },
+      ],
+      customerText: "不需要,你说的这个我不感兴趣。",
+    });
+    expect(first.shouldEnd).toBe(false);
+
+    const second = await adapter.generateManagerTurn({
+      ...openingManagerTurnInput(SEED_PERSONA_P03.visible),
+      history: [
+        { number: 1, speaker: "customer", text: "喂,哪位?" },
+        {
+          number: 2,
+          speaker: "manager",
+          text: "您好,我是咱们银行的客户经理。您现在方便简单聊两句吗?",
+        },
+        { number: 3, speaker: "customer", text: "不需要,你说的这个我不感兴趣。" },
+        {
+          number: 4,
+          speaker: "manager",
+          text: "理解理解,那不着急。我就想着跟您说一声这个活动,您有需要随时找我。",
+        },
+      ],
+      customerText: "说了不用了,别再介绍了。",
+    });
+    expect(second.shouldEnd).toBe(false);
   });
 });

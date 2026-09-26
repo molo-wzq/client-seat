@@ -11,19 +11,26 @@ import type {
 /** 客户信号关键词:按真实策略的决策顺序依次匹配。 */
 const EXPLICIT_END = /(拜拜|再见|挂了|不用了|别打了|以后再说|先这样)/;
 const SOFT_REFUSAL = /(再说吧|考虑一下|暂时不|先不用|到时候看|不怎么想|不想)/;
+/** 拒绝统一计数(软拒绝与明确拒绝都算):累计三次才挂断。 */
+const ANY_REFUSAL = new RegExp(`${SOFT_REFUSAL.source}|${EXPLICIT_END.source}`);
 const AGREE_ENROLL = /(报上|报吧|帮我报|预约吧|加微信)/;
 const AGREE_AFTER_ASK = /^(可以|行|好的|嗯|没问题)/;
 const FUND_HABIT = /(逆回购|闲置|放着|买理财|理财|配置|收益|证券|股市|炒股)/;
 /** 画像可见信息中的资金线索:SC2 适用条件之一。 */
 const FUND_CLUE = /(证券|股|资产|资金)/;
 
+/** 挂断门槛:客户累计拒绝达到此次数,通话才收口结束。 */
+export const REFUSAL_LIMIT = 3;
+
 /**
  * 伪实现(spec.md 测试决策):确定性脚本驱动端到端测试,
  * 也作为未配置真实模型密钥时的演示兜底。
  *
- * 对话脚本按真实策略的决策顺序组织:开场(SC1)→ 明确拒绝收口 → 软拒绝降压
- * (连续两次软拒绝停止策略并收口)→ 争取下一步(SC3)→ 需求已知进入产品介绍
- * (SC2 后半)→ 默认分支按画像是否有资金线索选择 SC2 现状了解或 SC3 直接给事由。
+ * 对话脚本按真实策略的决策顺序组织:开场(SC1)→ 拒绝累计计数
+ * (软拒绝与明确拒绝都算,累计三次才收口挂断;第一次拒绝降压,
+ * 第二次拒绝转为低压力了解需求,均不挂断)→ 争取下一步(SC3)
+ * → 需求已知进入产品介绍(SC2 后半)→ 默认分支按画像是否有资金线索
+ * 选择 SC2 现状了解或 SC3 直接给事由。
  * 产品事实只取自种子产品卡;声称使用的卡必须在本轮检索到的已发布卡内。
  */
 export class FakeModelAdapter implements CopywritingPort, DialoguePort {
@@ -57,16 +64,52 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
   private async scriptTurn(input: ManagerTurnInput): Promise<ManagerTurnOutput> {
     const { customerText, history, persona } = input;
 
-    // 客户明确要求结束(含第一句就拒绝):先接住,礼貌收口,不推销。
-    // 首句即拒绝时也必须走这里——SC1 停止条件明言反感即收口。
-    if (EXPLICIT_END.test(customerText)) {
+    // 拒绝累计计数(软拒绝与明确拒绝都算):累计三次才挂断,前两次先接住继续争取。
+    const priorRefusals = history.filter(
+      (turn) => turn.speaker === "customer" && ANY_REFUSAL.test(turn.text),
+    ).length;
+    if (ANY_REFUSAL.test(customerText)) {
+      const refusalCount = priorRefusals + 1;
+
+      // 累计第三次拒绝:礼貌收口挂断。
+      if (refusalCount >= REFUSAL_LIMIT) {
+        return {
+          reply: "好的,那我真的不再打扰您了。之后有适合您的活动,我微信上再跟您说,再见。",
+          recognizedSignal: "客户再次拒绝,累计已满三次",
+          currentGoal: "体面收口",
+          shouldEnd: true,
+          endReason: "客户累计三次拒绝,理财经理礼貌收口挂断",
+          outcomeSummary: "通话在客户三次拒绝后结束,未取得下一步承诺",
+        };
+      }
+
+      // 第一句就拒绝(含开口即挂):先自报身份、一句话说清来意并给退路,争取继续通话。
+      if (history.length === 0) {
+        return {
+          reply:
+            "好的,理解您。那我就用一句话说完:我是咱们银行的客户经理,行里有个客户的资金活动想跟您说一声,说完您再决定,好吗?",
+          recognizedSignal: "客户第一句即拒绝",
+          currentGoal: "争取继续通话的机会",
+          usedCardId: SEED_CARD_IDS.opening,
+        };
+      }
+
+      // 第一次拒绝:先接住并降低压力,不追加推销、不报产品数字。
+      if (refusalCount === 1) {
+        return {
+          reply:
+            "理解理解,那不着急,您先忙。就是这么个活动想着跟您说一声,您有需要随时找我。",
+          recognizedSignal: "客户表达拒绝(累计第1次)",
+          currentGoal: "先接住拒绝,降低压力,保留后续联系",
+        };
+      }
+
+      // 第二次拒绝:再接住,换低压力角度转为了解需求,仍不挂断。
       return {
-        reply: "好的,那先不打扰您了。之后有适合您的活动我随时联系您,再见。",
-        recognizedSignal: "客户明确要求结束",
-        currentGoal: "体面收口",
-        shouldEnd: true,
-        endReason: "客户明确要求结束,理财经理礼貌收口",
-        outcomeSummary: "通话在客户要求下结束,未取得下一步承诺",
+        reply:
+          "好的,理解您,那活动咱就先不提。我就顺口问一句,您平时闲置资金一般都放哪儿?就当了解一下,不说产品。",
+        recognizedSignal: "客户再次拒绝(累计第2次)",
+        currentGoal: "再次降低压力,转为低压力了解需求",
       };
     }
 
@@ -80,31 +123,6 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
         recognizedSignal: "电话刚接通,客户应答",
         currentGoal: "让客户确认这是本行客户经理的正常服务来电,愿意继续听下去",
         usedCardId: SEED_CARD_IDS.opening,
-      };
-    }
-
-    // 同一策略连续两次软拒绝:停止本卡,策略无法继续,体面收口。
-    const loweredPressureLastTurn = history
-      .at(-1)
-      ?.currentGoal?.includes("降低压力");
-    if (SOFT_REFUSAL.test(customerText) && loweredPressureLastTurn) {
-      return {
-        reply: "好的,那今天先不打扰您。之后有适合您的活动,我微信上再跟您说,再见。",
-        recognizedSignal: "客户再次软拒绝,当前策略无法继续",
-        currentGoal: "体面收口",
-        shouldEnd: true,
-        endReason: "策略无法继续:客户连续软拒绝,理财经理体面收口",
-        outcomeSummary: "通话因客户连续软拒绝而结束,未取得下一步承诺",
-      };
-    }
-
-    // 软拒绝:先接住并降低压力,不追加推销、不报产品数字。
-    if (SOFT_REFUSAL.test(customerText)) {
-      return {
-        reply:
-          "理解理解,那不着急,您先忙。就是这么个活动想着跟您说一声,您有需要随时找我。",
-        recognizedSignal: "客户犹豫,表达软拒绝",
-        currentGoal: "先接住拒绝,降低压力,保留后续联系",
       };
     }
 

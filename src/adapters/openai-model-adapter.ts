@@ -89,9 +89,10 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     input: ManagerTurnInput,
     reply: string,
   ): Promise<Omit<ManagerTurnOutput, "reply">> {
-    const recentHistory = input.history.slice(-8);
+    // 全量历史而非近几轮:拒绝累计计数要数清全部客户轮
+    // (通话有 12 经理轮上限,历史长度可控,不会撑爆裁判上下文)。
     const dialogue = [
-      ...recentHistory.map(
+      ...input.history.map(
         (turn) => `${turn.speaker === "customer" ? "客户" : "经理"}:${turn.text}`,
       ),
       `客户:${input.customerText}`,

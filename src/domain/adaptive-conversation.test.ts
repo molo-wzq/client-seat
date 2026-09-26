@@ -86,45 +86,55 @@ describe("策略驱动的自适应对话", () => {
     expect(fresh.status).toBe("ongoing");
   });
 
-  it("同一策略连续两次软拒绝后停止策略,体面收口结束通话", async () => {
+  it("客户拒绝累计三次才挂断:前两次先接住继续,第三次礼貌收口", async () => {
     const { api } = await setup();
     const { conversation, say } = await publishedConversation(api);
 
     await say("喂");
-    await say("再说吧,暂时不考虑这个");
-    const after = await say("再考虑一下吧");
+    const first = await say("再说吧,暂时不考虑这个");
+    expect(first.status).toBe("ongoing");
+    expect(first.turns.at(-1)!.text).toMatch(/理解|不着急|没关系|不打扰/);
+    expect(first.turns.at(-1)!.text).not.toMatch(PRODUCT_FACTS);
 
+    const second = await say("再考虑一下吧");
+    expect(second.status).toBe("ongoing");
+
+    const third = await say("不用了,别打了");
     const fresh = await api.getConversation(conversation.id);
     expect(fresh.status).toBe("ended");
-    expect(fresh.endReason).toContain("无法继续");
-    expect(after.turns.at(-1)!.text).toMatch(/不打扰|再见/);
+    expect(fresh.endReason).toContain("三次拒绝");
+    expect(third.turns.at(-1)!.text).toMatch(/不打扰|再见/);
   });
 
-  it("客户明确要求结束时礼貌收口并结束通话", async () => {
+  it("明确拒绝同样计入累计:未满三次不结束通话", async () => {
     const { api } = await setup();
-    const { conversation, say } = await publishedConversation(api);
+    const { say } = await publishedConversation(api);
 
     await say("喂");
-    const after = await say("好了好了,不用了,拜拜");
+    const first = await say("好了好了,不用了,拜拜");
+    expect(first.status).toBe("ongoing");
+    expect(first.turns.at(-1)!.text).not.toMatch(/立减金|报名/);
 
-    const fresh = await api.getConversation(conversation.id);
-    expect(fresh.status).toBe("ended");
-    expect(fresh.endReason).toContain("客户");
-    const reply = after.turns.at(-1)!.text;
-    expect(reply).toMatch(/不打扰|再见/);
-    expect(reply).not.toMatch(/立减金|报名/);
+    const second = await say("别打了");
+    expect(second.status).toBe("ongoing");
+
+    const third = await say("不用了,挂了");
+    expect(third.status).toBe("ended");
+    expect(third.endReason).toContain("三次拒绝");
+    expect(third.turns.at(-1)!.text).toMatch(/不打扰|再见/);
   });
 
-  it("客户第一句即明确拒绝时直接礼貌收口,不做开场推销", async () => {
+  it("客户第一句即拒绝时不立即挂断,先争取继续通话", async () => {
     const { api } = await setup();
     const { say } = await publishedConversation(api);
 
     const after = await say("不用了,别打了");
-    expect(after.status).toBe("ended");
-    expect(after.endReason).toContain("客户");
-    expect(after.turns.at(-1)!.text).toMatch(/不打扰|再见/);
-    // 不做开场推销:没有自报身份式的开场话术,也没有产品权益。
-    expect(after.turns.at(-1)!.text).not.toMatch(/代发客户|方便简单聊两句|立减金/);
+    expect(after.status).toBe("ongoing");
+    const reply = after.turns.at(-1)!.text;
+    // 争取继续:一句话说清来意并给退路,不做完整开场推销,不报产品权益。
+    expect(reply).toMatch(/一句话|半分钟/);
+    expect(reply).toMatch(/好吗|再说/);
+    expect(reply).not.toMatch(/立减金|报名|方便简单聊两句/);
   });
 
   it("同一通话并发发送两条客户发言,轮次不丢失、序号连续", async () => {
@@ -291,7 +301,10 @@ describe("重新生成经理回复(票 31)", () => {
   it("通话已结束后不可重摇", async () => {
     const { api } = await setup();
     const { conversation, say } = await publishedConversation(api);
+    // 累计三次拒绝才结束通话。
     await say("不用了,谢谢");
+    await say("别打了");
+    await say("不用了,挂了");
     await expect(api.regenerateManagerTurn(conversation.id)).rejects.toThrow(/已结束/);
   });
 });
