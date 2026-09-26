@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { UiIcon } from "./UiIcon";
+import { setSfxEnabled, sfxEnabled } from "./game-feel";
 
 export type AppView = "setup" | "table" | "postgame" | "materials" | "cards" | "history";
 
@@ -26,6 +28,9 @@ export function LeftRail({
   onQuickStart: () => void;
   quickBusy: boolean;
 }) {
+  // 音效开关:状态由 game-feel 持有(localStorage 记忆),这里只留一份渲染镜像。
+  const [sfxOn, setSfxOn] = useState(sfxEnabled());
+
   return (
     <aside className="left-rail" aria-label="对练导航">
       <div className="app-header">
@@ -84,6 +89,21 @@ export function LeftRail({
           <span>通话记录</span><span className="rail-count">{historyCount}</span>
         </button>
       </nav>
+      <button
+        type="button"
+        className="rail-item sfx-toggle"
+        aria-pressed={sfxOn}
+        aria-label="音效开关"
+        title={sfxOn ? "关闭音效" : "开启音效"}
+        onClick={() => {
+          const next = !sfxOn;
+          setSfxEnabled(next);
+          setSfxOn(next);
+        }}
+      >
+        <UiIcon name={sfxOn ? "volume" : "volumeOff"} />
+        <span>{sfxOn ? "音效 · 开" : "音效 · 关"}</span>
+      </button>
     </aside>
   );
 }

@@ -4,6 +4,7 @@ import type { Conversation, ConversationResult } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { BusyHint } from "./BusyHint";
 import { UiIcon } from "./UiIcon";
+import { playSfx } from "./game-feel";
 
 /**
  * 快捷回复(票 31):客户角色的典型信号一键发送。
@@ -81,6 +82,8 @@ export function CallStep({
     // busy 守卫对 Enter 快捷键同样生效:发送按钮会 disable,但键盘路径必须显式拦,
     // 否则模型响应等待期内可并发触发 sendCustomerTurn,乐观更新互相覆盖。
     if (!customerText || !conversation || ended || busy) return;
+    // 出手音效:客户话术离手的瞬间给一记 pop,Enter 键路径没有按压声,在这里补齐。
+    playSfx("send");
     // 乐观更新:客户话立即上屏,模型 5–15 秒的等待不显得卡死;失败回滚。
     const previous = conversation;
     applyConversation({
@@ -164,6 +167,7 @@ export function CallStep({
   }
 
   async function finish() {
+    playSfx("end");
     setBusy(true);
     setBusyHint("正在生成对练结果…");
     setError(null);

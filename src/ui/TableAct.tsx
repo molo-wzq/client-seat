@@ -1,9 +1,11 @@
+import { useEffect, useRef, useState } from "react";
 import { MAX_MANAGER_TURNS } from "../domain/product-core";
 import type { Conversation, ConversationResult, Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { CallStep } from "./CallStep";
 import { UiIcon } from "./UiIcon";
 import { PersonaAvatar } from "./PersonaAvatar";
+import { playSfx, thump } from "./game-feel";
 
 export function TableAct({
   api,
@@ -28,11 +30,26 @@ export function TableAct({
   const activeCardId = lastManager?.usedCardId;
   const currentGoal = lastManager?.currentGoal;
 
+  // 出牌演出(打击感核心):经理新亮出一张策略卡时,卡砖从空中砸落 +
+  // 桌面震颤 + 拍桌音效。挂载时的初始亮牌(找回进行中对局)不算"出牌",不触发。
+  const boardRef = useRef<HTMLDivElement>(null);
+  const prevCardRef = useRef<string | null>(activeCardId ?? null);
+  const [slam, setSlam] = useState<{ id: string; seq: number } | null>(null);
+
+  useEffect(() => {
+    if (activeCardId && activeCardId !== prevCardRef.current) {
+      setSlam((current) => ({ id: activeCardId, seq: (current?.seq ?? 0) + 1 }));
+      playSfx("card");
+      thump(boardRef.current);
+    }
+    prevCardRef.current = activeCardId ?? null;
+  }, [activeCardId]);
+
   return (
     <section className="act" aria-labelledby="table-title">
       <span className="act-kicker">第二幕 / 通话进行中</span>
       <h2 id="table-title">第2幕 · 对局</h2>
-      <div className="table-board">
+      <div className="table-board" ref={boardRef}>
         <div className="player-board">
           <span className="identity-badge customer-badge">● 客户</span>
           <div className="player-profile">
@@ -83,12 +100,20 @@ export function TableAct({
           <h3>桌面明牌</h3>
           <p className="hint">经理本轮亮出的策略卡(高亮 = 正在用)</p>
           <ul className="card-tiles">
-            {publishedCards.map((card) => (
-              <li key={card.id} className={`card-tile${card.id === activeCardId ? " active" : ""}`}>
-                {card.name}
-                {card.id === activeCardId && <span className="badge badge-published">本轮在用</span>}
-              </li>
-            ))}
+            {publishedCards.map((card) => {
+              const isActive = card.id === activeCardId;
+              // 出牌瞬间 remount 该卡砖,保证 slam 动画在"同一张卡连出两轮"时也能重放。
+              const isSlamming = isActive && slam?.id === card.id;
+              return (
+                <li
+                  key={isSlamming ? `${card.id}-slam-${slam?.seq}` : card.id}
+                  className={`card-tile${isActive ? " active" : ""}${isSlamming ? " slam" : ""}`}
+                >
+                  {card.name}
+                  {isActive && <span className="badge badge-published">本轮在用</span>}
+                </li>
+              );
+            })}
           </ul>
           {/* key 绑定目的文本:经理更换目的时 remount,重播 goal-in 滑入动画。 */}
           {currentGoal && <p className="current-goal" key={currentGoal}><span>当前目的</span>{currentGoal}</p>}

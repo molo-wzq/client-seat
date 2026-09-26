@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ConversationResult } from "../domain/types";
+import { playSfx } from "./game-feel";
 
 export function ResultStep({
   result,
@@ -14,6 +15,12 @@ export function ResultStep({
   const flashTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearTimeout(flashTimer.current), []);
+
+  // 盖章音效对齐 stamp-slam 的砸落帧(动画延迟 220ms、约 55% 处着桌)。
+  useEffect(() => {
+    const t = window.setTimeout(() => playSfx("stamp"), 450);
+    return () => window.clearTimeout(t);
+  }, []);
 
   function scrollToTurn(turnNumber: number) {
     document.getElementById(`result-turn-${turnNumber}`)?.scrollIntoView({ behavior: "smooth", block: "center" });

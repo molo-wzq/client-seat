@@ -10,7 +10,9 @@ export type UiIconName =
   | "lock"
   | "refresh"
   | "copy"
-  | "stop";
+  | "stop"
+  | "volume"
+  | "volumeOff";
 
 const paths: Record<UiIconName, ReactNode> = {
   phone: <path d="M6.6 10.8a15 15 0 0 0 6.6 6.6l2.2-2.2a1 1 0 0 1 1-.24c1.1.36 2.28.56 3.5.56a1 1 0 0 1 1 1V20a1 1 0 0 1-1 1C10.56 21 3 13.44 3 4a1 1 0 0 1 1-1h3.48a1 1 0 0 1 1 1c0 1.22.2 2.4.56 3.5a1 1 0 0 1-.24 1Z" />,
@@ -23,6 +25,8 @@ const paths: Record<UiIconName, ReactNode> = {
   refresh: <path d="M20 12a8 8 0 1 1-2.34-5.66M20 4v4.7h-4.7" />,
   copy: <path d="M9 9h11v11H9zM5 15H4V4h11v1" />,
   stop: <path d="M7 7h10v10H7z" />,
+  volume: <path d="M4 9v6h4l5 4V5L8 9H4Zm12.5-.5a5 5 0 0 1 0 7" />,
+  volumeOff: <path d="M4 9v6h4l5 4V5L8 9H4Zm12 0 5 6m0-6-5 6" />,
 };
 
 export function UiIcon({ name, ...props }: SVGProps<SVGSVGElement> & { name: UiIconName }) {

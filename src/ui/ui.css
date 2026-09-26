@@ -2276,7 +2276,7 @@ button.danger {
 @keyframes turn-in {
   from {
     opacity: 0;
-    transform: translateY(8px) translateX(var(--turn-from, 0));
+    transform: translateY(8px) translateX(var(--turn-from, 0)) scale(0.97);
   }
 }
 
@@ -2617,4 +2617,107 @@ button.danger {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* --------------------------------------------------------------------------
+   打击感强化 · juice layer 2
+   出牌拍桌 / 接通振铃 / 末格收口 / 按压回弹 / 音效开关。
+   桌面震颤由 game-feel.ts 的 WAAPI 承担;此处只管卡砖与轨道的演出。
+   prefers-reduced-motion 由文件末尾的统一守卫降级。
+   -------------------------------------------------------------------------- */
+
+/* --- 出牌瞬间:卡砖从空中砸落 + 冲击涟漪,随后接管发光呼吸 --- */
+.card-tile.active.slam {
+  animation:
+    card-slam 460ms var(--ease-pop) both,
+    tile-ripple 560ms var(--ease-out),
+    card-glow 2.4s ease-in-out 420ms infinite;
+  z-index: 2;
+}
+
+@keyframes card-slam {
+  0% {
+    opacity: 0;
+    transform: translateY(-30px) rotate(-5deg) scale(1.5);
+  }
+
+  42% {
+    opacity: 1;
+    transform: translateY(0) rotate(1.2deg) scale(1.05);
+  }
+
+  58% {
+    transform: rotate(-1deg) translateY(-2px) scale(0.97);
+  }
+
+  78% {
+    transform: rotate(-1deg) translateY(-2px) scale(1.015);
+  }
+
+  /* 定格与 .strategy-board .card-tile.active 的静态倾斜一致,收演不跳变。 */
+  100% {
+    transform: rotate(-1deg) translateY(-2px);
+  }
+}
+
+/* 涟漪用 outline 外扩:不占布局,也不与 ::before(横幅)/::after(水印编号)抢位。 */
+@keyframes tile-ripple {
+  0% {
+    outline: 2px solid rgba(244, 208, 111, 0.75);
+    outline-offset: 0;
+  }
+
+  100% {
+    outline: 2px solid rgba(244, 208, 111, 0);
+    outline-offset: 16px;
+  }
+}
+
+/* --- 接通过场:通话面板入场振铃两声,呼应拨号音 --- */
+.call-board .step {
+  animation: connect-ring 640ms var(--ease-out) 2;
+}
+
+@keyframes connect-ring {
+  0% {
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.23), 0 0 0 0 rgba(244, 208, 111, 0.55);
+  }
+
+  100% {
+    box-shadow: 0 10px 20px rgba(0, 0, 0, 0.23), 0 0 0 22px rgba(244, 208, 111, 0);
+  }
+}
+
+/* --- 通话轨道走满:第 12 格红闪,宣告强制收口 --- */
+.track-cell.passed:last-child {
+  animation: cell-press 320ms var(--ease-pop), cell-final 1s ease-out 120ms;
+}
+
+@keyframes cell-final {
+  0%,
+  45% {
+    border-color: var(--brick-red);
+    box-shadow: 0 0 12px 2px rgba(204, 9, 43, 0.45), inset 0 -3px rgba(164, 104, 38, 0.24);
+  }
+}
+
+/* --- 按压回弹:所有按钮按下时除了下沉还轻微收缩,一松手弹回 --- */
+button:active:not(:disabled) {
+  transform: translateY(1px) scale(0.99);
+}
+
+/* --- 明牌卡砖:非在用卡的悬浮微抬,桌面的"活物感" --- */
+.strategy-board .card-tile:not(.active):hover {
+  transform: translateY(-2px);
+  border-color: #bd8443;
+}
+
+/* --- 音效开关:沉到木栏底部,与导航区隔开 --- */
+.left-rail .sfx-toggle {
+  margin-top: auto;
+}
+
+/* --- 选中文字:暖黄荧光笔 --- */
+::selection {
+  background: rgba(244, 208, 111, 0.55);
 }

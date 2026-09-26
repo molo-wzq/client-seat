@@ -8,6 +8,7 @@ import { ResultStep } from "./ui/ResultStep";
 import { SetupAct } from "./ui/SetupAct";
 import { TableAct } from "./ui/TableAct";
 import { WireframePrototype } from "./ui/wireframe-prototype";
+import { playSfx } from "./ui/game-feel";
 
 export function App({ api }: { api: ProductCore }) {
   const [view, setView] = useState<AppView>("setup");
@@ -75,8 +76,10 @@ export function App({ api }: { api: ProductCore }) {
     try {
       setConversation(next);
       setResult(null);
-      await refreshCatalog().catch(() => undefined);
+      // 先切到对局幕:接通过场(振铃入场)立即上场,几百毫秒的目录刷新退到后台补。
+      // 交错点击仍被 enteringRef 互斥位挡住,目录在互斥窗口内完成刷新,不会互相覆盖。
       setView("table");
+      await refreshCatalog().catch(() => undefined);
     } finally {
       enteringRef.current = false;
     }
@@ -85,6 +88,7 @@ export function App({ api }: { api: ProductCore }) {
   async function quickStart() {
     setQuickBusy(true);
     setError(null);
+    playSfx("dial");
     try {
       await enterTable(await api.quickStart());
     } catch (e) {
@@ -97,6 +101,7 @@ export function App({ api }: { api: ProductCore }) {
   async function connect(personaId: string) {
     setConnectBusy(true);
     setError(null);
+    playSfx("dial");
     try {
       await enterTable(await api.startConversation(personaId));
     } catch (e) {
