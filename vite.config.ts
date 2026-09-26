@@ -7,6 +7,11 @@ export default defineConfig({
     proxy: {
       "/api": "http://127.0.0.1:5175",
     },
+    watch: {
+      // output/submission 是本地产物目录、data 是运行时 JSON 存储,应用源码不引用;
+      // 它们常被外部进程写入,watcher 撞上文件占用(EBUSY)会直接拖垮 dev 服务。
+      ignored: ["**/output/**", "**/submission/**", "**/data/**"],
+    },
   },
   test: {
     environment: "jsdom",
