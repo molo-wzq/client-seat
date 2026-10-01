@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { SEED_PRODUCT_CARD } from "../domain/seed";
+import { CALL_LOGIC_LAWS } from "../domain/call-logic";
 import type { Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { PersonaAvatar } from "./PersonaAvatar";
@@ -140,19 +141,27 @@ export function SetupAct({
         </div>
 
         <div>
-          <h3>产品卡(固定)</h3>
+          <h3>通话逻辑(固定)</h3>
           <article className="card product-card">
             <span className="card-ribbon" aria-hidden="true">★</span>
-            <span className="card-code">固定产品卡 · P-01</span>
-            <strong>{SEED_PRODUCT_CARD.activity.name}</strong>
-            <p className="hint">虚拟产品事实,AI 不得用卡外信息</p>
+            <span className="card-code">通话逻辑 · L-01</span>
+            <strong>这通电话的方向:{SEED_PRODUCT_CARD.activity.name}</strong>
+            <p className="hint">四条钱规律 + 本局参数;AI 不得用卡外信息</p>
+            <ul className="logic-laws" aria-label="通话逻辑四条规律">
+              {CALL_LOGIC_LAWS.map((law) => (
+                <li key={law.key}>
+                  <strong>{law.name}</strong>
+                  <span>{law.law}</span>
+                </li>
+              ))}
+            </ul>
             {/* 手绘图表 doodle:呼应概念图的产品卡插画。 */}
             <svg className="product-doodle" viewBox="0 0 96 52" aria-hidden="true">
               <path d="M6 44 C 20 40 26 36 34 30 S 50 26 58 20 74 12 88 8" />
               <path d="M6 48 C 26 46 40 43 52 39 S 78 33 90 28" />
               <path d="M78 6 L88 8 L86 17" />
             </svg>
-            {/* 分档权益是产品卡事实,列出便于对局时核对经理话术。 */}
+            {/* 分档权益是本局参数,列出便于对局时核对经理话术。 */}
             <ul className="product-tiers" aria-label="分档权益">
               {SEED_PRODUCT_CARD.activity.tiers.map((tier) => (
                 <li key={tier.amount}>

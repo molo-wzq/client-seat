@@ -46,7 +46,7 @@ describe("素材到模拟通话的核心闭环", () => {
     const reply = await screen.findByLabelText("客户回复");
     await user.type(reply, "喂");
     await user.click(screen.getByRole("button", { name: "发送" }));
-    expect(await screen.findByText(/我是咱们银行的客户经理/)).toBeInTheDocument();
+    expect(await screen.findByText(/我是咱们行的理财经理小李/)).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "结束并查看结果" }));
 
@@ -56,7 +56,7 @@ describe("素材到模拟通话的核心闭环", () => {
     expect(screen.getByText("本轮主要目标")).toBeInTheDocument();
     expect(screen.getByText("沟通结果")).toBeInTheDocument();
     expect(screen.getByText("结束原因")).toBeInTheDocument();
-    expect(screen.getAllByText(/我是咱们银行的客户经理/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/我是咱们行的理财经理小李/).length).toBeGreaterThan(0);
     expect(screen.getByText(/只解释 AI 的打法,不评价你的客户表现/)).toBeInTheDocument();
     expect(screen.queryByText(SCORING_PATTERN)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "再来一局" })).toBeInTheDocument();
@@ -75,7 +75,7 @@ describe("快速开始", () => {
     const reply = screen.getByLabelText("客户回复");
     await user.type(reply, "喂");
     await user.click(screen.getByRole("button", { name: "发送" }));
-    expect(await screen.findByText(/我是咱们银行的客户经理/)).toBeInTheDocument();
+    expect(await screen.findByText(/我是咱们行的理财经理小李/)).toBeInTheDocument();
   });
 });
 
@@ -86,7 +86,7 @@ describe("进行中对局可找回", () => {
     const reply = screen.getByLabelText("客户回复");
     await user.type(reply, "喂");
     await user.click(screen.getByRole("button", { name: "发送" }));
-    await screen.findByText(/我是咱们银行的客户经理/);
+    await screen.findByText(/我是咱们行的理财经理小李/);
   }
 
   it("另接新电话后,旧的进行中通话仍可从通话记录回到桌面继续", async () => {
@@ -106,7 +106,7 @@ describe("进行中对局可找回", () => {
     await user.click(screen.getByRole("button", { name: /代发·资金在证券/ }));
 
     expect(await screen.findByLabelText("客户回复")).toBeInTheDocument();
-    expect(screen.getByText(/我是咱们银行的客户经理/)).toBeInTheDocument();
+    expect(screen.getByText(/我是咱们行的理财经理小李/)).toBeInTheDocument();
   });
 
   it("离开并结束另一通电话后,左栏「进行中的通话」可从目录找回旧通话", async () => {
@@ -122,7 +122,7 @@ describe("进行中对局可找回", () => {
     const reply = await screen.findByLabelText("客户回复");
     await user.type(reply, "喂");
     await user.click(screen.getByRole("button", { name: "发送" }));
-    await screen.findByText(/我是咱们银行的客户经理/);
+    await screen.findByText(/我是咱们行的理财经理小李/);
     await user.click(screen.getByRole("button", { name: "结束并查看结果" }));
     expect(await screen.findByRole("heading", { name: "这通电话是怎样推进的" })).toBeInTheDocument();
 
@@ -133,7 +133,7 @@ describe("进行中对局可找回", () => {
     expect(resume).toBeEnabled();
     await user.click(resume);
     expect(await screen.findByLabelText("客户回复")).toBeInTheDocument();
-    expect(screen.getByText(/我是咱们银行的客户经理/)).toBeInTheDocument();
+    expect(screen.getByText(/我是咱们行的理财经理小李/)).toBeInTheDocument();
   });
 });
 
@@ -159,7 +159,7 @@ describe("左栏口径与标签", () => {
     const reply = await screen.findByLabelText("客户回复");
     await user.type(reply, "喂");
     await user.click(screen.getByRole("button", { name: "发送" }));
-    await screen.findByText(/我是咱们银行的客户经理/);
+    await screen.findByText(/我是咱们行的理财经理小李/);
     await user.click(screen.getByRole("button", { name: "结束并查看结果" }));
     expect(await screen.findByRole("heading", { name: "这通电话是怎样推进的" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看结算" })).toBeInTheDocument();

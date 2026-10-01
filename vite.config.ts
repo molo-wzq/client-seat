@@ -16,5 +16,7 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: "./src/test/setup.ts",
+    // .scratch 下的 cloudrun-deploy 是部署副本,里面的同名测试不参与本仓库断言。
+    exclude: ["**/node_modules/**", "**/dist/**", ".scratch/**"],
   },
 });

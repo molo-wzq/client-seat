@@ -1288,6 +1288,68 @@ h3 svg,
   font-size: 11px;
 }
 
+/* 通话逻辑四条规律:规律名与一句话规律上下排布,占卡面主位。 */
+.product-card .logic-laws {
+  display: grid;
+  gap: 6px;
+  margin: 8px 0;
+  padding: 0;
+  list-style: none;
+}
+
+.product-card .logic-laws li {
+  display: grid;
+  gap: 1px;
+}
+
+.product-card .logic-laws strong {
+  font-size: 12px;
+}
+
+.product-card .logic-laws span {
+  font-size: 11px;
+  line-height: 1.55;
+  color: #6b5137;
+}
+
+/* 复盘页的通话逻辑标尺:四条规律一行一条,弱化为背景标尺而非主角。 */
+.call-logic-panel {
+  margin: 10px 0 18px;
+  padding: 10px 14px;
+  border: 1px dashed var(--ink-soft, #8a7355);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.call-logic-panel strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+.call-logic-panel ul {
+  display: grid;
+  gap: 3px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.call-logic-panel li {
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.call-logic-panel li b {
+  margin-right: 6px;
+}
+
+/* 卡外数字:确定性守卫的标记,颜色警示但不喧哗。 */
+.replay-chain .out-of-card {
+  color: #a33c1e;
+  font-weight: 600;
+}
+
 .table-board {
   grid-template-columns: minmax(205px, 0.8fr) minmax(340px, 1.48fr) minmax(190px, 0.76fr);
   padding: clamp(14px, 1.8vw, 22px);
@@ -1621,6 +1683,23 @@ select {
 .strategy-path blockquote {
   border-color: #315d9b;
   background: var(--bubble-ai);
+}
+
+/* 复盘链:客户原话→识别信号→策略卡→经理回应 的四格证据条 */
+.replay-chain {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 18px;
+  margin: 8px 0 10px;
+}
+
+.replay-chain dt {
+  color: var(--brick-muted);
+  letter-spacing: .08em;
+}
+
+.replay-chain dd {
+  margin: 2px 0 0;
 }
 
 .result-log {

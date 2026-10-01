@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { MAX_MANAGER_TURNS } from "../domain/product-core";
-import type { Conversation, ConversationResult } from "../domain/types";
+import { cleanReplyText } from "../domain/reply-text";
+import type { Conversation, ConversationResult, Persona } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { BusyHint } from "./BusyHint";
 import { UiIcon } from "./UiIcon";
@@ -9,15 +10,25 @@ import { playSfx } from "./game-feel";
 /**
  * 快捷回复(票 31):客户角色的典型信号一键发送。
  * 按对话局势切三组——接通时 / 探询期 / 经理报出产品后,和策略卡的信号语义对齐。
+ * 台词跟画像走(p3 用词规则):年长客户说的是定期到期和养老金,不是股市;
+ * 画像取不到时(接口桩/未加载完)回落到通用组。
  */
-function quickReplies(conversation: Conversation | null): string[] {
+export function quickReplies(conversation: Conversation | null, personas: Persona[] = []): string[] {
   const turns = conversation?.turns ?? [];
+  const persona = personas.find((p) => p.id === conversation?.personaId);
+  const elderly = persona?.visible.some((line) => /年长|退休|阿姨|大爷/.test(line)) ?? false;
   const lastManager = [...turns].reverse().find((t) => t.speaker === "manager");
-  if (!lastManager) return ["喂", "喂,你好,哪位?", "你谁啊?"];
-  if (/立减金|收益|报名|活动|万/.test(lastManager.text)) {
-    return ["怎么参加?", "再考虑一下吧", "帮我报上吧", "不用了,谢谢"];
+  if (!lastManager) {
+    return elderly ? ["喂,是小李啊", "喂,哪位?", "你们谁啊?"] : ["喂", "喂,你好,哪位?", "你谁啊?"];
   }
-  return ["还行,你说", "我平时闲钱都在股市", "暂时不用,谢谢", "你们这个安全吗?"];
+  if (/立减金|收益|报名|活动|万/.test(lastManager.text)) {
+    return elderly
+      ? ["那个立减金咋领?", "能领多少啊?", "那你帮我报上吧", "那我再考虑一下"]
+      : ["怎么参加?", "再考虑一下吧", "帮我报上吧", "不用了,谢谢"];
+  }
+  return elderly
+    ? ["钱都存着定期呢", "有笔存款到期了还没动", "我不懂这些,你少说点", "暂时不用,谢谢"]
+    : ["还行,你说", "我平时闲钱都在股市", "暂时不用,谢谢", "你们这个安全吗?"];
 }
 
 export function CallStep({
@@ -32,6 +43,8 @@ export function CallStep({
   onConversationChange?: (conversation: Conversation) => void;
 }) {
   const [conversation, setConversation] = useState<Conversation | null>(null);
+  // 画像用于快捷回复的台词分流;接口桩可能没有该方法,取不到就回落通用组。
+  const [personas, setPersonas] = useState<Persona[]>([]);
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const [busyHint, setBusyHint] = useState("理财经理正在思考…");
@@ -44,6 +57,20 @@ export function CallStep({
   const copyTimer = useRef<number | undefined>(undefined);
 
   useEffect(() => () => window.clearTimeout(copyTimer.current), []);
+
+  useEffect(() => {
+    let alive = true;
+    if (typeof api.listPersonas !== "function") return;
+    api
+      .listPersonas()
+      .then((all) => {
+        if (alive) setPersonas(all);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [api]);
 
   function applyConversation(next: Conversation) {
     setConversation(next);
@@ -104,6 +131,12 @@ export function CallStep({
     setError(null);
     const controller = new AbortController();
     abortRef.current = controller;
+    // 试跑计时(spec C 验收):首字时间与可再次输入时间(含元数据等待),
+    // 仅开发环境(非测试)输出到控制台,作为本地诊断,不进对话记录。
+    const timingOn =
+      import.meta.env.DEV && import.meta.env.MODE !== "test" && typeof performance !== "undefined";
+    const startedAt = timingOn ? performance.now() : 0;
+    let firstDeltaAt: number | null = null;
     try {
       // 优先走流式接口:话术逐字上屏(票 29);旧桩 API 没有该方法时回退整体返回。
       if (typeof api.sendCustomerTurnStream === "function") {
@@ -111,6 +144,7 @@ export function CallStep({
           conversationId,
           customerText,
           (delta) => {
+            if (firstDeltaAt === null) firstDeltaAt = performance.now();
             setStreamingReply((current) => (current ?? "") + delta);
           },
           controller.signal,
@@ -118,6 +152,13 @@ export function CallStep({
         applyConversation(next);
       } else {
         applyConversation(await api.sendCustomerTurn(conversationId, customerText));
+      }
+      if (timingOn) {
+        const inputReadyAt = performance.now();
+        console.info(
+          `[turn-timing] 首字 ${firstDeltaAt !== null ? Math.round(firstDeltaAt - startedAt) : "未收到增量"}ms;` +
+            `可再次输入 ${Math.round(inputReadyAt - startedAt)}ms(含元数据等待)`,
+        );
       }
     } catch (e) {
       applyConversation(previous);
@@ -219,10 +260,12 @@ export function CallStep({
         ))}
         {streamingReply !== null ? (
           // 流式话术气泡:首字到达即替换思考气泡,done 后由权威轮次接管。
+          // 显示文本与落库共用同一清理:流式中途出现的前缀/引号即时剥掉,
+          // 不会先播原文、落库再变样。
           <li className="turn turn-manager typing" aria-hidden="true">
             <span className="who">理财经理(AI)</span>
             <p>
-              {streamingReply}
+              {cleanReplyText(streamingReply)}
               <span className="stream-caret" aria-hidden="true" />
             </p>
           </li>
@@ -234,11 +277,19 @@ export function CallStep({
           </li>
         ) : null}
       </ol>
-      {busy && <BusyHint text={busyHint} />}
+      {busy && (
+        <BusyHint
+          text={
+            streamingReply !== null
+              ? "话术已生成,正在核对本轮用卡与收口信号…"
+              : busyHint
+          }
+        />
+      )}
       {!ended && (
         <div className="reply-box">
           <div className="quick-chips" role="group" aria-label="快捷回复">
-            {quickReplies(conversation).map((chip) => (
+            {quickReplies(conversation, personas).map((chip) => (
               <button
                 key={chip}
                 type="button"

@@ -1,9 +1,9 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { Conversation, ConversationResult } from "../domain/types";
+import type { Conversation, ConversationResult, Persona } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
-import { CallStep } from "./CallStep";
+import { CallStep, quickReplies } from "./CallStep";
 
 function ongoingConversation(): Conversation {
   return {
@@ -153,6 +153,48 @@ describe("流式话术上屏(票 29)", () => {
     });
     await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
   });
+
+  it("流式上屏与落库共用同一清理:前缀与包裹引号即时剥掉,不会先播原文再变样", async () => {
+    const pending = deferred<Conversation>();
+    const api = {
+      getConversation: async () => ongoingConversation(),
+      sendCustomerTurnStream: async (
+        _id: string,
+        _text: string,
+        onDelta: (d: string) => void,
+      ) => {
+        onDelta("理财经理:“您好,");
+        onDelta("我是咱们银行的客户经理。”");
+        return pending.promise;
+      },
+      finishConversation: async () => ({ ...ongoingConversation(), status: "ended" as const }),
+      getResult: async () => ({}) as never,
+    } as unknown as ProductCore;
+
+    const user = userEvent.setup();
+    render(<CallStep api={api} conversationId="conv-1" onFinished={() => {}} />);
+    const reply = await screen.findByLabelText("客户回复");
+    await user.type(reply, "喂");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+
+    // 流式中间态即清理:称谓前缀与包裹引号不出现;提示切换为核对态。
+    expect(await screen.findByText("您好,我是咱们银行的客户经理。")).toBeInTheDocument();
+    const log = screen.getByRole("list");
+    expect(within(log).queryByText(/“/)).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("正在核对本轮");
+
+    pending.resolve({
+      ...ongoingConversation(),
+      turns: [
+        { number: 1, speaker: "customer" as const, text: "喂" },
+        { number: 2, speaker: "manager" as const, text: "您好,我是咱们银行的客户经理。" },
+      ],
+    });
+    // done 落地后与流式显示一致,无跳变重复。
+    await waitFor(() =>
+      expect(within(screen.getByRole("list")).getAllByText(/咱们银行的客户经理/)).toHaveLength(1),
+    );
+  });
 });
 
 describe("快捷回复与消息操作(票 31)", () => {
@@ -187,5 +229,45 @@ describe("快捷回复与消息操作(票 31)", () => {
     const copyBtn = await screen.findByRole("button", { name: /复制第2轮/ });
     await user.click(copyBtn);
     expect(copyBtn).toHaveTextContent("已复制");
+  });
+});
+
+describe("快捷回复台词跟画像走(p3 人生阶段用词)", () => {
+  const ELDERLY: Persona = {
+    id: "p-elder",
+    name: "年长客户",
+    visible: ["某银行存量客户,年长女性,与经理已相识"],
+    hidden: [],
+  };
+  const conversationWith = (managerText?: string, personaId = "p-elder"): Conversation =>
+    ({
+      ...ongoingConversation(),
+      personaId,
+      turns: managerText
+        ? [{ number: 2, speaker: "manager" as const, text: managerText }]
+        : [],
+    }) as Conversation;
+
+  it("年长画像的接通/探询台词不出现股市,说的是定期到期", () => {
+    expect(quickReplies(conversationWith(), [ELDERLY])).toEqual([
+      "喂,是小李啊",
+      "喂,哪位?",
+      "你们谁啊?",
+    ]);
+    expect(quickReplies(conversationWith("行,那我想先了解一下您平时钱怎么安排"), [ELDERLY])).toContain(
+      "钱都存着定期呢",
+    );
+  });
+
+  it("报产品后的年长台词:能触发软拒绝计数与报名承诺分支", () => {
+    const chips = quickReplies(conversationWith("像20万档就有150块微信立减金"), [ELDERLY]);
+    // 「再考虑一下」须命中软拒绝计数,「帮我报上」须命中报名承诺。
+    expect(chips).toContain("那我再考虑一下");
+    expect(chips).toContain("那你帮我报上吧");
+  });
+
+  it("画像取不到时回落通用组,行为不变", () => {
+    expect(quickReplies(conversationWith("像20万档就有150块微信立减金"))).toContain("怎么参加?");
+    expect(quickReplies(null)).toContain("喂");
   });
 });
