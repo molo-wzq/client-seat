@@ -48,6 +48,10 @@ export interface ManagerTurnOutput {
   currentGoal?: string;
   /** 本轮使用的策略卡 id(须为已发布卡;无对应卡时缺省)。 */
   usedCardId?: string;
+  /** 用卡匹配依据:话术对应卡中哪个动作;仅当 usedCardId 存在时有意义。 */
+  cardMatchBasis?: string;
+  /** 裁判按通话逻辑(四条钱规律)的一句归因候选;指不到具体规律时缺省。 */
+  logicHint?: string;
   /** 达成合理下一步或客户明确结束时由模型主动收口。 */
   shouldEnd?: boolean;
   endReason?: string;

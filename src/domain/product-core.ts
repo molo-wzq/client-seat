@@ -7,6 +7,9 @@ import {
   type ConversationRetentionPolicy,
 } from "./conversation-retention";
 import { numberTurns, parseTranscriptTurns, resolveTurnRange } from "./transcript";
+import { PROMPT_VERSION } from "./prompt-version";
+import { detectManagerFarewell } from "./reply-text";
+import { hasOutOfCardNumber } from "./product-facts";
 import type { CopywritingPort, DialoguePort, ProductStorage } from "./ports";
 import type {
   Conversation,
@@ -182,6 +185,8 @@ export function createProductCore(deps: {
       status: "ongoing",
       turns: [],
       createdAt: now().toISOString(),
+      // 复盘追溯:记录本局按哪版提示词打的;旧记录无此字段,如实视为未记录。
+      promptVersion: PROMPT_VERSION,
     };
     await storage.saveConversation(conversation);
     // 存储上限在开新通话的落库点执行:所有新对话入口都过这里,不依赖 UI/HTTP 层。
@@ -241,9 +246,17 @@ export function createProductCore(deps: {
     );
 
     // 模型声称使用的卡必须是本轮检索到的已发布卡:检索边界落到数据上。
+    // 匹配依据只在用卡可信时保留:无卡或卡不在候选集,依据一并丢弃,不伪造。
     const retrievable = output.usedCardId
       ? publishedCards.some((c) => c.id === output.usedCardId)
       : false;
+    // 卡外数字守卫(确定性):白名单=产品卡事实∪本局客户口述∪此前经理已报。
+    // 只标不拦,与策略卡「未确认」同一哲学——复盘如实呈现,不改话术。
+    const outOfCardFact = hasOutOfCardNumber(
+      output.reply,
+      SEED_PRODUCT_CARD,
+      conversation.turns,
+    );
     const managerTurn: ConversationTurn = {
       number: customerTurn.number + 1,
       speaker: "manager",
@@ -251,13 +264,21 @@ export function createProductCore(deps: {
       usedCardId: retrievable ? output.usedCardId : undefined,
       recognizedSignal: output.recognizedSignal,
       currentGoal: output.currentGoal,
+      ...(retrievable && output.cardMatchBasis ? { cardMatchBasis: output.cardMatchBasis } : {}),
+      ...(output.logicHint ? { logicHint: output.logicHint } : {}),
+      ...(outOfCardFact ? { outOfCardFact: true } : {}),
     };
     conversation.turns = [...conversation.turns, managerTurn];
 
     const managerTurnCount = conversation.turns.filter((t) => t.speaker === "manager").length;
-    if (output.shouldEnd) {
+    // 告别收口兜底(已知规则的确定性检查):元数据缺失或判 false,但话术
+    // 最后一句已是明确告别——电话里经理说了再见,通话就结束了,不能停在
+    // "进行中"等用户再发言。只结束通话状态,不伪造用卡或结果摘要。
+    const farewellOnly = output.shouldEnd !== true && detectManagerFarewell(output.reply);
+    if (output.shouldEnd || farewellOnly) {
       conversation.status = "ended";
-      conversation.endReason = output.endReason || "通话结束";
+      conversation.endReason =
+        output.endReason || (farewellOnly ? "理财经理已告别收口,通话结束" : "通话结束");
       conversation.outcomeSummary = output.outcomeSummary || "未知";
     } else if (managerTurnCount >= MAX_MANAGER_TURNS) {
       conversation.status = "ended";
@@ -520,6 +541,16 @@ export function createProductCore(deps: {
         .map((t) => t.currentGoal)
         .filter((g): g is string => Boolean(g && g !== "未知" && g !== "无"));
 
+      // 每个经理轮的上一条客户发言:复盘链"客户原话→经理回应"的左端。
+      function customerTextBefore(turnNumber: number): string {
+        const index = conversation.turns.findIndex((t) => t.number === turnNumber);
+        for (let i = index - 1; i >= 0; i -= 1) {
+          const turn = conversation.turns[i];
+          if (turn?.speaker === "customer") return turn.text;
+        }
+        return "(未记录)";
+      }
+
       // 来源片段落为原始轮次:优先按素材 id 定位(标题可重名),旧数据回退按标题。
       function resolveSourceTurns(source: { materialId?: string; materialTitle: string; turnRange: string } | null) {
         if (!source) return [];
@@ -537,6 +568,7 @@ export function createProductCore(deps: {
         outcome: conversation.outcomeSummary || "未知",
         endReason: conversation.endReason || "未知",
         turns: conversation.turns,
+        ...(conversation.promptVersion ? { promptVersion: conversation.promptVersion } : {}),
         strategyPath: managerTurns
           .filter((t) => t.usedCardId && cardsById.has(t.usedCardId))
           .map((t) => {
@@ -547,6 +579,10 @@ export function createProductCore(deps: {
               cardId: t.usedCardId as string,
               cardName: card!.name,
               keyExpression: t.text,
+              customerText: customerTextBefore(t.number),
+              ...(t.recognizedSignal ? { recognizedSignal: t.recognizedSignal } : {}),
+              ...(t.currentGoal ? { currentGoal: t.currentGoal } : {}),
+              ...(t.cardMatchBasis ? { matchBasis: t.cardMatchBasis } : {}),
               source,
               sourceTurns: resolveSourceTurns(source),
             };

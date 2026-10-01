@@ -136,6 +136,21 @@ export interface ConversationTurn {
   usedCardId?: string;
   recognizedSignal?: string;
   currentGoal?: string;
+  /**
+   * 仅经理轮:用卡匹配依据(裁判指出话术对应卡中哪个动作)。
+   * 是话术生成后的解释候选,不是模型真实思考过程;仅当 usedCardId 存在时有意义。
+   */
+  cardMatchBasis?: string;
+  /**
+   * 仅经理轮:裁判按通话逻辑(四条钱规律)对本轮话术的一句归因候选
+   * (如「地图未画完就报了数字」)。同 cardMatchBasis,是解释候选非思考记录。
+   */
+  logicHint?: string;
+  /**
+   * 仅经理轮:确定性守卫——话术里出现白名单外的数字(产品卡事实、
+   * 本局客户口述、此前经理已报过的数字之外)。只标不拦,复盘如实呈现。
+   */
+  outOfCardFact?: boolean;
 }
 
 export type ConversationStatus = "ongoing" | "ended";
@@ -148,6 +163,8 @@ export interface Conversation {
   endReason?: string;
   outcomeSummary?: string;
   createdAt: string;
+  /** 本局使用的经理提示词版本;旧记录无此字段,如实视为未记录。 */
+  promptVersion?: string;
 }
 
 /** 结果页视图:解释本轮打法,不评价扮演客户的用户。 */
@@ -157,12 +174,22 @@ export interface ConversationResult {
   outcome: string;
   endReason: string;
   turns: ConversationTurn[];
+  /** 本局提示词版本;旧记录缺信息时为空,复盘页如实标注。 */
+  promptVersion?: string;
   strategyPath: Array<{
     turnNumber: number;
     cardId: string;
     cardName: string;
     /** 关键表达:经理本轮实际说出的话。 */
     keyExpression: string;
+    /** 客户本轮原话:触发这句经理回应的上一条客户发言。 */
+    customerText: string;
+    /** 系统识别的客户信号(解释候选);缺失时如实为空。 */
+    recognizedSignal?: string;
+    /** 经理本轮沟通目的(解释候选);缺失时如实为空。 */
+    currentGoal?: string;
+    /** 用卡匹配依据(裁判指出对应卡中哪个动作);缺失时按"未确认"展示。 */
+    matchBasis?: string;
     source: SourceExcerpt | null;
     /** 原始转写片段:按来源区间解析出的素材轮次;无法解析时为空。 */
     sourceTurns: MaterialTurn[];

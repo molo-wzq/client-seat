@@ -81,10 +81,10 @@ describe("结果解释与素材追溯", () => {
     for (const line of DEFAULT_SCRIPT) await api.sendCustomerTurn(p01.id, line);
     const p01Result = await api.getResult(p01.id);
 
-    // P02:画像无资金线索(SC2 适用条件不满足)→ 跳过现状了解,直接给事由争取预约
+    // 无资金线索的自定义画像(SC2 适用条件不满足)→ 跳过现状了解,直接给事由争取预约
     const p02 = await api.savePersona({
       name: "退休教师",
-      visible: ["客户是退休教师,行内只有活期存款"],
+      visible: ["客户是退休教师,刚搬来附近,行内业务很少"],
       hidden: [],
     });
     const p02Conversation = await api.startConversation(p02.id);
@@ -105,6 +105,43 @@ describe("结果解释与素材追溯", () => {
         expect(entry.source?.materialTitle).toBe(material.title);
       }
     }
+  });
+
+  it("复盘证据链:每轮带客户原话、识别信号、目的与用卡匹配依据", async () => {
+    const { result } = await completedResult();
+
+    expect(result.promptVersion).toBeTruthy();
+    for (const entry of result.strategyPath) {
+      expect(entry.customerText, `第${entry.turnNumber}轮缺客户原话`).toBeTruthy();
+      // 客户原话与完整对话中该经理轮的上一条客户发言一致。
+      const index = result.turns.findIndex((t) => t.number === entry.turnNumber);
+      const before = result.turns[index === -1 ? 0 : index - 1];
+      expect(before?.speaker).toBe("customer");
+      expect(entry.customerText).toBe(before?.text);
+      // 伪适配器脚本带匹配依据与解释候选字段。
+      expect(entry.matchBasis).toBeTruthy();
+      expect(entry.recognizedSignal).toBeTruthy();
+      expect(entry.currentGoal).toBeTruthy();
+    }
+  });
+
+  it("未匹配卡的经理轮不硬配:策略路径不含它,完整对话保留(复盘显示未确认)", async () => {
+    const { api } = await createBareApi();
+    const material = await api.analyzeTranscript({ transcript: SEED_TRANSCRIPT });
+    await api.publishMaterialCards(material.id);
+    const conversation = await api.startConversation(SEED_PERSONA.id);
+    await api.sendCustomerTurn(conversation.id, "喂");
+    // 第一次软拒绝的接住话术在伪适配器不带卡:该经理轮无 usedCardId。
+    await api.sendCustomerTurn(conversation.id, "暂时不用,谢谢");
+
+    const fresh = await api.getConversation(conversation.id);
+    const noCardTurn = fresh.turns.find((t) => t.speaker === "manager" && !t.usedCardId);
+    expect(noCardTurn).toBeDefined();
+
+    await api.finishConversation(conversation.id);
+    const result = await api.getResult(conversation.id);
+    expect(result.strategyPath.find((e) => e.turnNumber === noCardTurn!.number)).toBeUndefined();
+    expect(result.turns.some((t) => t.number === noCardTurn!.number)).toBe(true);
   });
 
   it("素材标题重名时,来源片段仍定位到所属素材(id 关联)", async () => {

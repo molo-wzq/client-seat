@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createInProcessProductCore } from "../product/in-process-product-api";
 import { RecordingAdapter } from "../test/recording-adapter";
+import { expectNumbersOnlyFromProductCard } from "../test/dialogue-guards";
 import type { ManagerTurnInput, ManagerTurnOutput } from "../domain/ports";
 import { MAX_MANAGER_TURNS } from "./product-core";
 import { FakeModelAdapter } from "../adapters/fake-model-adapter";
@@ -160,15 +161,21 @@ describe("策略驱动的自适应对话", () => {
 
     await say("喂");
     await say("嗯");
-    const after = await say("我的钱都在股市,平时做国债逆回购,T+1的");
+    // 票 30 之后:先给线索(去向)→ 经理先接住、只追问一层(金额);金额补齐才算摸清资金现状。
+    const followUp = await say("我的钱都在股市,平时做国债逆回购,T+1的");
+    const followUpReply = followUp.turns.at(-1)!.text;
+    expect(followUpReply).not.toMatch(PRODUCT_FACTS);
+    expect((followUpReply.match(/[？?]/g) ?? []).length).toBeLessThanOrEqual(1);
+
+    const after = await say("大概二十来万吧,平时要用的");
     const reply = after.turns.at(-1)!.text;
 
     expect(reply).toMatch(/2%/);
     expect(reply).toMatch(/T\+1/);
-    // 分档权益与产品卡一致
-    expect(reply).toContain("50元");
-    expect(reply).toContain("150元");
-    expect(reply).toContain("300元");
+    // p3 语体:权益锚着客户自己的钱报(客户二十来万→锚定20万档),数字仍全部出自产品卡
+    expect(reply).toContain("20万");
+    expect(reply).toContain("150");
+    expectNumbersOnlyFromProductCard(reply);
     expect(reply).not.toMatch(OUT_OF_CARD_FACTS);
   });
 
@@ -249,11 +256,11 @@ describe("策略驱动的自适应对话", () => {
     }
   });
 
-  it("内置画像差异引起不同策略路径(P03 无资金线索,跳过现状了解)", async () => {
+  it("内置画像差异引起不同策略路径(可见资金线索走 SC2,无线索走 SC3)", async () => {
     const { api } = await setup();
     await api.publishMaterialCards((await api.analyzeTranscript({ transcript: SEED_TRANSCRIPT })).id);
 
-    // P02(可见含资金线索)→ 走 SC2 现状了解
+    // P02(可见含到账/定期线索)→ 走 SC2 现状了解
     const p02 = await api.startConversation(SEED_PERSONAS[1]!.id);
     await api.sendCustomerTurn(p02.id, "喂");
     await api.sendCustomerTurn(p02.id, "嗯");
@@ -262,16 +269,69 @@ describe("策略驱动的自适应对话", () => {
       .map((t) => t.usedCardId);
     expect(p02Turns[1]).toBe(SEED_CARD_IDS.discovery);
 
-    // P03(可见无资金线索,SC2 适用条件不满足)→ 直接以 SC3 事由争取预约
+    // P03(可见含定期到期线索,同样走 SC2;定期到期也是资金线索,不再视作无线索)
     const p03 = await api.startConversation(SEED_PERSONAS[2]!.id);
     await api.sendCustomerTurn(p03.id, "喂");
     await api.sendCustomerTurn(p03.id, "嗯");
     const p03Turns = (await api.getConversation(p03.id)).turns
       .filter((t) => t.speaker === "manager")
       .map((t) => t.usedCardId);
-    expect(p03Turns[1]).toBe(SEED_CARD_IDS.closing);
+    expect(p03Turns[1]).toBe(SEED_CARD_IDS.discovery);
 
-    expect(p02Turns).not.toEqual(p03Turns);
+    // 自定义画像可见信息无任何资金线索(SC2 适用条件不满足)→ 直接以 SC3 事由争取预约
+    const noClue = await api.savePersona({
+      name: "新搬来的老师",
+      visible: ["客户刚搬来附近,行内业务很少"],
+      hidden: [],
+    });
+    const noClueConversation = await api.startConversation(noClue.id);
+    await api.sendCustomerTurn(noClueConversation.id, "喂");
+    await api.sendCustomerTurn(noClueConversation.id, "嗯");
+    const noClueTurns = (await api.getConversation(noClueConversation.id)).turns
+      .filter((t) => t.speaker === "manager")
+      .map((t) => t.usedCardId);
+    expect(noClueTurns[1]).toBe(SEED_CARD_IDS.closing);
+
+    expect(p02Turns).not.toEqual(noClueTurns);
+  });
+
+  it("话术已告别而元数据未结束时,通话按告别收口兜底结束", async () => {
+    // 元数据缺失/判 false、话术最后一句已是明确告别:不能停在"进行中"等用户再发言。
+    class FarewellAdapter extends FakeModelAdapter {
+      constructor(private readonly farewell: boolean) {
+        super();
+      }
+      override async generateManagerTurn(input: ManagerTurnInput): Promise<ManagerTurnOutput> {
+        if (input.history.length === 0) return super.generateManagerTurn(input);
+        return {
+          reply: this.farewell
+            ? "好的,那就不占用您时间了。我是咱们行的客户经理,有需要您随时找我,再见。"
+            : "好的,那我就先说到这儿。您还有什么想了解的,随时问我。",
+          // 模拟元数据降级:无 shouldEnd、无用卡,不伪造任何结构化结论。
+          recognizedSignal: "客户持续接话",
+        };
+      }
+    }
+    async function drive(farewell: boolean) {
+      const api = createInProcessProductCore({ adapter: new FarewellAdapter(farewell) });
+      await api.publishMaterialCards(
+        (await api.analyzeTranscript({ transcript: SEED_TRANSCRIPT })).id,
+      );
+      const conversation = await api.startConversation(SEED_PERSONA.id);
+      await api.sendCustomerTurn(conversation.id, "喂");
+      const after = await api.sendCustomerTurn(conversation.id, "嗯");
+      return after;
+    }
+
+    const ended = await drive(true);
+    expect(ended.status).toBe("ended");
+    expect(ended.endReason).toContain("告别");
+    expect(ended.outcomeSummary).toBe("未知");
+    // 兜底只结束通话状态,不伪造用卡。
+    expect(ended.turns.at(-1)?.usedCardId).toBeUndefined();
+
+    const ongoing = await drive(false);
+    expect(ongoing.status).toBe("ongoing");
   });
 });
 
@@ -306,5 +366,46 @@ describe("重新生成经理回复(票 31)", () => {
     await say("别打了");
     await say("不用了,挂了");
     await expect(api.regenerateManagerTurn(conversation.id)).rejects.toThrow(/已结束/);
+  });
+});
+
+describe("通话逻辑归因与卡外数字守卫(p4)", () => {
+  /** 编造型适配器:客户给出金额后,经理报卡外收益与利息,并带一句 logicHint。 */
+  class FabricatingAdapter extends FakeModelAdapter {
+    override async generateManagerTurn(input: ManagerTurnInput): Promise<ManagerTurnOutput> {
+      if (input.customerText.includes("十五万")) {
+        return {
+          reply: "您这15万放咱这,年化3.5%,一个月就有400来块利息。",
+          logicHint: "地图未画完就报了数字",
+        };
+      }
+      return super.generateManagerTurn(input);
+    }
+  }
+
+  it("卡外数字如实标记、logicHint 透传落库,话术本身不改不拦", async () => {
+    const api = createInProcessProductCore({ adapter: new FabricatingAdapter() });
+    const material = await api.analyzeTranscript({ transcript: SEED_TRANSCRIPT });
+    await api.publishMaterialCards(material.id);
+    const conversation = await api.startConversation(SEED_PERSONA.id);
+    await api.sendCustomerTurn(conversation.id, "喂");
+    const after = await api.sendCustomerTurn(conversation.id, "我有十五万闲钱");
+
+    const turn = after.turns.at(-1);
+    expect(turn?.speaker).toBe("manager");
+    expect(turn?.text).toContain("年化3.5%"); // 只标不拦:话术原样落库
+    expect(turn?.outOfCardFact).toBe(true); // 3.5% 与 400块 都不在白名单
+    expect(turn?.logicHint).toBe("地图未画完就报了数字");
+  });
+
+  it("数字全部有出处时不标记", async () => {
+    const { api } = await setup();
+    const { say } = await publishedConversation(api);
+    await say("喂");
+    const after = await say("大概二十来万吧,平时做国债逆回购");
+    // 追问金额的轮次不带数字,后续锚定轮的数字出自产品卡或客户口述。
+    const turn = after.turns.at(-1);
+    expect(turn?.speaker).toBe("manager");
+    expect(turn?.outOfCardFact).toBeUndefined();
   });
 });

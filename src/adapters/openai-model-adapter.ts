@@ -3,6 +3,7 @@ import {
   assembleManagerMetaPrompt,
   assembleManagerSystemPrompt,
 } from "./prompts";
+import { cleanReplyText } from "../domain/reply-text";
 import type {
   CopywritingPort,
   DialoguePort,
@@ -14,6 +15,9 @@ import type {
   CaseAnalysis,
   StrategyCard,
 } from "../domain/types";
+
+// cleanReplyText 已移入领域(流式上屏与落库共用同一清理);此处 re-export 保持既有引用。
+export { cleanReplyText };
 
 /**
  * 真实语言模型适配器:OpenAI 兼容 chat/completions 接口。
@@ -116,9 +120,14 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
         asOptionalString((raw as Record<string, unknown>).goal) ??
         asOptionalString(raw.currentGoal),
       usedCardId: asOptionalString(raw.usedCardId),
+      // 匹配依据只在有卡时才有意义;无卡时丢弃,不产出悬空依据。
+      cardMatchBasis: asOptionalString(raw.usedCardId)
+        ? asOptionalString(raw.cardMatchBasis)
+        : undefined,
       shouldEnd: raw.shouldEnd === true,
       endReason: asOptionalString(raw.endReason),
       outcomeSummary: asOptionalString(raw.outcomeSummary),
+      logicHint: asOptionalString(raw.logicHint),
     };
   }
 
@@ -257,18 +266,6 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
 }
 
 const DEFAULT_MATERIAL_TITLE = "未命名素材";
-
-/**
- * 话术净化:尽管规则 10 明令禁止,模型偶发仍会带「理财经理:」称谓前缀、
- * 包裹引号或首尾空白——这些不是电话里说出来的话,直接播出会污染对话。
- */
-export function cleanReplyText(reply: string): string {
-  return reply
-    .trim()
-    .replace(/^(?:理财经理|经理|AI|客服|话术)\s*[:：]\s*/, "")
-    .replace(/^["「『“]+|["」』”]+$/g, "")
-    .trim();
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
