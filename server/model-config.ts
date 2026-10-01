@@ -18,6 +18,16 @@ export const ASR_CONFIG_ENV = {
   model: "ASR_MODEL",
 } as const;
 
+/**
+ * LLM 备用组:主网关(如 token plan)不稳时自动切换的第二供应商
+ * (server/main.ts 组合成 FailoverModelAdapter)。未配密钥即无备用。
+ */
+export const LLM_FALLBACK_CONFIG_ENV = {
+  key: "LLM_FALLBACK_API_KEY",
+  baseUrl: "LLM_FALLBACK_BASE_URL",
+  model: "LLM_FALLBACK_MODEL",
+} as const;
+
 export interface ResolvedModelConfig {
   /** 未配密钥时为 undefined,由调用方决定降级(演示模式)或报错。 */
   apiKey: string | undefined;
@@ -33,6 +43,15 @@ export function readLlmConfig(env: Env): ResolvedModelConfig {
     apiKey: env[LLM_CONFIG_ENV.key],
     baseUrl: env[LLM_CONFIG_ENV.baseUrl] || DEFAULT_MODEL_BASE_URL,
     model: env[LLM_CONFIG_ENV.model] || DEFAULT_MODEL_NAME,
+  };
+}
+
+/** LLM 备用配置:与主组同构,回退到代码默认网关。 */
+export function readLlmFallbackConfig(env: Env): ResolvedModelConfig {
+  return {
+    apiKey: env[LLM_FALLBACK_CONFIG_ENV.key],
+    baseUrl: env[LLM_FALLBACK_CONFIG_ENV.baseUrl] || DEFAULT_MODEL_BASE_URL,
+    model: env[LLM_FALLBACK_CONFIG_ENV.model] || DEFAULT_MODEL_NAME,
   };
 }
 
