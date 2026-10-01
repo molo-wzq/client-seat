@@ -30,3 +30,18 @@ output/
 .scratch/phone-coaching-agent/l1/review/
 # L1 转写用 ffmpeg 本地二进制(不入库)
 .scratch/phone-coaching-agent/l1/tools/bin/
+
+# 本地申报材料与工具产物(不入公开仓库)
+作品情况填写版*.docx
+作品情况填写版*.tmp.docx
+nul
+.v2c/
+.video_agent/
+
+# .scratch 根层的采样/日志/部署副本(规格目录不受影响,仍按需入库)
+.scratch/docx-fill/
+.scratch/research/
+.scratch/cloudrun-deploy/
+.scratch/*.json
+.scratch/*.txt
+.scratch/*.log
