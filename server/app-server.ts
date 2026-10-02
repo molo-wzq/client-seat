@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
+import zlib from "node:zlib";
 import type { ProductCore } from "../src/domain/product-core";
 import { NotFoundError, ValidationError } from "../src/domain/product-core";
-import type { MaterialDraftPatch } from "../src/domain/types";
+import type { ConversationStartOptions, MaterialDraftPatch, PlayerObservation } from "../src/domain/types";
 
 /** 领域之外的 http 层错误:请求体超过大小上限,映射为 413。 */
 class BodyTooLargeError extends Error {}
@@ -29,7 +30,7 @@ export function createRequestListener(deps: {
       if (url.pathname.startsWith("/api/")) {
         await handleApi(req, res, url.pathname);
       } else {
-        serveStatic(res, url.pathname, staticRoot);
+        serveStatic(req, res, url.pathname, staticRoot);
       }
     } catch (error) {
       if (error instanceof NotFoundError) {
@@ -37,9 +38,9 @@ export function createRequestListener(deps: {
       } else if (error instanceof ValidationError) {
         respondJson(res, 400, { error: error.message });
       } else if (error instanceof BodyTooLargeError) {
-        // 先回 413 再关连接:req.destroy() 会连带销毁共享 socket,
-        // 未等响应送达就断开,客户端只会看到连接重置。
-        respondJson(res, 413, { error: error.message }, { Connection: "close" });
+        // data 监听器会继续丢弃余下请求体;提前关闭仍在上传的连接
+        // 会让客户端只收到 ECONNRESET,看不到这个可读的错误响应。
+        respondJson(res, 413, { error: error.message });
       } else {
         respondJson(res, 500, { error: (error as Error).message });
       }
@@ -148,7 +149,11 @@ export function createRequestListener(deps: {
       return;
     }
     if (req.method === "POST" && pathname === "/api/conversations") {
-      const conversation = await core.startConversation((body as { personaId?: string }).personaId || "");
+      const input = body as ConversationStartOptions & { personaId?: string };
+      const conversation = await core.startConversation(input.personaId || "", {
+        observationFocus: input.observationFocus,
+        replayOfId: input.replayOfId,
+      });
       respondJson(res, 200, conversation);
       return;
     }
@@ -192,6 +197,17 @@ export function createRequestListener(deps: {
       return;
     }
     const resultMatch = pathname.match(/^\/api\/conversations\/([^/]+)\/result$/);
+    const branchMatch = pathname.match(/^\/api\/conversations\/([^/]+)\/branch$/);
+    const observationMatch = pathname.match(/^\/api\/conversations\/([^/]+)\/observations$/);
+    if (req.method === 'PUT' && observationMatch) {
+      respondJson(res, 200, await core.saveObservation(safeDecodeSegment(observationMatch[1]), body as unknown as PlayerObservation));
+      return;
+    }
+    if (req.method === 'POST' && branchMatch) {
+      const input = body as { customerTurnNumber: number; replacementText: string };
+      respondJson(res, 200, await core.branchConversation(safeDecodeSegment(branchMatch[1]), input.customerTurnNumber, input.replacementText));
+      return;
+    }
     if (req.method === "GET" && resultMatch) {
       const result = await core.getResult(safeDecodeSegment(resultMatch[1]));
       respondJson(res, 200, result);
@@ -254,7 +270,7 @@ function respondJson(
   res.end(JSON.stringify(payload));
 }
 
-function serveStatic(res: http.ServerResponse, pathname: string, distDir: string): void {
+function serveStatic(req: http.IncomingMessage, res: http.ServerResponse, pathname: string, distDir: string): void {
   const safePath = path.normalize(pathname).replace(/^([.][.][/\\])+/, "");
   let filePath = path.join(distDir, safePath);
   if (!filePath.startsWith(distDir)) filePath = path.join(distDir, "index.html");
@@ -273,11 +289,27 @@ function serveStatic(res: http.ServerResponse, pathname: string, distDir: string
     ".svg": "image/svg+xml",
     ".json": "application/json; charset=utf-8",
   };
-  res.writeHead(200, {
-    "Content-Type": types[path.extname(filePath)] || "application/octet-stream",
-  });
+  const ext = path.extname(filePath);
+  const headers: Record<string, string> = {
+    "Content-Type": types[ext] || "application/octet-stream",
+  };
+  // 构建产物文件名带内容 hash(/assets/index-*.js):可整年缓存;
+  // index.html 必须每次回源校验,否则发版后拿不到新 hash 的资源名。
+  headers["Cache-Control"] = pathname.startsWith("/assets/")
+    ? "public, max-age=31536000, immutable"
+    : "no-cache";
   // pipe 不监听源流 error 时,读文件失败(文件被锁/消失)会成为 uncaughtException 杀死进程。
-  const stream = fs.createReadStream(filePath);
-  stream.on("error", () => res.destroy());
-  stream.pipe(res);
+  const source = fs.createReadStream(filePath);
+  source.on("error", () => res.destroy());
+  const acceptsGzip = /gzip\b/i.test(String(req.headers["accept-encoding"] ?? ""));
+  const compressible = ext in types;
+  if (acceptsGzip && compressible) {
+    headers["Content-Encoding"] = "gzip";
+    headers["Vary"] = "Accept-Encoding";
+    res.writeHead(200, headers);
+    source.pipe(zlib.createGzip()).on("error", () => res.destroy()).pipe(res);
+    return;
+  }
+  res.writeHead(200, headers);
+  source.pipe(res);
 }

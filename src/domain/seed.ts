@@ -344,6 +344,7 @@ export const SEED_PERSONAS: Persona[] = [SEED_PERSONA, SEED_PERSONA_P02, SEED_PE
 export const SEED_PRODUCT_CARD: VirtualProductCard = {
   activity: {
     name: "代发客户拉新资金活动",
+    audience: "代发工资客户",
     deadline: "本月底(31号前)报名",
     rule: "活动期内新资金达标即可由经理代为报名,资金无须立即转入",
     tiers: [

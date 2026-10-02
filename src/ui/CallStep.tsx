@@ -1,34 +1,39 @@
 import { useEffect, useRef, useState } from "react";
 import { MAX_MANAGER_TURNS } from "../domain/product-core";
 import { cleanReplyText } from "../domain/reply-text";
-import type { Conversation, ConversationResult, Persona } from "../domain/types";
+import type { Conversation, ConversationResult, FeelingStamp, Persona, PlayerObservation } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { BusyHint } from "./BusyHint";
 import { UiIcon } from "./UiIcon";
 import { playSfx } from "./game-feel";
+import { FeelingStampBar } from "./feeling-stamps";
 
 /**
  * 快捷回复(票 31):客户角色的典型信号一键发送。
  * 按对话局势切三组——接通时 / 探询期 / 经理报出产品后,和策略卡的信号语义对齐。
- * 台词跟画像走(p3 用词规则):年长客户说的是定期到期和养老金,不是股市;
+ * 台词跟画像的关系与语气走,不替客户补写资金事实;
  * 画像取不到时(接口桩/未加载完)回落到通用组。
  */
 export function quickReplies(conversation: Conversation | null, personas: Persona[] = []): string[] {
   const turns = conversation?.turns ?? [];
   const persona = personas.find((p) => p.id === conversation?.personaId);
   const elderly = persona?.visible.some((line) => /年长|退休|阿姨|大爷/.test(line)) ?? false;
+  const acquainted = persona?.visible.some((line) => /已相识|已认识|与经理熟悉/.test(line)) ?? false;
   const lastManager = [...turns].reverse().find((t) => t.speaker === "manager");
   if (!lastManager) {
-    return elderly ? ["喂,是小李啊", "喂,哪位?", "你们谁啊?"] : ["喂", "喂,你好,哪位?", "你谁啊?"];
+    return elderly && acquainted ? ["喂,是小李啊", "喂,哪位?", "你们谁啊?"] : ["喂", "喂,你好,哪位?", "你谁啊?"];
   }
-  if (/立减金|收益|报名|活动|万/.test(lastManager.text)) {
+  if (/立减金|报名|活动.*(?:参加|领取)|(?:参加|领取).*活动/.test(lastManager.text)) {
     return elderly
-      ? ["那个立减金咋领?", "能领多少啊?", "那你帮我报上吧", "那我再考虑一下"]
+      ? ["这个活动咋参加?", "规则你再说说", "那你帮我报上吧", "那我再考虑一下"]
       : ["怎么参加?", "再考虑一下吧", "帮我报上吧", "不用了,谢谢"];
   }
+  if (/收益|参考年化|灵活理财|持有期|T\+1|产品/.test(lastManager.text)) {
+    return ["这个产品怎么取用?", "收益是保证的吗?", "那我再考虑一下", "暂时不用,谢谢"];
+  }
   return elderly
-    ? ["钱都存着定期呢", "有笔存款到期了还没动", "我不懂这些,你少说点", "暂时不用,谢谢"]
-    : ["还行,你说", "我平时闲钱都在股市", "暂时不用,谢谢", "你们这个安全吗?"];
+    ? ["你先说说是啥事", "你问的是哪笔钱?", "你少说点,我慢慢听", "暂时不用,谢谢"]
+    : ["还行,你说", "你想了解哪方面?", "暂时不用,谢谢", "你先说说来意"];
 }
 
 export function CallStep({
@@ -46,15 +51,53 @@ export function CallStep({
   // 画像用于快捷回复的台词分流;接口桩可能没有该方法,取不到就回落通用组。
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [text, setText] = useState("");
+  const [failedDraft, setFailedDraft] = useState<string | null>(null);
+  const draftRef = useRef("");
+  const followLatest = useRef(true);
+  const [hasUnread, setHasUnread] = useState(false);
   const [busy, setBusy] = useState(false);
   const [busyHint, setBusyHint] = useState("理财经理正在思考…");
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   // 流式话术(票 29):话术增量先拼在这里逐字上屏,done 事件落地后被权威会话替换。
   const [streamingReply, setStreamingReply] = useState<string | null>(null);
   const [copiedTurn, setCopiedTurn] = useState<number | null>(null);
   const logRef = useRef<HTMLOListElement>(null);
   const abortRef = useRef<AbortController | null>(null);
   const copyTimer = useRef<number | undefined>(undefined);
+  const composingRef = useRef(false);
+  const replyRef = useRef<HTMLTextAreaElement>(null);
+  const activeRef = useRef(true);
+  const loadedIdRef = useRef<string | null>(null);
+  const uncertainRef = useRef<{ text: string; number: number } | null>(null);
+  // 体感戳保存中:同一时刻只发一枚,避免两枚乐观更新互相覆盖。
+  const [stampingTurn, setStampingTurn] = useState<number | null>(null);
+  const observationReady = typeof api.saveObservation === "function";
+
+  function updateDraft(value: string) {
+    draftRef.current = value;
+    setText(value);
+  }
+
+  function recoverUndelivered(customerText: string) {
+    if (draftRef.current.trim()) setFailedDraft(customerText);
+    else updateDraft(customerText);
+  }
+
+  function showLatest() {
+    followLatest.current = true;
+    setHasUnread(false);
+    logRef.current?.scrollTo?.({ top: logRef.current.scrollHeight });
+  }
+
+  useEffect(() => {
+    activeRef.current = true;
+    return () => {
+      activeRef.current = false;
+      abortRef.current?.abort();
+    };
+  }, []);
 
   useEffect(() => () => window.clearTimeout(copyTimer.current), []);
 
@@ -73,28 +116,48 @@ export function CallStep({
   }, [api]);
 
   function applyConversation(next: Conversation) {
+    if (!activeRef.current) return;
     setConversation(next);
     onConversationChange?.(next);
   }
 
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setError(null);
+    setConversation(null);
+    if (loadedIdRef.current !== conversationId) {
+      loadedIdRef.current = conversationId;
+      updateDraft("");
+      setFailedDraft(null);
+      uncertainRef.current = null;
+    }
+    followLatest.current = true;
+    setHasUnread(false);
     api
       .getConversation(conversationId)
       .then((c) => {
         if (cancelled) return;
+        const uncertain = uncertainRef.current;
+        if (uncertain) {
+          if (!c.turns.some((t) => t.number === uncertain.number && t.speaker === "customer" && t.text === uncertain.text)) {
+            recoverUndelivered(uncertain.text);
+          }
+          uncertainRef.current = null;
+        }
         setConversation(c);
         onConversationChange?.(c);
       })
-      .catch((e) => !cancelled && setError((e as Error).message));
+      .catch((e) => !cancelled && setError((e as Error).message))
+      .finally(() => { if (!cancelled) setLoading(false); });
     return () => {
       cancelled = true;
     };
-  }, [api, conversationId]);
+  }, [api, conversationId, loadAttempt]);
 
   useEffect(() => {
-    // jsdom 未实现 Element.scrollTo,用可选调用兜底。
-    logRef.current?.scrollTo?.({ top: logRef.current.scrollHeight });
+    if (followLatest.current) showLatest();
+    else setHasUnread(true);
   }, [conversation?.turns.length, streamingReply]);
 
   const ended = conversation?.status === "ended";
@@ -124,7 +187,8 @@ export function CallStep({
         },
       ],
     });
-    setText("");
+    updateDraft("");
+    setFailedDraft(null);
     setBusy(true);
     setBusyHint("理财经理正在思考…");
     setStreamingReply(null);
@@ -144,6 +208,7 @@ export function CallStep({
           conversationId,
           customerText,
           (delta) => {
+            if (!activeRef.current) return;
             if (firstDeltaAt === null) firstDeltaAt = performance.now();
             setStreamingReply((current) => (current ?? "") + delta);
           },
@@ -161,16 +226,31 @@ export function CallStep({
         );
       }
     } catch (e) {
-      applyConversation(previous);
-      setText(customerText);
-      // 用户主动停止不算错误:不打扰,不提示。
-      if (!(controller.signal.aborted && (e as Error).name === "AbortError")) {
-        setError((e as Error).message);
+      if (!activeRef.current) return;
+      const stopped = controller.signal.aborted && (e as Error).name === "AbortError";
+      // 网络断流与主动停止都可能发生在落库之后,不能把请求失败当作未发送。
+      abortRef.current = null;
+      setStreamingReply(null);
+      setBusyHint("正在同步本轮通话，请稍候…");
+      const sentNumber = Math.max(0, ...previous.turns.map((t) => t.number)) + 1;
+      try {
+        const authoritative = await api.getConversation(conversationId);
+        if (!activeRef.current) return;
+        applyConversation(authoritative);
+        const saved = authoritative.turns.some((t) => t.number === sentNumber && t.speaker === "customer" && t.text === customerText);
+        if (!saved) recoverUndelivered(customerText);
+        if (!stopped) setError(saved ? `连接中断，本轮已保存并同步：${(e as Error).message}` : (e as Error).message);
+      } catch (syncError) {
+        if (!activeRef.current) return;
+        uncertainRef.current = { text: customerText, number: sentNumber };
+        setConversation(null);
+        setError(`通话同步失败，请重新加载：${(syncError as Error).message}`);
       }
     } finally {
       abortRef.current = null;
       setBusy(false);
       setStreamingReply(null);
+      if (activeRef.current) replyRef.current?.focus({ preventScroll: true });
     }
   }
 
@@ -207,43 +287,107 @@ export function CallStep({
     copyTimer.current = window.setTimeout(() => setCopiedTurn(null), 1600);
   }
 
+  /**
+   * 盖/撤一枚体感戳:与该轮已有观察合并后整条保存,
+   * 不覆盖判断、依据等已写内容;乐观上屏,失败回滚并提示。
+   */
+  async function stampFeeling(turnNumber: number, next: FeelingStamp | undefined) {
+    if (!conversation || stampingTurn !== null) return;
+    const previous = conversation;
+    const saved = previous.observations?.find((note) => note.managerTurnNumber === turnNumber);
+    if (saved?.feeling === next) return;
+    const merged: PlayerObservation = {
+      managerTurnNumber: turnNumber,
+      evidence: saved?.evidence ?? "",
+      nextExperiment: saved?.nextExperiment ?? "",
+      ...(saved?.judgement ? { judgement: saved.judgement } : {}),
+      revealed: saved?.revealed ?? false,
+      marked: saved?.marked ?? false,
+      ...(next ? { feeling: next } : {}),
+    };
+    applyConversation({
+      ...previous,
+      observations: [...(previous.observations ?? []).filter((note) => note.managerTurnNumber !== turnNumber), merged].sort(
+        (a, b) => a.managerTurnNumber - b.managerTurnNumber,
+      ),
+    });
+    setStampingTurn(turnNumber);
+    try {
+      applyConversation(await api.saveObservation(conversationId, merged));
+    } catch (e) {
+      if (activeRef.current) {
+        applyConversation(previous);
+        setError((e as Error).message);
+      }
+    } finally {
+      if (activeRef.current) setStampingTurn(null);
+    }
+  }
+
   async function finish() {
+    if (!conversation || busy || loading) return;
     playSfx("end");
     setBusy(true);
     setBusyHint("正在生成对练结果…");
     setError(null);
     try {
       if (conversation?.status === "ongoing") {
-        await api.finishConversation(conversationId);
+        applyConversation(await api.finishConversation(conversationId));
       }
-      onFinished(await api.getResult(conversationId));
+      const result = await api.getResult(conversationId);
+      if (activeRef.current) onFinished(result);
     } catch (e) {
       setError((e as Error).message);
+    } finally {
       setBusy(false);
     }
   }
 
   return (
     <section className="step" aria-labelledby="call-title">
-      <h2 id="call-title">模拟通话</h2>
+      <div className="call-heading">
+        <h2 id="call-title">模拟通话</h2>
+        <button type="button" className="ghost call-exit" onClick={finish} disabled={busy || loading || !conversation}>
+          结束并查看结果
+        </button>
+      </div>
       <p className="hint">
-        你扮演生客,AI 扮演理财经理。电话已接通,输入你作为客户的第一句话(如「喂」)。
+        {ended ? "本局已结束。查看复盘，观察经理如何回应你的客户信号。"
+          : managerTurnCount === 0 ? "你扮演生客,AI 扮演理财经理。电话已接通,输入你作为客户的第一句话(如「喂」)。"
+          : "按画像回应经理，可以追问、犹豫或拒绝。快捷回复只是选择，也可以自己写。听完经理某句话，随手盖一枚体感戳，复盘时会对照他那轮的打法。"}
       </p>
       {error && (
         <p role="alert" className="error">
           {error}
+          {!conversation && !loading && <button type="button" onClick={() => setLoadAttempt((n) => n + 1)}>重新加载通话</button>}
         </p>
       )}
       {ended && (
         <p className="ended-note">通话已结束:{conversation?.endReason}</p>
       )}
-      <ol className="call-log" ref={logRef}>
+      {loading && <BusyHint text="正在加载通话…" />}
+      <ol className={`call-log${conversation?.turns.length === 0 && !busy ? " empty" : ""}`} ref={logRef} onScroll={(e) => {
+        const log = e.currentTarget;
+        followLatest.current = log.scrollHeight - log.scrollTop - log.clientHeight < 48;
+        if (followLatest.current) setHasUnread(false);
+      }}>
+        {conversation && conversation.turns.length === 0 && !busy && !ended && <li className="empty-call">
+          <strong>电话已接通</strong>
+          <p>选一句开场，或在下方输入你的客户回应。</p>
+        </li>}
         {conversation?.turns.map((turn) => (
           <li key={turn.number} className={`turn turn-${turn.speaker}`}>
             <span className="who">
               {turn.speaker === "customer" ? "你(生客)" : "理财经理(AI)"}
             </span>
             <p>{turn.text}</p>
+            {turn.speaker === "manager" && observationReady && (
+              <FeelingStampBar
+                value={conversation.observations?.find((note) => note.managerTurnNumber === turn.number)?.feeling}
+                disabled={stampingTurn !== null}
+                onPick={(next) => void stampFeeling(turn.number, next)}
+              />
+            )}
             {turn.speaker === "manager" && (
               <button
                 type="button"
@@ -277,16 +421,17 @@ export function CallStep({
           </li>
         ) : null}
       </ol>
+      {hasUnread && <button type="button" className="ghost latest-reply" onClick={showLatest}>查看最新通话</button>}
       {busy && (
         <BusyHint
           text={
             streamingReply !== null
-              ? "话术已生成,正在核对本轮用卡与收口信号…"
+              ? "理财经理正在回复，随后核对本轮用卡与收口信号…"
               : busyHint
           }
         />
       )}
-      {!ended && (
+      {!ended && conversation && !loading && (
         <div className="reply-box">
           <div className="quick-chips" role="group" aria-label="快捷回复">
             {quickReplies(conversation, personas).map((chip) => (
@@ -295,7 +440,10 @@ export function CallStep({
                 type="button"
                 className="chip"
                 disabled={busy}
-                onClick={() => void send(chip)}
+                onClick={() => {
+                  updateDraft(draftRef.current.trim() ? `${draftRef.current}\n${chip}` : chip);
+                  replyRef.current?.focus({ preventScroll: true });
+                }}
               >
                 {chip}
               </button>
@@ -303,35 +451,48 @@ export function CallStep({
           </div>
           <label htmlFor="customer-reply">客户回复</label>
           <textarea
+            ref={replyRef}
             id="customer-reply"
             rows={2}
             value={text}
-            onChange={(e) => setText(e.target.value)}
+            onChange={(e) => updateDraft(e.target.value)}
+            onCompositionStart={() => { composingRef.current = true; }}
+            onCompositionEnd={() => { composingRef.current = false; }}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && !e.shiftKey) {
+              if (e.key === "Enter" && !e.shiftKey && !composingRef.current && !e.nativeEvent.isComposing && e.keyCode !== 229) {
                 e.preventDefault();
                 void send();
               }
             }}
             placeholder="作为客户回应……"
+            aria-describedby="reply-key-hint"
           />
+          <small id="reply-key-hint" className="hint-inline">Enter 发送 · Shift + Enter 换行 · 快捷回复先填入，确认后发送</small>
+          {failedDraft && <aside className="failed-draft" aria-label="未发出的回复">
+            <p>上一句未发出：{failedDraft}。你正在写的草稿已保留。</p>
+            <button type="button" className="ghost" disabled={busy} onClick={() => {
+              updateDraft(draftRef.current.trim() ? `${failedDraft}\n${draftRef.current}` : failedDraft);
+              setFailedDraft(null);
+            }}>把失败发言接到草稿前</button>
+            <button type="button" className="ghost" onClick={() => setFailedDraft(null)}>放弃失败发言</button>
+          </aside>}
           <div className="actions">
             <span className="turn-count">
               经理第 {managerTurnCount}/{MAX_MANAGER_TURNS} 轮
             </span>
             {canRegenerate && (
-              <button type="button" className="ghost" onClick={() => void regenerate()} disabled={busy}>
-                <UiIcon name="refresh" />重新生成
+              <button type="button" className="ghost" onClick={() => void regenerate()} disabled={busy} title="重新生成本轮，原回复会保存到版本对照">
+                <UiIcon name="refresh" />重新生成 · 保留原句
               </button>
             )}
             <button
               onClick={() => (busy ? stop() : void send())}
-              disabled={!busy && !text.trim()}
+              disabled={busy ? !abortRef.current : !text.trim()}
               className={busy ? "danger" : undefined}
             >
               {busy ? (
                 <>
-                  <UiIcon name="stop" />停止
+                  <UiIcon name="stop" />{abortRef.current ? "停止显示" : "处理中"}
                 </>
               ) : (
                 "发送"
@@ -340,11 +501,9 @@ export function CallStep({
           </div>
         </div>
       )}
-      <div className="actions">
-        <button onClick={finish} disabled={busy || managerTurnCount === 0}>
-          结束并查看结果
-        </button>
-      </div>
+      {!ended && <p className="hint">{busy
+        ? abortRef.current ? "可先停止显示；同步已保存话术后，再结束并查看结果。" : "本轮处理中；处理完成后可结束并查看结果。"
+        : "明确表示要挂断或不再联系会结束通话；犹豫时可以继续了解，也可点击“结束并查看结果”。"}</p>}
     </section>
   );
 }

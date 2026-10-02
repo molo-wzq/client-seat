@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { FakeModelAdapter } from "./adapters/fake-model-adapter";
@@ -51,9 +51,11 @@ describe("素材到模拟通话的核心闭环", () => {
     await user.click(screen.getByRole("button", { name: "结束并查看结果" }));
 
     expect(await screen.findByRole("heading", { name: "这通电话是怎样推进的" })).toBeInTheDocument();
-    expect(screen.getByText("生客开场,自报身份先给退路")).toBeInTheDocument();
+    await user.click(screen.getByText(/经理第 1 轮 · T02/));
+    expect(within(document.getElementById("review-turn-2")!).getByText("生客开场,自报身份先给退路", { selector: "strong" })).toBeVisible();
     expect(screen.getByText(/T01–T02/)).toBeInTheDocument();
-    expect(screen.getByText("本轮主要目标")).toBeInTheDocument();
+    expect(screen.getByText("开局目标")).toBeInTheDocument();
+    expect(screen.getByText('最后动作（候选）')).toBeInTheDocument();
     expect(screen.getByText("沟通结果")).toBeInTheDocument();
     expect(screen.getByText("结束原因")).toBeInTheDocument();
     expect(screen.getAllByText(/我是咱们行的理财经理小李/).length).toBeGreaterThan(0);
@@ -102,7 +104,7 @@ describe("进行中对局可找回", () => {
     expect(await screen.findByLabelText("客户回复")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: /通话记录/ }));
-    expect((await screen.findAllByText("进行中")).length).toBe(2);
+    expect(within(await screen.findByRole("list")).getAllByText("进行中")).toHaveLength(2);
     await user.click(screen.getByRole("button", { name: /代发·资金在证券/ }));
 
     expect(await screen.findByLabelText("客户回复")).toBeInTheDocument();

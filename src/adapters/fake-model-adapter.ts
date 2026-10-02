@@ -1,5 +1,6 @@
 import { buildSeedMaterial, SEED_CARDS, SEED_CARD_IDS, SEED_TRANSCRIPT } from "../domain/seed";
 import { parseTranscriptTurns } from "../domain/transcript";
+import { customerIntent } from '../domain/customer-intent';
 import type {
   CopywritingPort,
   DialoguePort,
@@ -9,12 +10,9 @@ import type {
 } from "../domain/ports";
 
 /** 客户信号关键词:按真实策略的决策顺序依次匹配。 */
-const EXPLICIT_END = /(拜拜|再见|挂了|不用了|别打了|以后再说|先这样)/;
-const SOFT_REFUSAL = /(再说吧|考虑一下|暂时不|先不用|到时候看|不怎么想|不想)/;
-/** 拒绝统一计数(软拒绝与明确拒绝都算):累计三次才挂断。 */
-const ANY_REFUSAL = new RegExp(`${SOFT_REFUSAL.source}|${EXPLICIT_END.source}`);
-const AGREE_ENROLL = /(报上|报吧|帮我报|预约吧|加微信)/;
-const AGREE_AFTER_ASK = /^(可以|行|好的|嗯|没问题)/;
+// 演示脚本只认直接授权句:引用、否定、提问、假设不因含「帮我报」就变成承诺。
+const AGREE_ENROLL = /^(?:(?:好(?:的|啊|吧)?|行|可以|那|就|嗯|你|请|麻烦你)[，,\s]*)*(?:帮我报(?:上|名)?|给我报(?:上|名)?|报上|报吧|预约吧|加(?:个)?微信)(?:吧|啊|呀|谢谢|[，,\s]|顺便|加(?:个)?微信|[。.!！])*$/;
+const AGREE_AFTER_ASK = /^(可以|行|好的|嗯|没问题)[呀啊吧呢]*[。.!！\s]*$/;
 /** 客户口述的金额线索(二十万/15万/几十万):资金现状三块之一。 */
 const AMOUNT_CLUE = /[一二三四五六七八九十百\d]+\s*[来多]?\s*万/;
 /** 客户在问活动资格(资格未知口径:条件式说明,不断言)。 */
@@ -40,16 +38,13 @@ function elderlyAddress(persona: ManagerTurnInput["persona"]): string {
   return persona.visible.some((line) => /年长|退休|阿姨|大爷/.test(line)) ? "大姐," : "";
 }
 
-/** 挂断门槛:客户累计拒绝达到此次数,通话才收口结束。 */
-export const REFUSAL_LIMIT = 3;
 
 /**
  * 伪实现(spec.md 测试决策):确定性脚本驱动端到端测试,
  * 也作为未配置真实模型密钥时的演示兜底。
  *
- * 对话脚本按真实策略的决策顺序组织:开场(SC1)→ 拒绝累计计数
- * (软拒绝与明确拒绝都算,累计三次才收口挂断;第一次拒绝降压,
- * 第二次拒绝转为低压力了解需求,均不挂断)→ 资格问询走条件式说明
+ * 对话脚本按真实策略的决策顺序组织:开场(SC1)→ 尊重明确离场、
+ * 犹豫时征询是否继续 → 资格问询走条件式说明
  * → 资金线索先接住再追问一层,金额已知才进产品介绍(规则 4/11)
  * → 默认分支按画像是否有资金线索选择 SC2 现状了解或 SC3 直接给事由。
  * 产品事实只取自种子产品卡;声称使用的卡必须在本轮检索到的已发布卡内。
@@ -85,55 +80,17 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
   private async scriptTurn(input: ManagerTurnInput): Promise<ManagerTurnOutput> {
     const { customerText, history, persona } = input;
 
-    // 拒绝累计计数(软拒绝与明确拒绝都算):累计三次才挂断,前两次先接住继续争取。
-    const priorRefusals = history.filter(
-      (turn) => turn.speaker === "customer" && ANY_REFUSAL.test(turn.text),
-    ).length;
-    if (ANY_REFUSAL.test(customerText)) {
-      const refusalCount = priorRefusals + 1;
-
-      // 累计第三次拒绝:礼貌收口挂断。收口只留一句身份+渠道,不带后续钩子(p3 规则 4)。
-      if (refusalCount >= REFUSAL_LIMIT) {
-        return {
-          reply: "好嘞,那我就真不打扰您了。我是咱们行的理财经理小李,您有需要随时找我,再见啊。",
-          recognizedSignal: "客户再次拒绝,累计已满三次",
-          currentGoal: "体面收口",
-          shouldEnd: true,
-          endReason: "客户累计三次拒绝,理财经理礼貌收口挂断",
-          outcomeSummary: "通话在客户三次拒绝后结束,未取得下一步承诺",
-        };
-      }
-
-      // 第一句就拒绝(含开口即挂):先自报身份、一句话说清来意并给退路,争取继续通话。
-      if (history.length === 0) {
-        return {
-          reply:
-            "哎,好的。那我就一句话说完:我是咱们行的理财经理小李,行里有个资金方面的活动想跟您说一声,说完您再决定,好吗?",
-          recognizedSignal: "客户第一句即拒绝",
-          currentGoal: "争取继续通话的机会",
-          usedCardId: SEED_CARD_IDS.opening,
-          cardMatchBasis: "执行开场卡动作链:一句话说清来意并给退路",
-        };
-      }
-
-      // 第一次拒绝:先接住并降低压力,不追加推销、不报产品数字。
-      if (refusalCount === 1) {
-        return {
-          reply:
-            "哎,理解理解,那不着急,您先忙您的。就是这么个事儿想着跟您说一声,您有需要随时找我就行。",
-          recognizedSignal: "客户表达拒绝(累计第1次)",
-          currentGoal: "先接住拒绝,降低压力,保留后续联系",
-        };
-      }
-
-      // 第二次拒绝:再接住,换低压力角度转为了解需求,仍不挂断。
+    if (customerIntent(customerText) === 'leave') {
       return {
-        reply:
-          "行,那活动咱就先不提了哈。我就顺口问一句,您平时闲着的钱一般都放哪儿呀?就当随便聊聊,不说产品。",
-        recognizedSignal: "客户再次拒绝(累计第2次)",
-        currentGoal: "再次降低压力,转为低压力了解需求",
+        reply: '好的，先不打扰您了。有需要可以通过银行官方渠道联系我们，再见。',
+        recognizedSignal: '客户明确离场', currentGoal: '体面收口', shouldEnd: true,
+        endReason: '客户明确离场，通话结束', outcomeSummary: '客户结束当前通话，未新增报名或联系授权',
       };
     }
+    if (customerIntent(customerText) === 'hesitate') return {
+      reply: '理解，那不着急。您愿意先了解一个条件，还是今天先到这里？',
+      recognizedSignal: '客户表达犹豫', currentGoal: '接住犹豫，征询是否继续',
+    };
 
     // 第一轮:SC1 生客开场——自报身份、征询时机、身份依据,并一句话说清具体来意。
     // 代发关系是系统里查得到的(p3:画像写明的行内信息当功课说,不问客户)。
@@ -152,23 +109,26 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
     }
 
     // 客户同意报名/加微信(或回应默认选项式预约):确认承诺并收口(SC3)。
-    const askedDefaultOption = history.some(
-      (turn) => turn.speaker === "manager" && /预约报名/.test(turn.text),
-    );
+    const lastManager = [...history].reverse().find((turn) => turn.speaker === "manager");
+    const askedDefaultOption = Boolean(lastManager && /预约报名/.test(lastManager.text));
     const agreed =
       AGREE_ENROLL.test(customerText) ||
       (askedDefaultOption && AGREE_AFTER_ASK.test(customerText.trim()));
     if (agreed) {
+      const enroll = /报|预约/.test(customerText) || (askedDefaultOption && AGREE_AFTER_ASK.test(customerText.trim()));
+      const wechat = /微信/.test(customerText);
+      const commitment = enroll && wechat ? "核对报名条件并保持微信联系" : enroll ? "核对报名条件后确认报名" : "保持微信联系";
       return {
-        reply:
-          "好嘞,那我先帮您把20万这一档报上哈,月底前来得及,资金方便的时候再确认就行。回头有合适的活动,我微信上跟您说。那先不打扰您了,再见。",
-        recognizedSignal: "客户同意预约报名并添加微信",
-        currentGoal: "确认下一步承诺,预告后续服务并由经理收口",
+        reply: enroll
+          ? `好嘞,那我先核对报名资格和资金档位,没确认的金额不替您填。${wechat ? "微信联系也按您同意的来。" : "只办您同意的这一步。"}那先不打扰您了,再见。`
+          : "好嘞,那只按您同意的微信联系来,不替您报名。那先不打扰您了,再见。",
+        recognizedSignal: `客户同意${commitment}`,
+        currentGoal: "确认已获授权的下一步并收口",
         usedCardId: SEED_CARD_IDS.closing,
         cardMatchBasis: "执行收口卡动作链:确认承诺、预告后续服务并收口",
         shouldEnd: true,
-        endReason: "取得合理下一步:客户同意代为报名活动并添加微信",
-        outcomeSummary: "客户同意经理代为报名20万档新资金活动,并同意后续微信联系;通话自然收口",
+        endReason: `取得合理下一步:客户同意${commitment}`,
+        outcomeSummary: `客户同意${commitment};未填写未确认的金额,未把授权当作已办理成功`,
       };
     }
 

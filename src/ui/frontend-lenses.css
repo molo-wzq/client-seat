@@ -1,0 +1,186 @@
+/* 界面透镜：主行动优先，证据按需读；沿用现有木质、纸牌和绿毡。 */
+:root { --ui-ink: #352f27; --ui-muted: #62584a; --ui-focus: #174d35; }
+html body { min-width: 0; }
+.app-main { font-size: 15px; }
+.app-main .hint, .app-main .hint-inline { font-size: 14px; color: var(--ui-muted); }
+.app-main .act > .hint { margin-bottom: 18px; }
+.app-main .cards .card header { align-items: start; gap: 10px; }
+.app-main .cards .card header strong { min-width: 0; white-space: normal; overflow-wrap: anywhere; font-size: 15px; line-height: 1.65; }
+.cards .card header .badge { flex: 0 0 auto; }
+.session-view { width: min(1380px, 100%); margin-inline: auto; }
+.observation-notebook { margin-top: 18px; padding: 16px; background: #faf4e8; border: 1px solid #c4b496; border-radius: 8px; }
+.observation-notebook h3 { margin-top: 0; }
+.observation-notebook fieldset { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 12px; }
+.observation-notebook label { display: block; margin: 10px 0 6px; }
+.observation-notebook textarea, .observation-notebook input:not([type=radio]):not([type=checkbox]) { width: 100%; }
+.observation-notebook input[type=radio], .observation-notebook input[type=checkbox] { width: auto; margin-right: 6px; }
+[hidden] { display: none !important; }
+.skip-link { position: fixed; top: 8px; left: 12px; z-index: 100; padding: 12px 18px; background: #fff6e8; color: #174d35; border: 2px solid #174d35; border-radius: 6px; transform: translateY(-160%); }
+.skip-link:focus { transform: none; }
+.app-main:focus { outline: none; }
+.app-main :is(button, summary, input, textarea, select):focus-visible {
+  outline: 3px solid var(--ui-focus); outline-offset: 3px; box-shadow: 0 0 0 5px #fff5d9;
+}
+.app-main :is(button, summary) { min-height: 44px; }
+.app-main :is(input:not([type='radio']):not([type='checkbox']), select) { min-height: 44px; }
+.app-main summary { display: flex; align-items: center; gap: 8px; line-height: 1.6; cursor: pointer; }
+.app-main summary::before { content: '+'; flex: 0 0 auto; font-family: Consolas, monospace; font-weight: 700; }
+.app-main details[open] > summary::before { content: '−'; }
+.app-main summary::-webkit-details-marker { display: none; }
+.app-main summary { list-style: none; }
+.app-main .tavern-rail summary::before, .app-main .tavern-rail details[open] > summary::before { content: none; }
+.app-main .play-guide { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 24px; padding: 12px 18px; margin-bottom: 20px; }
+.play-guide > div p { margin-bottom: 0; font-size: 14px; }
+.play-guide > details { max-width: 380px; }
+.play-guide > details summary { color: #24543a; font-size: 14px; font-weight: 600; }
+.play-guide > details ol { display: block; }
+.app-main .setup-board { grid-template-columns: minmax(240px, .8fr) minmax(0, 1.6fr); gap: 24px; padding: 24px; }
+.app-main .setup-board > div { grid-column: auto; }
+.setup-board .roster-card { padding-bottom: 28px; }
+.setup-board .roster-copy small { font-size: 13px; line-height: 1.65; }
+.setup-board .roster-card .badge { font-size: 12px; }
+.setup-board .roster-card.seated .badge { background: #28553b; }
+.app-main .observation-picker { min-width: 0; border: 0; padding: 14px 16px; }
+.observation-picker legend { float: left; width: 100%; margin: 0 0 10px; padding: 0; font-size: 15px; }
+.observation-picker .quick-chips { clear: both; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.observation-picker label { min-height: 44px; margin: 0; padding: 8px 10px; border: 1px solid #b8a88b; border-radius: 5px; background: #fff8e9; font-size: 14px; }
+.observation-picker label:has(input:checked) { border-color: #315c40; background: #dfebdc; box-shadow: inset 3px 0 #315c40; font-weight: 700; }
+.observation-picker p { font-size: 14px; }
+.observation-picker small { display: block; font-size: 13px; color: #635848; line-height: 1.65; }
+.connect-actions { align-items: center; gap: 12px; margin: 16px 0; }
+.connect-actions small { color: #f2e4c9; font-size: 13px; }
+.setup-deck-reference, .setup-reference { padding: 0 14px; border: 1px solid #8b9573; border-radius: 7px; color: #f2e4c9; }
+.setup-deck-reference { margin-top: 16px; }
+.setup-deck-reference > summary, .setup-reference > summary { font-size: 14px; font-weight: 600; }
+.setup-deck-reference h3 { font-size: 15px; color: #f2e4c9; }
+.setup-deck-reference .hint { color: #dfd3ba; }
+.setup-board .card-tile { font-size: 14px; }
+.setup-reference { grid-column: 1 / -1; }
+.setup-reference .logic-rail { margin: 4px 0 16px; }
+.setup-reference .law-card-rack { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.seat { scroll-margin-block: 16px; }
+.seat-preview .info-list { font-size: 14px; }
+.app-main .table-board { grid-template-columns: minmax(220px, .75fr) minmax(0, 1.7fr); align-items: start; }
+.table-board > .tavern-rail { grid-column: 1 / -1; }
+.table-board .tavern-strategies { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.table-board .hint, .table-board .hint-inline { color: #e2d6c0; }
+.table-board .step .hint, .table-board .step .hint-inline { color: #62584a; }
+.table-board .step .hint-inline { font-size: 13px; }
+.app-main .table-board .step { padding: 18px; }
+.table-board .player-board .info-list { font-size: 14px; line-height: 1.75; }
+.app-main .call-log { font-size: 15px; line-height: 1.8; min-height: 200px; max-height: 360px; }
+.call-log .turn p { font-size: 15px; }
+.call-log .turn { padding-right: 42px; }
+.app-main .call-log.empty { min-height: 100px; }
+.app-main .empty-call { min-height: 100px; }
+.call-board .step > .hint { margin-bottom: 12px; }
+.call-heading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px 12px; margin-bottom: 10px; }
+.app-main .call-heading h2 { margin: 0; }
+.app-main .call-heading .call-exit { min-height: 44px; padding: 8px 12px; color: #86392e; border: 1px solid #a46d5f; font-size: 13px; box-shadow: none; }
+.app-main .observation-reminder { padding: 10px 12px; }
+.call-log .turn-copy { width: 36px; min-height: 36px; }
+.app-main .quick-chips button { min-height: 44px; padding: 8px 12px; font-size: 14px; border-color: #9b8d76; }
+.call-board .reply-box textarea { font-size: 16px; line-height: 1.6; }
+.reply-box .turn-count { margin-right: auto; font-size: 13px; }
+.reply-box .actions { align-items: center; gap: 10px; }
+.reply-box .actions .ghost { margin-left: 0; font-size: 13px; box-shadow: none; }
+.app-main :is(.law-card-cue, .law-card-open, .law-card-number, .table-note-label, .table-note-open, .tavern-rail-caption, .tavern-rail-foot) { font-size: 12px; }
+.app-main :is(.law-card-detail, .table-note-body, .strategy-card-purpose, .strategy-card-effect p, .strategy-card-details ul, .strategy-card-details ol) { font-size: 14px; }
+.app-main :is(.strategy-card-top, .strategy-card-effect > span, .strategy-card-details div > span, .strategy-card-details summary, .strategy-card-source) { font-size: 12px; }
+.strategy-card-details summary { padding-block: 10px; }
+.tavern-rail .card-tile { font-size: 14px; }
+.tavern-rail .current-goal { font-size: 14px; }
+.app-main .replay-comparison, .app-main .observation-review { font-size: 15px; }
+.result-act .result-heading { overflow-x: clip; padding-right: 10px; }
+.comparison-rounds { padding-left: 0; list-style: none; }
+.comparison-rounds > li { margin: 18px 0; }
+.comparison-pair section { padding: 16px; }
+.comparison-pair blockquote { line-height: 1.8; }
+.review-turn-details > summary { flex-wrap: wrap; padding: 10px 12px; background: #eee2cc; border-radius: 5px; color: #254a34; font-size: 15px; }
+.review-turn-details > summary small { color: #6c5235; font-size: 13px; }
+.strategy-path > li { padding: 12px; }
+.app-main .replay-chain dd ul { margin: 0; padding-left: 20px; list-style: disc; }
+.app-main .strategy-path .replay-chain dd li { margin: 6px 0; padding: 0; border: 0; border-radius: 0; background: none; box-shadow: none; }
+.strategy-path > li:focus, .result-log > li:focus { outline: 3px solid #315c40; outline-offset: 4px; }
+.review-overview, .review-transcript { margin: 18px 0; border: 1px solid #c4b496; padding: 0 14px; border-radius: 7px; }
+.review-overview > summary, .review-transcript > summary { font-weight: 600; }
+.result-summary { margin-top: 8px; }
+.review-transcript .result-log { margin-top: 8px; }
+.result-act .review-focus { margin-top: 18px; }
+.result-act .review-focus p { font-size: 14px; }
+.result-act .review-counts { font-size: 13px; }
+.rail-tools { min-width: 0; }
+.rail-tools > summary { display: none; }
+.rail-tools nav { display: grid; gap: 8px; }
+.rail-tools .sfx-toggle { width: 100%; margin-top: 18px; }
+.history-toolbar { display: grid; grid-template-columns: minmax(0, 1fr) 180px; gap: 12px; margin: 18px 0 8px; }
+.history-toolbar label { display: grid; gap: 6px; font-size: 14px; }
+.history-toolbar input, .history-toolbar select { margin: 0; width: 100%; min-height: 44px; }
+.app-main .history-list { display: grid; gap: 10px; margin-top: 14px; padding: 0; list-style: none; }
+.history-list .catalog-item { display: flex; align-items: start; justify-content: space-between; gap: 16px; width: 100%; min-height: 88px; padding: 14px 16px !important; text-align: left; }
+.history-list .catalog-item::before { content: none !important; }
+.history-title { display: grid; gap: 7px; min-width: 0; }
+.history-title strong { font-size: 15px; }
+.history-title > span { font-size: 13px; font-weight: 400; color: #62584a; line-height: 1.65; }
+.history-title .history-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70ch; }
+.history-list .badge { flex: 0 0 auto; font-size: 12px; }
+@media (min-width: 1280px) {
+  .app-main .table-board { grid-template-columns: minmax(190px, .65fr) minmax(320px, 1.65fr) minmax(240px, .85fr); }
+  .table-board > .tavern-rail { grid-column: auto; }
+  .table-board .tavern-strategies { grid-template-columns: 1fr; }
+  .table-board > .strategy-board { position: sticky; top: 18px; max-height: calc(100svh - 36px); overflow: auto; }
+}
+@media (max-width: 1100px) and (min-width: 821px) {
+  .app-main .setup-board { grid-template-columns: minmax(190px, .75fr) minmax(0, 1.3fr); gap: 16px; padding: 16px; }
+  .app-main .table-board { grid-template-columns: minmax(170px, .65fr) minmax(0, 1.35fr); gap: 16px; }
+  .app-main .play-guide { grid-template-columns: 1fr; gap: 0; }
+}
+@media (max-width: 820px) {
+  .left-rail { gap: 8px; padding: 12px; border-bottom-width: 3px; }
+  .rail-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rail-tools > summary { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 9px 12px; min-height: 44px; border: 1px solid #b89e73; border-radius: 5px; color: #f2e3cc; font-size: 14px; list-style: none; cursor: pointer; }
+  .rail-tools > summary::after { content: '+'; }
+  .rail-tools[open] > summary::after { content: '−'; }
+  .rail-tools > summary::-webkit-details-marker { display: none; }
+  .rail-tools nav { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; padding-top: 8px; }
+  .rail-tools .sfx-toggle { margin: 0; }
+  .rail-item { min-height: 44px; font-size: 14px; }
+  .quick-start { font-size: 14px; }
+  .app-shell[data-view='table'] .quick-start { display: none; }
+  .app-main { padding: 18px 12px 36px; }
+  .app-main .play-guide { display: block; padding: 10px 14px; margin-bottom: 16px; }
+  .play-guide details summary { min-height: 40px; font-size: 13px; }
+  .app-main .setup-board, .app-main .table-board { grid-template-columns: minmax(0, 1fr); gap: 16px; padding: 14px; }
+  .setup-board > .setup-reference { grid-column: auto; }
+  .setup-reference .law-card-rack { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .app-main .setup-board .roster-card { min-height: 88px; }
+  .seat-preview .info-list { font-size: 14px; }
+  .seated-client { gap: 10px; }
+  .seated-client .seat-stamp, .seated-client .seat-code { display: none; }
+  .seated-copy h3 { font-size: 16px; line-height: 1.5; }
+  .connect-actions { display: grid; }
+  .connect-actions button { width: 100%; }
+  .table-board > .tavern-rail { grid-column: auto; }
+  .table-board .tavern-strategies { grid-template-columns: 1fr; }
+  .app-main .table-board .step { padding: 12px; }
+  .app-main .call-log { min-height: 160px; max-height: 35svh; }
+  .call-log .turn-copy { width: 44px; min-height: 44px; }
+  .call-log .turn { padding-right: 44px; }
+  .observation-reminder { padding: 10px; }
+  .observation-reminder > span { display: none; }
+  .comparison-rounds { padding-left: 0; }
+  .comparison-pair section { padding: 12px; }
+  .app-main .observation-review, .app-main .replay-comparison { padding: 12px; }
+  .app-main .strategy-path > li { padding: 8px; }
+  .app-main .replay-chain { grid-template-columns: minmax(0, 1fr); }
+  .history-toolbar { grid-template-columns: minmax(0, 1fr); }
+  .history-title .history-preview { white-space: normal; }
+}
+@media (max-width: 380px) {
+  .observation-picker .quick-chips { grid-template-columns: minmax(0, 1fr); }
+  .reply-box .actions .ghost { width: 100%; order: 3; }
+  .history-list .catalog-item { flex-direction: column; gap: 8px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .skip-link, .app-main *, .left-rail * { scroll-behavior: auto; }
+}

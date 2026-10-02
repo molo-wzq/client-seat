@@ -4,6 +4,8 @@ import { App } from "./App";
 import { createHttpProductCore } from "./product/http-product-api";
 import { initPointerSfx } from "./ui/game-feel";
 import "./ui/ui.css";
+import "./ui/tavern-rail.css";
+import "./ui/game-design.css";
 
 // 全局按钮按压声(捕获阶段一次绑定,AudioContext 等首次手势再创建)。
 initPointerSfx();

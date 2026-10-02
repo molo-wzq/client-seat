@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { Conversation, ConversationResult, Material, Persona } from "./domain/types";
+import type { Conversation, ConversationResult, ConversationStartOptions, Material, Persona } from "./domain/types";
 import type { ProductCore } from "./domain/product-core";
 import { BusyHint } from "./ui/BusyHint";
 import { CardsView, HistoryView, MaterialsView } from "./ui/CatalogViews";
@@ -19,9 +19,16 @@ export function App({ api }: { api: ProductCore }) {
   const [result, setResult] = useState<ConversationResult | null>(null);
   const [quickBusy, setQuickBusy] = useState(false);
   const [connectBusy, setConnectBusy] = useState(false);
+  const [historyBusy, setHistoryBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [catalogBusy, setCatalogBusy] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
+  const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    mainRef.current?.scrollIntoView?.({ block: "start" });
+    if (!catalogBusy) mainRef.current?.focus({ preventScroll: true });
+  }, [view, conversation?.id, catalogBusy]);
 
   async function refreshCatalog() {
     const [nextPersonas, nextMaterials, nextConversations] = await Promise.all([
@@ -63,8 +70,9 @@ export function App({ api }: { api: ProductCore }) {
   const ongoingCall = conversations.find((c) => c.status === "ongoing") ?? null;
   // 快速开始/接通/找回进行中通话都会进入对局,共用一个互斥位:
   // refreshCatalog 需数百毫秒,期间交错点击会让两次 enterTable 按完成顺序互相覆盖。
-  const entryBusy = quickBusy || connectBusy;
+  const entryBusy = quickBusy || connectBusy || historyBusy;
   const enteringRef = useRef(false);
+  const entryRequestRef = useRef(false);
 
   async function resumeOngoing() {
     if (ongoingCall && !entryBusy) await openHistory(ongoingCall);
@@ -86,6 +94,8 @@ export function App({ api }: { api: ProductCore }) {
   }
 
   async function quickStart() {
+    if (entryRequestRef.current) return;
+    entryRequestRef.current = true;
     setQuickBusy(true);
     setError(null);
     playSfx("dial");
@@ -95,20 +105,32 @@ export function App({ api }: { api: ProductCore }) {
       setError((e as Error).message);
     } finally {
       setQuickBusy(false);
+      entryRequestRef.current = false;
     }
   }
 
-  async function connect(personaId: string) {
+  async function connect(personaId: string, options?: ConversationStartOptions) {
+    if (entryRequestRef.current) return;
+    entryRequestRef.current = true;
     setConnectBusy(true);
     setError(null);
     playSfx("dial");
     try {
-      await enterTable(await api.startConversation(personaId));
+      await enterTable(await api.startConversation(personaId, options));
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setConnectBusy(false);
+      entryRequestRef.current = false;
     }
+  }
+
+  async function branch(turnNumber: number, text: string) {
+    if (!result || entryRequestRef.current) return;
+    entryRequestRef.current = true;
+    setConnectBusy(true);
+    try { await enterTable(await api.branchConversation(result.conversationId, turnNumber, text)); }
+    finally { setConnectBusy(false); entryRequestRef.current = false; }
   }
 
   function restart() {
@@ -118,17 +140,25 @@ export function App({ api }: { api: ProductCore }) {
   }
 
   async function openHistory(item: Conversation) {
+    if (entryRequestRef.current) return;
+    entryRequestRef.current = true;
+    setHistoryBusy(true);
     setError(null);
     try {
-      if (item.status === "ongoing") {
-        await enterTable(item);
+      const fresh = await api.getConversation(item.id);
+      if (fresh.status === "ongoing") {
+        await enterTable(fresh);
         return;
       }
-      setConversation(item);
-      setResult(await api.getResult(item.id));
+      const nextResult = await api.getResult(fresh.id);
+      setConversation(fresh);
+      setResult(nextResult);
       setView("postgame");
     } catch (e) {
       setError((e as Error).message);
+    } finally {
+      setHistoryBusy(false);
+      entryRequestRef.current = false;
     }
   }
 
@@ -137,7 +167,8 @@ export function App({ api }: { api: ProductCore }) {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-view={view}>
+      <a className="skip-link" href="#main-content">跳到主要内容</a>
       <LeftRail
         view={view}
         materialCount={materials.length}
@@ -145,14 +176,19 @@ export function App({ api }: { api: ProductCore }) {
         historyCount={conversations.length}
         sessionStatus={conversation?.status ?? null}
         hasOngoing={Boolean(ongoingCall)}
-        onNavigate={setView}
+        onNavigate={(nextView) => {
+          if (nextView === "postgame" && !result && conversation?.status === "ended") {
+            void openHistory(conversation);
+          } else setView(nextView);
+        }}
         onResumeOngoing={() => void resumeOngoing()}
         onQuickStart={() => void quickStart()}
         quickBusy={entryBusy}
       />
-      <main className="app-main">
+      <main className="app-main" id="main-content" tabIndex={-1} ref={mainRef}>
         {quickBusy && <BusyHint text="正在准备对话…" />}
         {connectBusy && <BusyHint text="正在接通…" />}
+        {historyBusy && <BusyHint text="正在加载通话…" />}
         {error && (
           <p role="alert" className="error">
             {error}
@@ -177,28 +213,43 @@ export function App({ api }: { api: ProductCore }) {
                 api={api}
                 personas={personas}
                 publishedCards={publishedCards}
-                onConnect={(personaId) => void connect(personaId)}
+                onConnect={(personaId, focus) => void connect(personaId, { observationFocus: focus })}
                 onCatalogChange={() => void refreshCatalog()}
                 connectBusy={entryBusy}
               />
             )}
-            {view === "table" && conversation && (
+            {conversation && (!result || view === "table") && (
+              <div className="session-view" hidden={view !== "table"}>
               <TableAct
+                key={conversation.id}
                 api={api}
                 conversationId={conversation.id}
                 conversation={conversation}
                 persona={seatedPersona}
                 publishedCards={publishedCards}
-                onConversationChange={setConversation}
+                onConversationChange={(next) => {
+                  const accept = (current: Conversation) => next.revision === undefined || current.revision === undefined || next.revision >= current.revision;
+                  setConversation((current) => current?.id === next.id && accept(current) ? next : current);
+                  setConversations((current) => current.map((item) => item.id === next.id && accept(item) ? next : item));
+                }}
                 onFinished={(finished) => {
                   setResult(finished);
                   setConversation((current) => (current ? { ...current, status: "ended" } : current));
-                  setView("postgame");
-                  void refreshCatalog();
+                  setView((current) => current === "table" ? "postgame" : current);
+                  void refreshCatalog().catch(() => undefined);
                 }}
               />
+              </div>
             )}
-            {view === "postgame" && result && <ResultStep result={result} onRestart={restart} />}
+            {view === "postgame" && result && <ResultStep
+              key={result.conversationId}
+              result={result}
+              api={api}
+              onRestart={restart}
+              onReplay={seatedPersona ? (focus) => void connect(seatedPersona.id, { replayOfId: result.conversationId, observationFocus: focus }) : undefined}
+              replayBusy={entryBusy}
+              onBranch={(turnNumber, text) => branch(turnNumber, text)}
+            />}
             {view === "materials" && (
               <MaterialsView api={api} materials={materials} onPublished={() => void refreshCatalog()} />
             )}

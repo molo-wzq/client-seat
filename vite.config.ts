@@ -4,6 +4,10 @@ import { defineConfig } from "vitest/config";
 export default defineConfig({
   plugins: [react()],
   server: {
+    // 本机 localhost 解析 ::1 优先,Vite 8 会只绑 [::1] 而不监听 127.0.0.1;
+    // 先试 IPv4 的浏览器/工具会撞上一个 2 秒才失败的死端口。host: true 让 Node
+    // 绑 '::' 双栈,::1 与 127.0.0.1 都能直连。
+    host: true,
     proxy: {
       "/api": "http://127.0.0.1:5175",
     },

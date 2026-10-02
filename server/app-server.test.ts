@@ -5,6 +5,7 @@ import { FakeModelAdapter } from "../src/adapters/fake-model-adapter";
 import { createProductCore } from "../src/domain/product-core";
 import { InMemoryStorage } from "../src/product/in-process-product-api";
 import { createRequestListener } from "./app-server";
+import { createHttpProductCore } from "../src/product/http-product-api";
 
 /** http 层契约(审计 C5):错误码由领域错误类型驱动,浏览器与进程内看到同一语义。 */
 
@@ -35,6 +36,32 @@ async function request(apiPath: string, method = "GET", body?: unknown) {
 }
 
 describe("http 契约:成功与业务错误码", () => {
+  it('浏览器接口持久保存判断并创建可靠关键轮分支，非法输入返回400', async () => {
+    const api = createHttpProductCore(base);
+    const call = await api.quickStart();
+    await api.sendCustomerTurn(call.id, '喂');
+    const note = { managerTurnNumber: 2, judgement: 'uncertain' as const, evidence: '未说明条件', nextExperiment: '换个条件', revealed: true, marked: true };
+    await api.saveObservation(call.id, note);
+    expect((await api.getConversation(call.id)).observations).toEqual([note]);
+    await api.finishConversation(call.id);
+    const branch = await api.branchConversation(call.id, 1, '我想了解条件');
+    expect(branch.branch?.originalCustomerText).toBe('喂');
+    expect(branch.turns[0].text).toBe('我想了解条件');
+    expect((await api.getConversation(call.id)).turns[0].text).toBe('喂');
+    expect((await request(`/api/conversations/${call.id}/observations`, 'PUT', { ...note, managerTurnNumber: 1 })).status).toBe(400);
+    expect((await request(`/api/conversations/${call.id}/branch`, 'POST', { customerTurnNumber: 2, replacementText: '换句' })).status).toBe(400);
+  });
+  it("浏览器接口保存观察点、原局关联并拒绝非法观察点", async () => {
+    const api = createHttpProductCore(base);
+    const first = await api.quickStart();
+    await api.finishConversation(first.id);
+    const replay = await api.startConversation(first.personaId, { observationFocus: "next-step", replayOfId: first.id });
+    expect(await api.getConversation(replay.id)).toMatchObject({ observationFocus: "next-step", replayOfId: first.id });
+    await api.finishConversation(replay.id);
+    expect(await api.getResult(replay.id)).toMatchObject({ observationFocus: "next-step", replayOfId: first.id });
+    const invalid = await request("/api/conversations", "POST", { personaId: first.personaId, observationFocus: "score" });
+    expect(invalid.status).toBe(400);
+  });
   it("合法转写分析 → 200 且返回素材", async () => {
     const { status, json } = await request("/api/materials/analyze", "POST", {
       transcript: "T01 经理:您好\nT02 客户:喂",
@@ -96,6 +123,8 @@ describe("http 契约:成功与业务错误码", () => {
     expect(response.status).toBe(413);
     const json = (await response.json().catch(() => null)) as { error?: string } | null;
     expect(json?.error).toContain("请求体过大");
+    // 超限响应后仍可正常请求,不能用提前断连接代替可读错误。
+    expect((await request("/api/personas")).status).toBe(200);
   });
 
   it("请求体为合法 JSON 但顶层非对象 → 400", async () => {

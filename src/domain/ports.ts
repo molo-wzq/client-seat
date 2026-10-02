@@ -52,6 +52,8 @@ export interface ManagerTurnOutput {
   cardMatchBasis?: string;
   /** 裁判按通话逻辑(四条钱规律)的一句归因候选;指不到具体规律时缺省。 */
   logicHint?: string;
+  /** 事后事实核对候选,不代表已验证错误或已通过核验。 */
+  factCheckNotes?: string[];
   /** 达成合理下一步或客户明确结束时由模型主动收口。 */
   shouldEnd?: boolean;
   endReason?: string;

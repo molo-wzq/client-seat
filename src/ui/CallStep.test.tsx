@@ -181,7 +181,7 @@ describe("流式话术上屏(票 29)", () => {
     expect(await screen.findByText("您好,我是咱们银行的客户经理。")).toBeInTheDocument();
     const log = screen.getByRole("list");
     expect(within(log).queryByText(/“/)).not.toBeInTheDocument();
-    expect(screen.getByRole("status")).toHaveTextContent("正在核对本轮");
+    expect(screen.getByRole("status")).toHaveTextContent("理财经理正在回复，随后核对本轮");
 
     pending.resolve({
       ...ongoingConversation(),
@@ -198,7 +198,7 @@ describe("流式话术上屏(票 29)", () => {
 });
 
 describe("快捷回复与消息操作(票 31)", () => {
-  it("点击快捷回复 chip 直接发送该句,经理回复上屏", async () => {
+  it("快捷回复先放入草稿，确认发送后经理回复上屏", async () => {
     const sendImpl = async () => ({
       ...ongoingConversation(),
       turns: [
@@ -211,6 +211,9 @@ describe("快捷回复与消息操作(票 31)", () => {
     // 空会话 → 开场 chips
     const chip = await screen.findByRole("button", { name: "喂" });
     await user.click(chip);
+    expect(screen.getByLabelText('客户回复')).toHaveValue('喂');
+    expect(screen.queryByText(/我是咱们银行的客户经理/)).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '发送' }));
     expect(await screen.findByText(/我是咱们银行的客户经理/)).toBeInTheDocument();
   });
 
@@ -226,6 +229,7 @@ describe("快捷回复与消息操作(票 31)", () => {
     render(<CallStep api={stubApi(sendImpl)} conversationId="conv-1" onFinished={() => {}} />);
     const chip = await screen.findByRole("button", { name: "喂" });
     await user.click(chip);
+    await user.click(screen.getByRole('button', { name: '发送' }));
     const copyBtn = await screen.findByRole("button", { name: /复制第2轮/ });
     await user.click(copyBtn);
     expect(copyBtn).toHaveTextContent("已复制");
@@ -248,15 +252,15 @@ describe("快捷回复台词跟画像走(p3 人生阶段用词)", () => {
         : [],
     }) as Conversation;
 
-  it("年长画像的接通/探询台词不出现股市,说的是定期到期", () => {
+  it("年长画像按已知关系开场,探询快捷回复不虚构资金事实", () => {
     expect(quickReplies(conversationWith(), [ELDERLY])).toEqual([
       "喂,是小李啊",
       "喂,哪位?",
       "你们谁啊?",
     ]);
-    expect(quickReplies(conversationWith("行,那我想先了解一下您平时钱怎么安排"), [ELDERLY])).toContain(
-      "钱都存着定期呢",
-    );
+    const replies = quickReplies(conversationWith("行,那我想先了解一下您平时钱怎么安排"), [ELDERLY]);
+    expect(replies).toContain("你问的是哪笔钱?");
+    expect(replies.join(" ")).not.toMatch(/股市|存着定期|有笔存款/);
   });
 
   it("报产品后的年长台词:能触发软拒绝计数与报名承诺分支", () => {

@@ -87,7 +87,7 @@ describe("策略驱动的自适应对话", () => {
     expect(fresh.status).toBe("ongoing");
   });
 
-  it("客户拒绝累计三次才挂断:前两次先接住继续,第三次礼貌收口", async () => {
+  it("软犹豫后仍可了解，明确离场立即收口", async () => {
     const { api } = await setup();
     const { conversation, say } = await publishedConversation(api);
 
@@ -103,38 +103,34 @@ describe("策略驱动的自适应对话", () => {
     const third = await say("不用了,别打了");
     const fresh = await api.getConversation(conversation.id);
     expect(fresh.status).toBe("ended");
-    expect(fresh.endReason).toContain("三次拒绝");
+    expect(fresh.endReason).toContain("明确离场");
     expect(third.turns.at(-1)!.text).toMatch(/不打扰|再见/);
   });
 
-  it("明确拒绝同样计入累计:未满三次不结束通话", async () => {
+  it("第一次明确离场立即结束，不再追问客户", async () => {
     const { api } = await setup();
     const { say } = await publishedConversation(api);
 
     await say("喂");
     const first = await say("好了好了,不用了,拜拜");
-    expect(first.status).toBe("ongoing");
+    expect(first.status).toBe("ended");
     expect(first.turns.at(-1)!.text).not.toMatch(/立减金|报名/);
 
-    const second = await say("别打了");
-    expect(second.status).toBe("ongoing");
-
-    const third = await say("不用了,挂了");
-    expect(third.status).toBe("ended");
-    expect(third.endReason).toContain("三次拒绝");
-    expect(third.turns.at(-1)!.text).toMatch(/不打扰|再见/);
+    await expect(say("别打了")).rejects.toThrow('已结束');
+    expect(first.endReason).toContain("明确离场");
+    expect(first.turns.at(-1)!.text).toMatch(/不打扰|再见/);
   });
 
-  it("客户第一句即拒绝时不立即挂断,先争取继续通话", async () => {
+  it("客户第一句明确拒绝也尊重离場，不争取继续推销", async () => {
     const { api } = await setup();
     const { say } = await publishedConversation(api);
 
     const after = await say("不用了,别打了");
-    expect(after.status).toBe("ongoing");
+    expect(after.status).toBe("ended");
     const reply = after.turns.at(-1)!.text;
     // 争取继续:一句话说清来意并给退路,不做完整开场推销,不报产品权益。
-    expect(reply).toMatch(/一句话|半分钟/);
-    expect(reply).toMatch(/好吗|再说/);
+    expect(reply).toMatch(/不打扰|再见/);
+    expect(reply).not.toMatch(/好吗|再说/);
     expect(reply).not.toMatch(/立减金|报名|方便简单聊两句/);
   });
 
@@ -326,7 +322,7 @@ describe("策略驱动的自适应对话", () => {
     const ended = await drive(true);
     expect(ended.status).toBe("ended");
     expect(ended.endReason).toContain("告别");
-    expect(ended.outcomeSummary).toBe("未知");
+    expect(ended.outcomeSummary).toContain('未记录已确认的下一步');
     // 兜底只结束通话状态,不伪造用卡。
     expect(ended.turns.at(-1)?.usedCardId).toBeUndefined();
 
@@ -361,10 +357,8 @@ describe("重新生成经理回复(票 31)", () => {
   it("通话已结束后不可重摇", async () => {
     const { api } = await setup();
     const { conversation, say } = await publishedConversation(api);
-    // 累计三次拒绝才结束通话。
+    // 明确拒绝后立即结束。
     await say("不用了,谢谢");
-    await say("别打了");
-    await say("不用了,挂了");
     await expect(api.regenerateManagerTurn(conversation.id)).rejects.toThrow(/已结束/);
   });
 });

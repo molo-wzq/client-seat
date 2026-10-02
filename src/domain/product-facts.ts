@@ -86,7 +86,7 @@ export function cardFactNumbers(card: VirtualProductCard): Set<string> {
 
 /**
  * 经理话术里的数字是否全部有出处:
- * 白名单 = 产品卡事实 ∪ 本局客户口述过的数字 ∪ 此前经理轮已报过的数字(说过的不重复记账)。
+ * 白名单 = 产品卡事实 ∪ 本局客户口述过的数字。经理先前说过不等于有依据。
  * history 含本轮客户发言在内的此前全部轮次。
  */
 export function hasOutOfCardNumber(
@@ -96,9 +96,32 @@ export function hasOutOfCardNumber(
 ): boolean {
   const whitelist = cardFactNumbers(card);
   for (const turn of history) {
+    if (turn.speaker !== 'customer') continue;
     for (const n of extractCardNumbers(turn.text)) whitelist.add(numberKey(n));
   }
   return extractCardNumbers(managerReply).some((n) => !whitelist.has(numberKey(n)));
+}
+
+/** 仅核对明确的档位—权益断言；问题、引述、否定和复杂句保留人工核对。 */
+export function factRelationNotes(reply: string, card: VirtualProductCard): string[] {
+  const notes: string[] = [];
+  const tiers = new Map(card.activity.tiers.map((tier) => [extractCardNumbers(tier.amount)[0]?.canonical, extractCardNumbers(tier.reward)[0]?.canonical]));
+  const unquoted = reply.replace(/“[^”]*”|‘[^’]*’|「[^」]*」|"[^"]*"/g, '');
+  for (const clause of unquoted.split(/[。!！;；\n]/)) {
+    if (/[?？]|不是|并非|不(?:能|应|是)|错误|假如|如果您说/.test(clause)) continue;
+    for (const reward of clause.matchAll(/([0-9]+(?:\.[0-9]+)?|[一二两三四五六七八九十百千]+)\s*(元|块)/g)) {
+      const before = clause.slice(0, reward.index);
+      const amount = [...before.matchAll(/([0-9]+(?:\.[0-9]+)?|[一二两三四五六七八九十百千]+)\s*万/g)].at(-1);
+      if (!amount || before.length - amount.index! > 36 || !/给|拿|领|对应|立减金|权益/.test(before.slice(amount.index! + amount[0].length))) continue;
+      const amountValue = extractCardNumbers(amount[0])[0]?.canonical;
+      const rewardValue = extractCardNumbers(reward[0])[0]?.canonical;
+      const expected = tiers.get(amountValue);
+      if (expected !== undefined && rewardValue !== undefined && expected !== rewardValue) {
+        notes.push(`档位权益对应待核对：话术将${amount[0]}与${reward[0]}相连，本局该档权益为${expected}元。`);
+      }
+    }
+  }
+  return [...new Set(notes)];
 }
 
 /** 供 UI 复用的量词正则说明(卡外数字徽标的提示文案)。 */

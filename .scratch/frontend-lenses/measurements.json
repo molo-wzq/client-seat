@@ -1,0 +1,242 @@
+[
+  {
+    "clientWidth": 305,
+    "page": "setup",
+    "scrollWidth": 305,
+    "width": 320
+  },
+  {
+    "clientWidth": 375,
+    "page": "setup",
+    "scrollWidth": 375,
+    "width": 390
+  },
+  {
+    "clientWidth": 805,
+    "page": "setup",
+    "scrollWidth": 805,
+    "width": 820
+  },
+  {
+    "clientWidth": 1009,
+    "page": "setup",
+    "scrollWidth": 1009,
+    "width": 1024
+  },
+  {
+    "clientWidth": 1425,
+    "page": "setup",
+    "scrollWidth": 1425,
+    "width": 1440
+  },
+  {
+    "clientWidth": 305,
+    "page": "table",
+    "scrollWidth": 305,
+    "width": 320
+  },
+  {
+    "clientWidth": 375,
+    "page": "table",
+    "scrollWidth": 375,
+    "width": 390
+  },
+  {
+    "clientWidth": 805,
+    "page": "table",
+    "scrollWidth": 805,
+    "width": 820
+  },
+  {
+    "clientWidth": 1009,
+    "page": "table",
+    "scrollWidth": 1009,
+    "width": 1024
+  },
+  {
+    "clientWidth": 1425,
+    "page": "table",
+    "scrollWidth": 1425,
+    "width": 1440
+  },
+  {
+    "clientWidth": 305,
+    "page": "cards",
+    "scrollWidth": 305,
+    "width": 320
+  },
+  {
+    "clientWidth": 375,
+    "page": "cards",
+    "scrollWidth": 375,
+    "width": 390
+  },
+  {
+    "clientWidth": 805,
+    "page": "cards",
+    "scrollWidth": 805,
+    "width": 820
+  },
+  {
+    "clientWidth": 1024,
+    "page": "cards",
+    "scrollWidth": 1024,
+    "width": 1024
+  },
+  {
+    "clientWidth": 1440,
+    "page": "cards",
+    "scrollWidth": 1440,
+    "width": 1440
+  },
+  {
+    "clientWidth": 305,
+    "page": "materials",
+    "scrollWidth": 305,
+    "width": 320
+  },
+  {
+    "clientWidth": 375,
+    "page": "materials",
+    "scrollWidth": 375,
+    "width": 390
+  },
+  {
+    "clientWidth": 805,
+    "page": "materials",
+    "scrollWidth": 805,
+    "width": 820
+  },
+  {
+    "clientWidth": 1009,
+    "page": "materials",
+    "scrollWidth": 1009,
+    "width": 1024
+  },
+  {
+    "clientWidth": 1425,
+    "page": "materials",
+    "scrollWidth": 1425,
+    "width": 1440
+  },
+  {
+    "clientWidth": 305,
+    "page": "material-expanded",
+    "scrollWidth": 305,
+    "width": 320
+  },
+  {
+    "clientWidth": 375,
+    "page": "material-expanded",
+    "scrollWidth": 375,
+    "width": 390
+  },
+  {
+    "clientWidth": 805,
+    "page": "material-expanded",
+    "scrollWidth": 805,
+    "width": 820
+  },
+  {
+    "clientWidth": 1009,
+    "page": "material-expanded",
+    "scrollWidth": 1009,
+    "width": 1024
+  },
+  {
+    "clientWidth": 1425,
+    "page": "material-expanded",
+    "scrollWidth": 1425,
+    "width": 1440
+  },
+  {
+    "clientWidth": 305,
+    "page": "history",
+    "scrollWidth": 305,
+    "width": 320
+  },
+  {
+    "clientWidth": 375,
+    "page": "history",
+    "scrollWidth": 375,
+    "width": 390
+  },
+  {
+    "clientWidth": 805,
+    "page": "history",
+    "scrollWidth": 805,
+    "width": 820
+  },
+  {
+    "clientWidth": 1009,
+    "page": "history",
+    "scrollWidth": 1009,
+    "width": 1024
+  },
+  {
+    "clientWidth": 1425,
+    "page": "history",
+    "scrollWidth": 1425,
+    "width": 1440
+  },
+  {
+    "clientWidth": 305,
+    "page": "review",
+    "scrollWidth": 305,
+    "width": 320
+  },
+  {
+    "clientWidth": 375,
+    "page": "review",
+    "scrollWidth": 375,
+    "width": 390
+  },
+  {
+    "clientWidth": 805,
+    "page": "review",
+    "scrollWidth": 805,
+    "width": 820
+  },
+  {
+    "clientWidth": 1009,
+    "page": "review",
+    "scrollWidth": 1009,
+    "width": 1024
+  },
+  {
+    "clientWidth": 1425,
+    "page": "review",
+    "scrollWidth": 1425,
+    "width": 1440
+  },
+  {
+    "clientWidth": 375,
+    "page": "review-expanded",
+    "scrollWidth": 375,
+    "width": 390
+  },
+  {
+    "clientWidth": 375,
+    "page": "review-expanded",
+    "scrollWidth": 375,
+    "width": 390
+  },
+  {
+    "clientWidth": 375,
+    "page": "review-expanded",
+    "scrollWidth": 375,
+    "width": 390
+  },
+  {
+    "clientWidth": 375,
+    "page": "review-expanded",
+    "scrollWidth": 375,
+    "width": 390
+  },
+  {
+    "clientWidth": 375,
+    "page": "review-expanded",
+    "scrollWidth": 375,
+    "width": 390
+  }
+]

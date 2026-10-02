@@ -24,6 +24,22 @@ function promptFor(visible: string[]): string {
 }
 
 describe("经理系统提示词:规则 6(原 9)客户属性防护", () => {
+  it("不把报名时间扩写为流动性保证,客户授权只覆盖其确认的动作", () => {
+    const prompt = promptFor(P03_VISIBLE);
+    expect(prompt).toContain("不等于资金没有持有期");
+    expect(prompt).toContain("活动资格尚未确认时不能省略面向对象");
+    expect(prompt).toContain("养老金不等于已确认的代发工资关系");
+    expect(prompt).toContain("只同意微信不能顺带报名");
+    expect(prompt).toContain("不把问题、犹豫、引用或一句「嗯」当作报名授权");
+    expect(prompt).toContain("报名截止只约束报名");
+    expect(prompt).toContain("不得编造「先占名额」");
+    expect(prompt).toContain("活动面向对象:代发工资客户");
+    expect(prompt).toContain("产品面向三方存管客户,不代表三方存管客户就能参加这项活动");
+    expect(prompt).toContain("有资金到账不等于符合活动资格");
+    expect(prompt).not.toContain("如告知客户可参加的资金活动");
+    expect(prompt).toContain("活动资金的持有、退出条件未提供");
+    expect(prompt).toContain("不能仅凭产品 T+1 替活动作答");
+  });
   it("可见信息无代发时,提示词含带反例的明确禁令", () => {
     const prompt = promptFor(P03_VISIBLE);
     expect(prompt).toContain("不凭空假设客户属性");
@@ -58,9 +74,9 @@ describe("经理系统提示词:规则 6(原 9)客户属性防护", () => {
 
   it("规则 4(原 6)收口渠道句:一句为限、无后续钩子;经理身份由角色区固定", () => {
     const prompt = promptFor(P03_VISIBLE);
-    expect(prompt).toMatch(/礼貌收口[\s\S]{0,80}联系渠道/);
-    expect(prompt).toContain("一句为限");
-    expect(prompt).toContain("过阵子再联系");
+    expect(prompt).toContain('立即礼貌收口挂断');
+    expect(prompt).toContain("至多留一句官方服务渠道");
+    expect(prompt).toContain("不得带未来回拨或营销钩子");
     // p3:身份不再靠"不编造姓名"约束,而是角色区给定固定身份。
     expect(prompt).toContain("理财经理小李");
     expect(prompt).toContain("不另起名字");
@@ -132,26 +148,28 @@ describe("KYC 探询质量(票 30)", () => {
   });
 });
 
-describe("拒绝计数与挂断门槛(客户拒绝三次再挂电话)", () => {
-  it("规则 4(原 5/6 合一):软拒绝与明确拒绝累计计数,前两次接住继续、不收口", () => {
+describe("当前意图与离场边界", () => {
+  it("软犹豫征询继续，重新开放不受历史次数惩罚", () => {
     const prompt = promptFor(P03_VISIBLE);
-    expect(prompt).toContain("软拒绝(再考虑/暂时不用/到时候看)与明确拒绝(不用了/别打了/要挂了)都算");
-    expect(prompt).toContain("累计第一次、第二次拒绝");
-    expect(prompt).toContain("不得收口挂断");
+    expect(prompt).toContain('软犹豫(再考虑/暂时不用/到时候看)先接住');
+    expect(prompt).toContain('客户重新愿意了解时按当前意图继续');
+    expect(prompt).not.toContain('累计第一次、第二次拒绝');
     // 策略卡停止条件与三次门槛冲突时,以硬性规则为准。
-    expect(prompt).toContain("以本条为准");
+    expect(prompt).toContain("以当前客户意愿为准");
   });
 
-  it("规则 4(原 6):累计第三次拒绝才礼貌收口挂断", () => {
+  it("明确离场立即礼貌收口，引用与否定不能误认", () => {
     const prompt = promptFor(P03_VISIBLE);
-    expect(prompt).toContain("客户累计第三次拒绝");
+    expect(prompt).toContain("客户明确表示挂断");
+    expect(prompt).toContain('引用、假设、否定');
     expect(prompt).toContain("礼貌收口挂断");
   });
 
-  it("裁判提示词:shouldEnd 以累计三次拒绝或达成下一步为准", () => {
+  it("裁判按当前本人意图或实际授权判断，不统计历史拒绝次数", () => {
     const prompt = assembleManagerMetaPrompt({ publishedCards: SEED_CARDS });
-    expect(prompt).toContain("客户累计拒绝达到三次");
-    expect(prompt).toContain("不足三次一律为 false");
+    expect(prompt).toContain("客户本人当前明确离场");
+    expect(prompt).toContain("不用统计历史拒绝次数");
+    expect(prompt).toContain("已达成客户实际授权的合理下一步");
   });
 });
 
@@ -244,18 +262,20 @@ describe("话术拟人化(p3)", () => {
     expect(prompt).toContain("「先生/女士」这种连写永远不说");
   });
 
-  it("用词跟人生阶段:年长客户说养老金退休金,不说工资", () => {
+  it("收入称谓基于已知信息,不凭年龄补工作或退休状态", () => {
     const prompt = promptFor(SEED_PERSONA_P02.visible);
-    expect(prompt).toContain("说养老金、退休金,不说工资");
-    expect(prompt).toContain("上班族才说工资");
+    expect(prompt).toContain("未给收入来源时说「资金」");
+    expect(prompt).toContain("不凭年龄假定退休或仍有工作单位");
+    expect(prompt).toContain("介绍活动面向代发工资客户时如实使用资格名称");
   });
 
   it("系统已知不问客户:画像写明的行内信息当功课,探询只问行外", () => {
     const prompt = promptFor(P03_VISIBLE);
     expect(prompt).toContain("开口前想一下系统");
     expect(prompt).toContain("不拿去问客户");
-    expect(prompt).toContain("探询只问系统看不到的");
-    expect(prompt).toContain("画像没写的本行信息视同没有");
+    expect(prompt).toContain("一般探询问系统看不到的行外资金安排");
+    expect(prompt).toContain("画像没写的本行信息保持未知");
+    expect(prompt).toContain("可以核对该未知条件");
   });
 
   it("精简:删掉已由别处承载的指令", () => {
@@ -265,7 +285,7 @@ describe("话术拟人化(p3)", () => {
     // 产品事实一节已写"卡外产品信息一律不说",规则区不再重复。
     expect(prompt).not.toMatch(/^\d+\.\s*只使用产品卡内的事实。?$/m);
     // 拒绝计数由 5/6 两条合为一条,只出现一次"第三次拒绝"门槛。
-    expect(prompt.match(/累计第三次拒绝/g)).toHaveLength(1);
+    expect(prompt).not.toMatch(/累计第三次拒绝/);
   });
 });
 
@@ -277,6 +297,9 @@ describe("通话逻辑(p4)", () => {
     }
     // 每条规律带"电话里"用法,不是光秃秃的口号。
     expect(prompt.match(/电话里:/g)).toHaveLength(4);
+    const logicSection = prompt.split("## 通话规则")[0];
+    expect(logicSection).not.toContain("月底前资金到位就行");
+    expect(prompt).not.toContain("过窗不候是客户自己也认的事实");
   });
 
   it("本局事实按规律标注参数角色", () => {

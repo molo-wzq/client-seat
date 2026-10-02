@@ -1,0 +1,112 @@
+/* 桌边牌架：木质外框、黄铜标记、纸牌。范围限定于右栏。 */
+.tavern-rail {
+  align-self: start;
+  position: relative;
+  padding: 17px 14px 12px;
+  border: 1px solid #a47c46;
+  border-radius: 9px;
+  color: #f1e0bc;
+  background:
+    radial-gradient(ellipse at 50% 0, #906b393d, transparent 65%),
+    repeating-linear-gradient(92deg, #ffffff03 0 1px, transparent 1px 6px),
+    linear-gradient(110deg, #34261c, #201a14 65%, #302219);
+  box-shadow: inset 0 0 0 3px #241b14, inset 0 0 0 4px #a47c463d, 0 6px 14px #0004;
+  overflow-wrap: anywhere;
+}
+.tavern-rail-heading { display: flex; align-items: center; gap: 10px; }
+.tavern-rail-heading h3 { margin: 0; color: #f7e6bd; font-family: "STZhongsong", "SimSun", serif; font-size: 20px; letter-spacing: .08em; }
+.tavern-eyebrow { display: block; margin-bottom: 5px; color: #c8ad80; font-size: 10px; letter-spacing: .08em; }
+.rail-crest { display: grid; place-items: center; flex: 0 0 34px; height: 38px; border: 1px solid #b28c52; border-radius: 4px 4px 14px 14px; color: #e6bd73; background: #ffffff08; }
+.rail-crest svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
+.rail-brass-count { margin-left: auto; font-family: var(--font-mono); color: #ddb776; font-size: 14px; border-bottom: 1px solid #b28c52; padding: 3px; }
+.tavern-rail-caption { margin: 11px 0 17px; color: #c9b99d; font-size: 11px; line-height: 1.7; }
+.law-card-rack { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px 9px; }
+.law-card {
+  --law-ink: #536348;
+  position: relative;
+  color: #362b20;
+  background: radial-gradient(ellipse at 50% 25%, #fff9e8, transparent 80%), #e8d8b5;
+  border: 1px solid #aa8b56;
+  border-radius: 5px;
+  box-shadow: inset 0 0 0 3px #ecddbf, inset 0 0 0 4px #bba1748c, 0 3px 0 #786347, 0 5px 7px #0005;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+.law-card-window { --law-ink: #916938; }
+.law-card-inertia { --law-ink: #856039; }
+.law-card-steps { --law-ink: #825045; }
+.law-card > summary { display: flex; flex-direction: column; align-items: center; min-height: 172px; padding: 11px 8px 8px; cursor: pointer; list-style: none; }
+.tavern-rail summary::-webkit-details-marker { display: none; }
+.law-card-number { align-self: flex-start; color: #8d744e; font-family: var(--font-mono); font-size: 10px; }
+.law-emblem { display: block; width: 54px; height: 54px; margin: 3px 0 9px; fill: none; stroke: var(--law-ink); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.law-card summary strong { font-family: "STZhongsong", "SimSun", serif; font-size: 16px; letter-spacing: .04em; }
+.law-card-cue { margin-top: 7px; text-align: center; color: #746044; font-size: 10px; line-height: 1.5; }
+.law-card-open { display: flex; justify-content: space-between; width: 100%; margin-top: auto; padding: 9px 0 0; color: #786144; font-size: 10px; }
+.law-card-open > span, .table-note-open > span, .strategy-card-details summary > span { transition: transform 160ms ease; }
+.law-card[open] .law-card-open > span, .table-note[open] .table-note-open > span, .strategy-card-details[open] summary > span { transform: rotate(45deg); }
+.law-card[open] { grid-column: 1 / -1; }
+.law-card[open] > summary { min-height: 0; display: grid; grid-template-columns: 24px 42px 1fr; gap: 7px; padding: 12px; }
+.law-card[open] .law-card-number { align-self: center; }
+.law-card[open] .law-emblem { width: 40px; height: 40px; margin: 0; grid-row: 1 / 3; grid-column: 2; }
+.law-card[open] .law-card-cue { grid-column: 3; text-align: left; margin: 0; }
+.law-card[open] .law-card-open { grid-column: 1 / -1; }
+.law-card-detail { margin: 0 12px; padding-bottom: 8px; border-top: 1px solid #b19a7370; font-size: 12px; line-height: 1.8; }
+.law-card-detail > span { color: #7b603c; font-size: 10px; font-weight: 700; }
+.law-card-detail p { margin: 8px 0; }
+.table-note { margin-top: 21px; border: 1px solid #b4a07b; border-radius: 2px; color: #46382b; background: linear-gradient(120deg, #efe4cd, #dcccac); box-shadow: 0 3px 5px #0004; }
+.table-note > summary { display: flex; flex-direction: column; gap: 7px; padding: 13px 12px 10px; cursor: pointer; list-style: none; }
+.table-note-label { color: #896240; font-size: 10px; letter-spacing: .12em; }
+.table-note summary strong { font-size: 12px; line-height: 1.6; }
+.table-note-open { display: flex; justify-content: space-between; border-top: 1px dashed #aa967466; padding-top: 7px; color: #77644b; font-size: 10px; }
+.table-note-body { padding: 0 12px 8px; font-size: 11px; line-height: 1.8; }
+.table-note-body > ul { padding: 0; margin: 9px 0; list-style: none; }
+.table-note-body li { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px; padding: 5px 0; border-bottom: 1px solid #aa967440; }
+.table-note-body p { margin: 7px 0; }
+.table-note-deadline { color: #895444; }
+.table-note-boundary { padding-top: 7px; border-top: 1px dashed #aa967466; color: #77644b; }
+.tavern-rail-foot { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 16px 0 0; color: #c1a578; font-size: 10px; line-height: 1.6; }
+.tavern-rail-foot > span { color: #dfb66d; }
+.tavern-rail .current-goal { margin: 0 0 16px; padding: 11px; border-color: #a78a555c; background: #f4d06f0d; font-size: 12px; }
+.tavern-waiting { padding: 12px; border: 1px dashed #a78a555c; color: #c9b99d; font-size: 12px; line-height: 1.7; }
+.tavern-rail .tavern-strategies { display: grid; grid-template-columns: 1fr; gap: 14px; margin: 0; padding: 0; list-style: none; }
+.tavern-rail .card-tile {
+  display: block;
+  min-height: 0;
+  padding: 12px;
+  border: 1px solid #ae946c;
+  border-radius: 5px;
+  color: #362b20;
+  background: linear-gradient(125deg, #f7edd6, #e5d5b5);
+  box-shadow: inset 0 0 0 3px #ecddbf, inset 0 0 0 4px #bba17460, 0 3px 0 #786347, 0 5px 7px #0005;
+  font-size: 12px;
+  font-weight: 400;
+}
+.tavern-rail .card-tile::before, .tavern-rail .card-tile::after { content: none; }
+.strategy-card-top { display: flex; align-items: center; justify-content: space-between; gap: 5px; margin-bottom: 10px; color: #8a6e45; font-size: 10px; }
+.strategy-card-top > span:first-child { font-family: var(--font-mono); }
+.strategy-lit { padding: 2px 6px; border-radius: 2px; background: #854638; color: #fff2d3; }
+.tavern-rail .card-tile h4 { margin: 0 0 9px; font-family: "STZhongsong", "SimSun", serif; font-size: 15px; line-height: 1.6; }
+.strategy-card-purpose { margin: 0 0 9px; color: #75634b; font-size: 11px; line-height: 1.7; }
+.strategy-card-effect { border-top: 1px solid #b19a7350; padding-top: 8px; }
+.strategy-card-effect > span, .strategy-card-details div > span { color: #896240; font-size: 10px; font-weight: 700; }
+.strategy-card-effect p { margin: 4px 0 9px; font-size: 11px; line-height: 1.7; }
+.strategy-card-details { margin-top: 8px; border-top: 1px dashed #aa967466; }
+.strategy-card-details summary { display: flex; justify-content: space-between; padding: 8px 0 0; cursor: pointer; color: #786144; font-size: 10px; }
+.strategy-card-details div { padding-top: 10px; }
+.strategy-card-details ul, .strategy-card-details ol { margin: 5px 0 12px; padding-left: 17px; font-size: 11px; line-height: 1.8; }
+.strategy-card-source { margin: 8px 0 0; border-top: 1px solid #aa967440; padding-top: 8px; font-size: 10px; color: #786144; }
+.tavern-rail .card-tile.active { border-color: #edc16b; background: linear-gradient(125deg, #fff6dc, #f0d69d); animation: tavern-card-glow 2.4s ease-in-out infinite; box-shadow: 0 0 0 2px #b28c52, 0 0 18px #e5bb6340; transform: rotate(-1deg) translateY(-2px); }
+.tavern-rail .card-tile.active.slam { animation: card-slam 460ms var(--ease-pop) both, tile-ripple 560ms var(--ease-out), tavern-card-glow 2.4s ease-in-out 420ms infinite; }
+@keyframes tavern-card-glow { 50% { box-shadow: 0 0 0 2px #dfb66d, 0 0 22px #e5bb6370; } }
+@media (hover: hover) { .law-card:hover { transform: translateY(-2px); box-shadow: inset 0 0 0 3px #ecddbf, inset 0 0 0 4px #bba1748c, 0 4px 0 #786347, 0 8px 10px #0005; } }
+.tavern-rail summary:focus-visible { outline: 2px solid #bf8636; outline-offset: 3px; border-radius: 3px; }
+@media (max-width: 980px) and (min-width: 821px) {
+  .logic-rail .law-card-rack { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .tavern-rail .tavern-strategies { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+}
+@media (max-width: 820px) {
+  .law-card > summary { min-height: 180px; }
+  .law-emblem { width: 60px; height: 60px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .tavern-rail *, .tavern-rail .card-tile.active, .tavern-rail .card-tile.active.slam { animation: none; transition: none; }
+}

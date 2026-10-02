@@ -9,10 +9,12 @@ import {
 import { numberTurns, parseTranscriptTurns, resolveTurnRange } from "./transcript";
 import { PROMPT_VERSION } from "./prompt-version";
 import { detectManagerFarewell } from "./reply-text";
-import { hasOutOfCardNumber } from "./product-facts";
-import type { CopywritingPort, DialoguePort, ProductStorage } from "./ports";
+import { hasOutOfCardNumber, factRelationNotes } from "./product-facts";
+import { customerIntent } from "./customer-intent";
+import type { CopywritingPort, DialoguePort, ProductStorage, ManagerTurnOutput } from "./ports";
 import type {
   Conversation,
+  ConversationStartOptions,
   ConversationResult,
   ConversationTurn,
   Material,
@@ -21,9 +23,11 @@ import type {
   Persona,
   PersonaInput,
   StrategyCard,
+  ConversationResources,
+  PlayerObservation,
   VisiblePersona,
 } from "./types";
-import { isMaterialKind } from "./types";
+import { isMaterialKind, isFeelingStamp } from "./types";
 
 /** 每通电话的经理轮数上限(spec.md:提示词规则+应用层轮数上限)。 */
 export const MAX_MANAGER_TURNS = 12;
@@ -47,7 +51,7 @@ export interface ProductCore {
   /** 从预设或修改后的属性保存一位自定义生客;留空字段保持未知,不自动补全。 */
   savePersona(input: PersonaInput): Promise<Persona>;
   listPersonas(): Promise<Persona[]>;
-  startConversation(personaId: string): Promise<Conversation>;
+  startConversation(personaId: string, options?: ConversationStartOptions): Promise<Conversation>;
   /** 快速开始:库中无已发布策略卡时以种子素材(已发布态)兜底,用第一个内置画像直接开一通对话;幂等。 */
   quickStart(): Promise<Conversation>;
   getConversation(conversationId: string): Promise<Conversation>;
@@ -65,10 +69,12 @@ export interface ProductCore {
     signal?: AbortSignal,
   ): Promise<Conversation>;
   /**
-   * 重新生成经理回复(票 31):丢弃最后一轮经理话术,以同一客户发言重摇。
+   * 重新生成经理回复:保留原经理轮版本，以同一客户发言重试。
    * 不追加新的客户轮;最后一轮不是经理话术或通话已结束时报错。
    */
   regenerateManagerTurn(conversationId: string): Promise<Conversation>;
+  branchConversation(conversationId: string, customerTurnNumber: number, replacementText: string): Promise<Conversation>;
+  saveObservation(conversationId: string, observation: PlayerObservation): Promise<Conversation>;
   finishConversation(conversationId: string): Promise<Conversation>;
   getResult(conversationId: string): Promise<ConversationResult>;
 }
@@ -123,6 +129,13 @@ export function createProductCore(deps: {
     return materials.flatMap((m) => m.cards.filter((c) => c.status === "published"));
   }
 
+  function locateSourceMaterial(source: StrategyCard["sourceExcerpt"], materials: Material[]) {
+    if (source.materialId) return materials.find((material) => material.id === source.materialId);
+    // 旧来源只记录标题时,重名无法可靠定位,不能随意引用第一份素材。
+    const matches = materials.filter((material) => material.title === source.materialTitle);
+    return matches.length === 1 ? matches[0] : undefined;
+  }
+
   async function listAllPersonas(): Promise<Persona[]> {
     // 内置 3 画像在前(P01–P03,提取自真实素材),自定义画像按保存顺序并入。
     return [...SEED_PERSONAS, ...(await storage.listPersonas())];
@@ -137,6 +150,23 @@ export function createProductCore(deps: {
   /** 构造对话生成可读的画像视图:隐藏信息不离开领域层。 */
   function toVisiblePersona(persona: Persona): VisiblePersona {
     return { id: persona.id, name: persona.name, visible: persona.visible };
+  }
+
+  async function snapshotResources(personaId: string): Promise<ConversationResources> {
+    const materials = await storage.listMaterials();
+    const cards = materials.flatMap((material) => material.cards.filter((card) => card.status === 'published'));
+    return structuredClone({
+      persona: await requirePersona(personaId), cards,
+      evidence: cards.map((card) => ({
+        cardId: card.id, cardName: card.name, source: card.sourceExcerpt,
+        sourceTurns: resolveTurnRange(card.sourceExcerpt.turnRange, locateSourceMaterial(card.sourceExcerpt, materials)?.turns ?? []),
+      })),
+    });
+  }
+
+  function observedOutcome(conversation: Conversation): string {
+    const count = conversation.turns.filter((turn) => turn.speaker === 'manager').length;
+    return count ? `已记录 ${count} 轮经理回应；未记录已确认的下一步承诺。可按原话继续核对。` : '客户在经理回应前结束；没有形成下一步承诺。';
   }
 
   /**
@@ -177,11 +207,27 @@ export function createProductCore(deps: {
     return material;
   }
 
-  async function startConversationLocked(personaId: string): Promise<Conversation> {
-    await requirePersona(personaId);
+  async function startConversationLocked(personaId: string, options: ConversationStartOptions = {}): Promise<Conversation> {
+    if (options.observationFocus !== undefined && !["signals", "conditions", "next-step", "free"].includes(options.observationFocus)) {
+      throw new ValidationError("观察点不合法");
+    }
+    if (options.replayOfId !== undefined && (typeof options.replayOfId !== "string" || !options.replayOfId.trim())) {
+      throw new ValidationError("原局标识不合法");
+    }
+    const original = options.replayOfId ? await requireConversation(options.replayOfId) : undefined;
+    if (original && (original.status !== "ended" || original.personaId !== personaId)) {
+      throw new ValidationError("只能重试同一客户已结束的通话");
+    }
+    const resources = original?.resources ? structuredClone(original.resources) : await snapshotResources(personaId);
     const conversation: Conversation = {
       id: randomId(),
+      revision: 0,
       personaId,
+      observationFocus: options.observationFocus ?? original?.observationFocus ?? "signals",
+      productFacts: structuredClone(original?.productFacts ?? SEED_PRODUCT_CARD),
+      resources,
+      openingGoal: '确认沟通意愿，了解必要需求，在客户同意后争取适合的下一步',
+      ...(original ? { replayOfId: original.id } : {}),
       status: "ongoing",
       turns: [],
       createdAt: now().toISOString(),
@@ -232,40 +278,59 @@ export function createProductCore(deps: {
       throw new Error("最后一轮不是客户发言,无法生成经理回复");
     }
 
-    const persona = toVisiblePersona(await requirePersona(conversation.personaId));
-    const publishedCards = await listPublishedCards();
-    const output = await dialogue.generateManagerTurn(
+    const persona = toVisiblePersona(conversation.resources?.persona ?? await requirePersona(conversation.personaId));
+    const productFacts = conversation.productFacts ?? SEED_PRODUCT_CARD;
+    // 用卡与来源从同一份本轮库快照读取,避免生成期间编辑造成证据错位。
+    const turnMaterials = conversation.resources ? [] : await storage.listMaterials();
+    const publishedCards = conversation.resources?.cards ?? turnMaterials.flatMap((m) => m.cards.filter((c) => c.status === "published"));
+    const leaving = customerIntent(customerTurn.text) === 'leave';
+    // 明确离场是客户的选择，模型故障或错误归因不能让客户被迫继续。
+    const output: ManagerTurnOutput = leaving ? {
+      reply: '好的，先不打扰您了。有需要可以通过银行官方渠道联系我们，再见。',
+      recognizedSignal: '客户明确表示结束当前通话', currentGoal: '尊重离场意图，体面收口',
+      shouldEnd: true, endReason: '客户明确离场，通话结束', outcomeSummary: '客户明确结束通话；没有据此新增报名或联系授权。',
+    } : await dialogue.generateManagerTurn(
       {
         persona,
-        publishedCards,
-        product: SEED_PRODUCT_CARD,
-        history: conversation.turns.slice(0, -1),
+        publishedCards: structuredClone(publishedCards),
+        product: productFacts,
+        history: conversation.turns.slice(0, -1).map(({ strategyEvidence: _privateEvidence, promptVersion: _version, factCheckNotes: _factNotes, ...turn }) => turn),
         customerText: customerTurn.text,
       },
       onReplyDelta,
     );
+    if (leaving) onReplyDelta?.(output.reply);
 
     // 模型声称使用的卡必须是本轮检索到的已发布卡:检索边界落到数据上。
     // 匹配依据只在用卡可信时保留:无卡或卡不在候选集,依据一并丢弃,不伪造。
-    const retrievable = output.usedCardId
-      ? publishedCards.some((c) => c.id === output.usedCardId)
-      : false;
-    // 卡外数字守卫(确定性):白名单=产品卡事实∪本局客户口述∪此前经理已报。
+    const usedCard = publishedCards.find((c) => c.id === output.usedCardId);
+    const retrievable = Boolean(usedCard && output.cardMatchBasis?.trim());
+    const sourceMaterial = usedCard && locateSourceMaterial(usedCard.sourceExcerpt, turnMaterials);
+    // 卡外数字守卫：只认产品事实与客户口述，经理重复不能洗白数字。
     // 只标不拦,与策略卡「未确认」同一哲学——复盘如实呈现,不改话术。
     const outOfCardFact = hasOutOfCardNumber(
       output.reply,
-      SEED_PRODUCT_CARD,
+      productFacts,
       conversation.turns,
     );
+    const factCheckNotes = [...new Set([...(output.factCheckNotes ?? []), ...factRelationNotes(output.reply, productFacts)])];
     const managerTurn: ConversationTurn = {
       number: customerTurn.number + 1,
       speaker: "manager",
+      promptVersion: PROMPT_VERSION,
       text: output.reply,
       usedCardId: retrievable ? output.usedCardId : undefined,
+      ...(retrievable && usedCard ? { strategyEvidence: conversation.resources?.evidence.find((item) => item.cardId === usedCard.id) ?? {
+        cardId: usedCard.id,
+        cardName: usedCard.name,
+        source: structuredClone(usedCard.sourceExcerpt),
+        sourceTurns: sourceMaterial ? structuredClone(resolveTurnRange(usedCard.sourceExcerpt.turnRange, sourceMaterial.turns)) : [],
+      } } : {}),
       recognizedSignal: output.recognizedSignal,
       currentGoal: output.currentGoal,
       ...(retrievable && output.cardMatchBasis ? { cardMatchBasis: output.cardMatchBasis } : {}),
       ...(output.logicHint ? { logicHint: output.logicHint } : {}),
+      ...(factCheckNotes.length ? { factCheckNotes } : {}),
       ...(outOfCardFact ? { outOfCardFact: true } : {}),
     };
     conversation.turns = [...conversation.turns, managerTurn];
@@ -279,12 +344,13 @@ export function createProductCore(deps: {
       conversation.status = "ended";
       conversation.endReason =
         output.endReason || (farewellOnly ? "理财经理已告别收口,通话结束" : "通话结束");
-      conversation.outcomeSummary = output.outcomeSummary || "未知";
+      conversation.outcomeSummary = output.outcomeSummary || observedOutcome(conversation);
     } else if (managerTurnCount >= MAX_MANAGER_TURNS) {
       conversation.status = "ended";
-      conversation.endReason = "达到轮数上限,理财经理体面收口";
-      conversation.outcomeSummary = "未知";
+      conversation.endReason = "达到轮数上限,本局通话结束";
+      conversation.outcomeSummary = observedOutcome(conversation);
     }
+    conversation.revision = (conversation.revision ?? 0) + 1;
     await storage.saveConversation(conversation);
     return conversation;
   }
@@ -438,12 +504,13 @@ export function createProductCore(deps: {
       return persona;
     },
 
-    async startConversation(personaId) {
-      return startConversationLocked(personaId);
+    async startConversation(personaId, options) {
+      return startConversationLocked(personaId, options);
     },
 
     async getConversation(conversationId) {
-      return requireConversation(conversationId);
+      // 断流/切幕后恢复须等待当前轮落库，不能把正在生成前的旧快照当作权威记录。
+      return serialize(`conversation:${conversationId}`, () => requireConversation(conversationId));
     },
 
     async listConversations() {
@@ -505,9 +572,56 @@ export function createProductCore(deps: {
         if (!last || last.speaker !== "manager") {
           throw new Error("最后一轮不是经理回复,无法重新生成");
         }
-        // 丢弃旧经理轮,回到"以客户发言结尾"的状态,复用同一生成路径。
+        // 保存旧版本，回到以客户发言结尾的状态，复用生成路径。
+        const observation = conversation.observations?.find((item) => item.managerTurnNumber === last.number);
+        conversation.revisions = [...(conversation.revisions ?? []), { turn: structuredClone(last), replacedAt: now().toISOString(), ...(observation ? { observation } : {}) }];
+        conversation.observations = conversation.observations?.filter((item) => item.managerTurnNumber !== last.number);
         conversation.turns = conversation.turns.slice(0, -1);
         return appendManagerTurn(conversation);
+      });
+    },
+
+    async saveObservation(conversationId, observation) {
+      return serialize(`conversation:${conversationId}`, async () => {
+        const conversation = await requireConversation(conversationId);
+        if (!observation || !Number.isInteger(observation.managerTurnNumber) ||
+          !conversation.turns.some((turn) => turn.speaker === 'manager' && turn.number === observation.managerTurnNumber) ||
+          (observation.judgement !== undefined && !['addressed', 'missed', 'uncertain'].includes(observation.judgement)) ||
+          (observation.feeling !== undefined && !isFeelingStamp(observation.feeling)) ||
+          typeof observation.evidence !== 'string' || typeof observation.nextExperiment !== 'string' ||
+          observation.evidence.length > 2000 || observation.nextExperiment.length > 2000 ||
+          typeof observation.revealed !== 'boolean' || typeof observation.marked !== 'boolean') throw new ValidationError('观察记录需指向已有经理轮，文字不超过2000字');
+        const note: PlayerObservation = {
+          managerTurnNumber: observation.managerTurnNumber, evidence: observation.evidence.trim(), nextExperiment: observation.nextExperiment.trim(),
+          ...(observation.judgement ? { judgement: observation.judgement } : {}), revealed: observation.revealed, marked: observation.marked,
+          ...(observation.feeling ? { feeling: observation.feeling } : {}),
+        };
+        conversation.observations = [...(conversation.observations ?? []).filter((item) => item.managerTurnNumber !== note.managerTurnNumber), note].sort((a, b) => a.managerTurnNumber - b.managerTurnNumber);
+        conversation.revision = (conversation.revision ?? 0) + 1;
+        await storage.saveConversation(conversation);
+        return conversation;
+      });
+    },
+
+    async branchConversation(conversationId, customerTurnNumber, replacementText) {
+      return serialize(`conversation:${conversationId}`, async () => {
+        const original = await requireConversation(conversationId);
+        if (!Number.isInteger(customerTurnNumber) || typeof replacementText !== 'string' || !replacementText.trim() || replacementText.length > 4000) throw new ValidationError('请指定客户轮次与不超过4000字的新回应');
+        const position = original.turns.findIndex((turn) => turn.number === customerTurnNumber && turn.speaker === 'customer');
+        const manager = original.turns[position + 1];
+        if (position < 0 || manager?.speaker !== 'manager') throw new ValidationError('只能从已有经理回应的客户轮创建分支');
+        if (!original.resources || !original.productFacts) throw new ValidationError('旧局缺少资源快照，无法锁定分支前情；请新开一局后再试');
+        const branch: Conversation = {
+          id: randomId(), revision: 0, personaId: original.personaId, observationFocus: original.observationFocus,
+          replayOfId: original.id, resources: structuredClone(original.resources), productFacts: structuredClone(original.productFacts),
+          openingGoal: original.openingGoal, status: 'ongoing', createdAt: now().toISOString(), promptVersion: PROMPT_VERSION,
+          turns: [...structuredClone(original.turns.slice(0, position)), { number: customerTurnNumber, speaker: 'customer', text: replacementText.trim() }],
+          observations: structuredClone((original.observations ?? []).filter((note) => note.managerTurnNumber < customerTurnNumber)),
+          branch: { originalId: original.id, customerTurnNumber, originalCustomerText: original.turns[position].text, originalManagerTurn: structuredClone(manager), conditionsPreserved: true },
+        };
+        const next = await appendManagerTurn(branch);
+        await purgeExpiredConversations(storage, now(), retention);
+        return next;
       });
     },
 
@@ -517,7 +631,8 @@ export function createProductCore(deps: {
         if (conversation.status === "ended") return conversation;
         conversation.status = "ended";
         conversation.endReason = "客户主动结束通话";
-        conversation.outcomeSummary = conversation.outcomeSummary || "未知";
+        conversation.outcomeSummary = conversation.outcomeSummary || observedOutcome(conversation);
+        conversation.revision = (conversation.revision ?? 0) + 1;
         await storage.saveConversation(conversation);
         return conversation;
       });
@@ -554,37 +669,44 @@ export function createProductCore(deps: {
       // 来源片段落为原始轮次:优先按素材 id 定位(标题可重名),旧数据回退按标题。
       function resolveSourceTurns(source: { materialId?: string; materialTitle: string; turnRange: string } | null) {
         if (!source) return [];
-        const material = source.materialId
-          ? materials.find((m) => m.id === source.materialId)
-          : undefined;
-        const located = material ?? materials.find((m) => m.title === source.materialTitle);
+        const located = locateSourceMaterial(source, materials);
         if (!located) return [];
         return resolveTurnRange(source.turnRange, located.turns);
       }
 
       return {
         conversationId: conversation.id,
-        mainGoal: goals.length > 0 ? goals[goals.length - 1] : "未知",
-        outcome: conversation.outcomeSummary || "未知",
+        ...(conversation.observationFocus ? { observationFocus: conversation.observationFocus } : {}),
+        ...(conversation.replayOfId ? { replayOfId: conversation.replayOfId } : {}),
+        ...(conversation.productFacts ? { productFacts: conversation.productFacts } : {}),
+        ...(conversation.resources ? { resources: conversation.resources } : {}),
+        ...(conversation.revisions?.length ? { revisions: conversation.revisions } : {}),
+        ...(conversation.branch ? { branch: conversation.branch } : {}),
+        ...(conversation.observations ? { observations: conversation.observations } : {}),
+        mainGoal: conversation.openingGoal ?? '旧记录未保存开局目标',
+        lastAction: goals.at(-1) ?? '未记录经理动作',
+        outcome: conversation.outcomeSummary || observedOutcome(conversation),
         endReason: conversation.endReason || "未知",
         turns: conversation.turns,
         ...(conversation.promptVersion ? { promptVersion: conversation.promptVersion } : {}),
         strategyPath: managerTurns
-          .filter((t) => t.usedCardId && cardsById.has(t.usedCardId))
+          .filter((t) => t.usedCardId && (t.strategyEvidence?.cardId === t.usedCardId || cardsById.has(t.usedCardId)))
           .map((t) => {
             const card = cardsById.get(t.usedCardId as string);
-            const source = card!.sourceExcerpt ?? null;
+            const evidence = t.strategyEvidence?.cardId === t.usedCardId ? t.strategyEvidence : undefined;
+            const source = evidence?.source ?? card?.sourceExcerpt ?? null;
             return {
               turnNumber: t.number,
               cardId: t.usedCardId as string,
-              cardName: card!.name,
+              cardName: evidence?.cardName ?? card!.name,
               keyExpression: t.text,
               customerText: customerTextBefore(t.number),
               ...(t.recognizedSignal ? { recognizedSignal: t.recognizedSignal } : {}),
               ...(t.currentGoal ? { currentGoal: t.currentGoal } : {}),
               ...(t.cardMatchBasis ? { matchBasis: t.cardMatchBasis } : {}),
               source,
-              sourceTurns: resolveSourceTurns(source),
+              sourceTurns: evidence ? evidence.sourceTurns : resolveSourceTurns(source),
+              evidenceOrigin: evidence ? "turn-snapshot" as const : "current-library" as const,
             };
           }),
       };

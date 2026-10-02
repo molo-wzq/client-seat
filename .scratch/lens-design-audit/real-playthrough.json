@@ -1,0 +1,531 @@
+[
+  {
+    "id": "b1654d78-dd10-45d9-b520-29b9658e6439",
+    "personaId": "p02-daoqi-wenjian",
+    "status": "ended",
+    "createdAt": "2026-10-02T01:10:48.486Z",
+    "promptVersion": "p4",
+    "observationFocus": "conditions",
+    "replayOfId": null,
+    "turns": [
+      {
+        "number": 1,
+        "speaker": "customer",
+        "text": "喂,是小李啊",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 2,
+        "speaker": "manager",
+        "text": "阿姨您好，我是咱们行的理财经理小李。这会儿跟您说两句方便吗？就是您明天有笔钱到账嘛，正好行里有个资金活动，我想着跟您说一声。",
+        "usedCardId": null,
+        "currentGoal": "开场自报身份、确认通话时机，并以明日到账资金为切口引出活动话题",
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 3,
+        "speaker": "customer",
+        "text": "我不是代发工资客户，也能参加这个活动吗？我只想先把条件弄清楚。",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 4,
+        "speaker": "manager",
+        "text": "这个活动是行里给代发客户做的，规则就是月底前报个名就行，钱不用急着转进来。您这边要是没有代发工资的关系，可能就对不上了。您明天那笔钱到账，本来是打算怎么安排的呀？",
+        "usedCardId": "340d3a-sc-2",
+        "currentGoal": "澄清活动参与资格与规则并探询客户到账资金安排。",
+        "cardMatchBasis": "执行该卡动作链第1步：确认活动规则灵活（月底前报名、资金不用急转）。",
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      }
+    ]
+  },
+  {
+    "id": "8b05245b-d849-4e5a-a5f9-2a4853f6f97d",
+    "personaId": "p02-daoqi-wenjian",
+    "status": "ended",
+    "createdAt": "2026-10-02T01:14:48.621Z",
+    "promptVersion": "p4",
+    "observationFocus": "conditions",
+    "replayOfId": "b1654d78-dd10-45d9-b520-29b9658e6439",
+    "turns": [
+      {
+        "number": 1,
+        "speaker": "customer",
+        "text": "喂,是小李啊",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 2,
+        "speaker": "manager",
+        "text": "阿姨您好,我是咱们行的理财经理小李。这会儿方便说话吧?跟您说一声啊,这个月行里有个面向代发客户的活动,新进来的资金够了档位能拿微信立减金,您明天那笔钱不是正好到账嘛,我想着帮您看看能不能赶上。",
+        "usedCardId": null,
+        "currentGoal": "确认通话时机并预告代发客户活动，借明日到账窗口争取客户参与",
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 3,
+        "speaker": "customer",
+        "text": "这个活动有啥门槛？先别帮我报名，我不想把钱一直锁住。",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 4,
+        "speaker": "manager",
+        "text": "阿姨您放心,这个不锁钱,就是先报个名登记一下,钱放哪儿还是哪儿,活动期内有新资金进来就成,最低五万起。那您手头除了明天到账这笔,还有别的闲钱放在别的行吗?",
+        "usedCardId": "340d3a-sc-2",
+        "currentGoal": "打消客户对资金被锁定的顾虑并顺势探询行外资金分布",
+        "cardMatchBasis": "执行该卡动作链第1步：确认活动规则灵活（报名不锁钱、钱放哪儿还是哪儿），以消除顾虑",
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      }
+    ]
+  },
+  {
+    "id": "86adf2c0-f749-4b3f-b82e-630d01ba1f0c",
+    "personaId": "p02-daoqi-wenjian",
+    "status": "ended",
+    "createdAt": "2026-10-02T01:26:11.562Z",
+    "promptVersion": "p5",
+    "observationFocus": "conditions",
+    "replayOfId": "8b05245b-d849-4e5a-a5f9-2a4853f6f97d",
+    "turns": [
+      {
+        "number": 1,
+        "speaker": "customer",
+        "text": "喂,是小李啊",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 2,
+        "speaker": "manager",
+        "text": "哎，大姐您好，我是咱们行的理财经理小李。您这会儿方便接电话吗？ 就是给您打这个电话，是行里这个月有个拉新资金的活动，想跟您说一声。",
+        "usedCardId": null,
+        "currentGoal": "问候客户、确认通话时机并预告本月拉新资金活动",
+        "cardMatchBasis": null,
+        "promptVersion": "p5",
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 3,
+        "speaker": "customer",
+        "text": "这个活动有啥门槛？先别帮我报名，我不想把钱一直锁住。",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 4,
+        "speaker": "manager",
+        "text": "行，不报名，咱就是先了解了解。这个活动最低是5万这一档起步的。 还有一点您放心，报名就是先占个名额，钱不用马上转进来，月底之前到位就行，我不会动您账上的钱。 不过这个活动是面向代发工资客户的，我想先跟您确认一下，您的工资是走咱们行代发吗？",
+        "usedCardId": "340d3a-sc-2",
+        "currentGoal": "打消客户对资金被锁定的顾虑，并核实其代发工资关系",
+        "cardMatchBasis": "执行该卡动作链第1步：确认活动规则灵活（报名只是先占名额、钱不用马上转、月底前到位），以消除客户顾虑",
+        "promptVersion": "p5",
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      }
+    ]
+  },
+  {
+    "id": "79663e85-83d6-4f12-957c-ebc9eda71feb",
+    "personaId": "p02-daoqi-wenjian",
+    "status": "ended",
+    "createdAt": "2026-10-02T01:30:49.834Z",
+    "promptVersion": "p6",
+    "observationFocus": "conditions",
+    "replayOfId": "86adf2c0-f749-4b3f-b82e-630d01ba1f0c",
+    "turns": [
+      {
+        "number": 1,
+        "speaker": "customer",
+        "text": "喂,是小李啊",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 2,
+        "speaker": "manager",
+        "text": "阿姨,是我,咱们行的理财经理小李,您这会儿方便接电话吧? 给您打这个电话呢,是想跟您说个事儿——咱们行现在有个面向代发客户的活动,新资金达标能领微信立减金。",
+        "usedCardId": null,
+        "currentGoal": "确认通话时机并抛出代发客户活动引子",
+        "cardMatchBasis": null,
+        "promptVersion": "p6",
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 3,
+        "speaker": "customer",
+        "text": "这个活动有啥门槛？先别帮我报名，我不想把钱一直锁住。",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 4,
+        "speaker": "manager",
+        "text": "行,报名的事我先不动,您放心。报名跟转钱本来就是两码事,不用您现在就把钱挪过来;产品本身是一天、七天的短期灵活产品,到期T+1就能到账。这个活动呢是5万起算一档,面向的是代发工资客户和三方存管客户,您这边是代发工资吧?",
+        "usedCardId": "340d3a-sc-2",
+        "currentGoal": "打消客户对资金被锁的顾虑，说明活动门槛并核实其代发工资客户身份",
+        "cardMatchBasis": "执行该卡动作链第1步：确认活动规则灵活（报名与转钱解耦、产品一到七天短期、到期T+1到账）以消除客户顾虑",
+        "promptVersion": "p6",
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      }
+    ]
+  },
+  {
+    "id": "690d7d41-ea30-445b-a93c-4f5fd8fd59f2",
+    "personaId": "p02-daoqi-wenjian",
+    "status": "ended",
+    "createdAt": "2026-10-02T01:38:55.804Z",
+    "promptVersion": "p7",
+    "observationFocus": "conditions",
+    "replayOfId": "79663e85-83d6-4f12-957c-ebc9eda71feb",
+    "turns": [
+      {
+        "number": 1,
+        "speaker": "customer",
+        "text": "喂,是小李啊",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 2,
+        "speaker": "manager",
+        "text": "哎，大姐，是我，咱们行的理财经理小李。这会儿说话方便吗？跟您说一声，行里这个月有个活动，是面向代发工资客户的，资金达标了能拿微信立减金。我记着您明天正好有笔钱到账，就想着跟您提一句。",
+        "usedCardId": null,
+        "currentGoal": "确认通话时机并预告代发客户活动及明日资金到账窗口",
+        "cardMatchBasis": null,
+        "promptVersion": "p7",
+        "factCheckNotes": [
+          "经理称活动『面向代发工资客户』，与参数活动对象一致；但未说明报名截止为『本月底31号前报名』且『资金无须立即转入』。",
+          "经理称『资金达标了能拿微信立减金』，未列明5万/20万/50万三档及对应50/150/300元立减金，分档条件暂缺。",
+          "『您明天正好有笔钱到账』未在本轮给出核实依据；如非系统可见需确认，不能据此认定资金必然到账。"
+        ],
+        "outOfCardFact": null
+      }
+    ]
+  },
+  {
+    "id": "9d3e044c-5288-4f5f-8e9e-4f5080ee9f30",
+    "personaId": "p02-daoqi-wenjian",
+    "status": "ended",
+    "createdAt": "2026-10-02T01:46:53.191Z",
+    "promptVersion": "p8",
+    "observationFocus": "conditions",
+    "replayOfId": "79663e85-83d6-4f12-957c-ebc9eda71feb",
+    "turns": [
+      {
+        "number": 1,
+        "speaker": "customer",
+        "text": "喂,是小李啊",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 2,
+        "speaker": "manager",
+        "text": "大姐,是我,咱们行的理财经理小李。先跟您说一声,您明天到账那笔钱,正好能搭上咱行里一个活动。这会儿方便说两句吗?",
+        "usedCardId": null,
+        "currentGoal": "表明身份并借明日到账资金引入活动，征询客户现在是否方便沟通。",
+        "cardMatchBasis": null,
+        "promptVersion": "p8",
+        "factCheckNotes": [
+          "话术称明日到账资金“正好能搭上咱行里一个活动”，但活动对象为代发工资客户，可见画像未显示客户符合代发客户身份，适用性缺少依据。"
+        ],
+        "outOfCardFact": null
+      },
+      {
+        "number": 3,
+        "speaker": "customer",
+        "text": "这个活动有啥门槛？先别帮我报名，我不想把钱一直锁住。",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 4,
+        "speaker": "manager",
+        "text": "哎呀您放心,报名跟转钱是两码事,我不会动您那笔钱的,先跟您说清楚。这个活动是面向代发工资客户的,新钱够5万就算达标。您工资是发在咱们行的吧?",
+        "usedCardId": "sc-2",
+        "currentGoal": "向客户澄清报名与资金转入互相独立，以打消资金被锁的顾虑，并核实其代发工资客户资格。",
+        "cardMatchBasis": "执行该卡动作链第4步：将活动报名与资金到账解耦以打消顾虑（「报名跟转钱是两码事」）。",
+        "promptVersion": "p8",
+        "factCheckNotes": [
+          "经理称「这个活动是面向代发工资客户的」，与参数中活动对象 audience「代发工资客户」一致；「新钱够5万就算达标」与参数最低档位5万一致，但客户工资是否由本行代发尚属经理提问待确认，不能当作已核实事实。"
+        ],
+        "outOfCardFact": null
+      }
+    ]
+  },
+  {
+    "id": "6609b10a-96ed-4609-8e1e-0e1f5c069f85",
+    "personaId": "p02-daoqi-wenjian",
+    "status": "ended",
+    "createdAt": "2026-10-02T01:55:32.782Z",
+    "promptVersion": "p9",
+    "observationFocus": "conditions",
+    "replayOfId": "9d3e044c-5288-4f5f-8e9e-4f5080ee9f30",
+    "turns": [
+      {
+        "number": 1,
+        "speaker": "customer",
+        "text": "喂,是小李啊",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 2,
+        "speaker": "manager",
+        "text": "哎，阿姨，是我，小李。您现在说话方便吗？\n就是跟您说个事儿——咱们行里最近有个面向代发客户的活动，我先跟您核对一下：您单位的工资，是走咱们行发的吗？",
+        "usedCardId": null,
+        "currentGoal": "确认通话方便并核对客户是否为本行代发工资客户，以判断活动资格并开启话题。",
+        "cardMatchBasis": null,
+        "promptVersion": "p9",
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 3,
+        "speaker": "customer",
+        "text": "这个活动有啥门槛？先别帮我报名，我不想把钱一直锁住。",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 4,
+        "speaker": "manager",
+        "text": "您放心，报名跟转钱是两码事——不是让您现在就把钱锁进来，活动期内资金先不用转过来，等您方便了再说。 门槛这块呢，新资金5万就算达标，是面向代发工资客户的活动。您单位工资，是咱们行代发的吗？",
+        "usedCardId": "340d3a-sc-2",
+        "currentGoal": "消除客户对资金锁定的顾虑，并确认其代发资格与5万门槛。",
+        "cardMatchBasis": "执行该卡动作链第1步：确认活动规则灵活（报名与资金转入解耦），以消除客户资金时间顾虑。",
+        "promptVersion": "p9",
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      }
+    ]
+  },
+  {
+    "id": "85ceed95-e5b4-414f-8d67-8849e96e97b8",
+    "personaId": "p02-daoqi-wenjian",
+    "status": "ended",
+    "createdAt": "2026-10-02T01:57:18.854Z",
+    "promptVersion": "p10",
+    "observationFocus": "conditions",
+    "replayOfId": "6609b10a-96ed-4609-8e1e-0e1f5c069f85",
+    "turns": [
+      {
+        "number": 1,
+        "speaker": "customer",
+        "text": "喂,是小李啊",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 2,
+        "speaker": "manager",
+        "text": "阿姨,是我,咱们行的理财经理小李。这会儿跟您说两句方便吗?咱们行最近有个面向代发工资客户的活动,存新资金能拿微信立减金,想跟您核对一下您符不符合条件。",
+        "usedCardId": null,
+        "currentGoal": "确认通话时机并简介代发客户活动以核对资格。",
+        "cardMatchBasis": null,
+        "promptVersion": "p10",
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 3,
+        "speaker": "customer",
+        "text": "这个活动有啥门槛？先别帮我报名，我不想把钱一直锁住。",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 4,
+        "speaker": "manager",
+        "text": "阿姨,您这个顾虑我明白,先不报,报名这事儿肯定得您点头。活动是面向代发工资客户的,新资金达到一定金额就有对应的微信立减金,报名归报名,钱不用马上转进来,您现在的安排不受影响。您在咱们行有代发工资关系吗?",
+        "usedCardId": "340d3a-sc-2",
+        "currentGoal": "澄清活动对象与报名规则，消除资金锁定顾虑，并确认客户代发工资资格。",
+        "cardMatchBasis": "执行该卡动作链第1步：确认活动规则灵活（报名归报名，钱不用马上转进来），消除客户顾虑。",
+        "promptVersion": "p10",
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 5,
+        "speaker": "customer",
+        "text": "我是代发客户，但如果参加了，钱还能随时取吗？先别替我办。",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 6,
+        "speaker": "manager",
+        "text": "阿姨,您放心,不给您办,报名一定等您自己点头。取用这块我跟您说实话:活动本身只是登记资格、拿立减金,钱不用马上转进来;至于到时候钱放哪儿、好不好取,那要看您放什么——咱们行有那种持有一天、七天的短期灵活产品,T+1到账,不是随时秒到的。您明天到账的那笔钱,现在是怎么打算的?",
+        "usedCardId": "sc-1",
+        "currentGoal": "澄清活动与资金安排的区别并如实说明流动性，随后探询到账资金的使用计划",
+        "cardMatchBasis": "执行该卡动作链第2步：以关心客户资金安排为由，提问其到账资金的处理打算",
+        "promptVersion": "p10",
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      }
+    ]
+  },
+  {
+    "id": "998f4770-830d-4fa1-9407-dcfd58002048",
+    "personaId": "p02-daoqi-wenjian",
+    "status": "ended",
+    "createdAt": "2026-10-02T02:00:51.681Z",
+    "promptVersion": "p11",
+    "observationFocus": "conditions",
+    "replayOfId": "85ceed95-e5b4-414f-8d67-8849e96e97b8",
+    "turns": [
+      {
+        "number": 1,
+        "speaker": "customer",
+        "text": "喂,是小李啊",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 2,
+        "speaker": "manager",
+        "text": "阿姨您好,我是咱们行的理财经理小李。您现在说话方便吗? 方便的话我跟您说一声,行里最近有个面向代发工资客户的活动,跟您的情况可能搭得上,我想跟您核对一下。",
+        "usedCardId": null,
+        "currentGoal": "确认客户当前是否方便通话，并引入代发工资客户活动以便后续核对。",
+        "cardMatchBasis": null,
+        "promptVersion": "p11",
+        "factCheckNotes": [
+          "活动对象为“代发工资客户”，可见画像未载明客户为代发工资客户；刚话术用“跟您的情况可能搭得上”把活动与客户关联，代发身份尚未核验。"
+        ],
+        "outOfCardFact": null
+      },
+      {
+        "number": 3,
+        "speaker": "customer",
+        "text": "这个活动有啥门槛？先别帮我报名，我不想把钱一直锁住。",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 4,
+        "speaker": "manager",
+        "text": "您放心,报名这事得您点头,我不会替您报。这个活动是面向代发工资客户的,您在咱们行有代发工资关系吗? 另外您问到锁不锁钱,活动这部分的具体持有和取用条件我还得帮您确认,不敢跟您打包票说随时能取。",
+        "usedCardId": null,
+        "currentGoal": "打消客户对被动报名的顾虑,并核实其是否具备代发工资客户资格",
+        "cardMatchBasis": null,
+        "promptVersion": "p11",
+        "factCheckNotes": [
+          "话术称「活动这部分的具体持有和取用条件」,但参数中活动仅规定新资金达标与报名截止,持有期/T+1到账等取用条件属灵活理财(T+1)产品侧,存在活动与产品对象混用的表述倾向"
+        ],
+        "outOfCardFact": null
+      },
+      {
+        "number": 5,
+        "speaker": "customer",
+        "text": "我是代发客户，但如果参加了，钱还能随时取吗？先别替我办。",
+        "usedCardId": null,
+        "currentGoal": null,
+        "cardMatchBasis": null,
+        "promptVersion": null,
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      },
+      {
+        "number": 6,
+        "speaker": "manager",
+        "text": "活动这块能不能随时取,我得先帮您问清楚,现在不敢跟您保证,毕竟是两回事,我不敢混着说。您别担心,报名肯定得您自己点头,我不会替您办。 您那笔明天到账的钱,是打算先放着,还是近期就要用?",
+        "usedCardId": null,
+        "currentGoal": "坦诚澄清活动流动性与持有条件暂无法保证、重申报名须客户本人同意，并探询明日到账资金的期限安排。",
+        "cardMatchBasis": null,
+        "promptVersion": "p11",
+        "factCheckNotes": null,
+        "outOfCardFact": null
+      }
+    ]
+  }
+]

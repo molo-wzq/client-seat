@@ -65,7 +65,7 @@ describe("桌面明牌的出牌演出", () => {
     expect(screen.getByText("异议接住").closest("li")).not.toHaveClass("active");
   });
 
-  it("经理换卡出牌时新卡高亮并播放砸落演出(slam)", async () => {
+  it("经理匹配新卡只显示候选，不播放成功砸落演出", async () => {
     const view = renderTable(conversation("c1"));
 
     view.rerender(
@@ -81,7 +81,8 @@ describe("桌面明牌的出牌演出", () => {
     );
 
     await waitFor(() => {
-      expect(screen.getByText("异议接住").closest("li")).toHaveClass("active", "slam");
+      expect(screen.getByText("异议接住").closest("li")).toHaveClass("active");
+      expect(screen.getByText("异议接住").closest("li")).not.toHaveClass("slam");
     });
     expect(screen.getByText("开场破冰").closest("li")).not.toHaveClass("active");
   });

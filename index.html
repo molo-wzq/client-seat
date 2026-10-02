@@ -13,6 +13,11 @@
         <feTurbulence type="fractalNoise" baseFrequency="0.055" numOctaves="3" seed="7" result="noise" />
         <feDisplacementMap in="SourceGraphic" in2="noise" scale="3.2" />
       </filter>
+      <!-- 细纹版:体感小印章专用,位移更小更细,盖出手工感又不糊掉单字。 -->
+      <filter id="stamp-ink-fine" x="-10%" y="-10%" width="120%" height="120%">
+        <feTurbulence type="fractalNoise" baseFrequency="0.14" numOctaves="2" seed="3" result="noise" />
+        <feDisplacementMap in="SourceGraphic" in2="noise" scale="1.1" />
+      </filter>
     </svg>
     <script type="module" src="/src/main.tsx"></script>
   </body>

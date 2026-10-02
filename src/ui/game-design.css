@@ -1,0 +1,96 @@
+/* 角色引导、回合节奏和复盘入口；沿用纸牌与木质视觉。 */
+.play-guide, .review-focus {
+  margin: 0 0 22px;
+  padding: 16px 20px;
+  border: 1px solid #b9a584;
+  border-left: 4px solid #315b42;
+  border-radius: 6px;
+  background: #f6eddc;
+  color: #382e24;
+  line-height: 1.75;
+  overflow-wrap: anywhere;
+}
+.play-guide p, .review-focus p { margin: 7px 0; font-size: 13px; }
+.play-guide ol { display: flex; flex-wrap: wrap; gap: 8px 28px; margin: 8px 0; padding-left: 22px; font-size: 13px; font-weight: 600; }
+.seat-preview { margin-top: 14px; padding-top: 10px; border-top: 1px dashed #b9a584; }
+.seat-preview h4 { margin: 0 0 6px; font-size: 13px; }
+.seat-preview details { margin-top: 12px; font-size: 13px; }
+.seat-preview summary, .source-evidence summary, .player-board > summary { cursor: pointer; padding: 8px 0; font-weight: 600; }
+.seat-preview summary:focus-visible, .source-evidence summary:focus-visible, .player-board > summary:focus-visible { outline: 2px solid #b48a37; outline-offset: 3px; }
+.player-board > summary { color: #f1e0bc; font-size: 13px; line-height: 1.7; }
+.role-reminder { color: #d9cbb4; font-size: 12px; line-height: 1.8; }
+.track-guidance { margin: 0 0 12px; color: #e5d9c7; font-size: 12px; line-height: 1.7; }
+.track-guidance.near-end { padding: 8px 10px; border: 1px solid #c2a361; border-radius: 5px; color: #ffe4a3; background: #63461e33; }
+.review-focus h3 { margin: 0; color: #274e36; }
+.review-counts { color: #71624e; }
+.source-evidence { padding: 8px 12px; margin-top: 12px; border: 1px dashed #b9a584; border-radius: 4px; font-size: 13px; }
+.source-evidence .source-turns { margin: 8px 0; }
+.strategy-path > li { scroll-margin-block: 24px; }
+.call-board .reply-box { scroll-margin-block: 20px; }
+.call-log.empty { min-height: 120px; display: grid; place-items: center; }
+.empty-call { list-style: none; text-align: center; color: #75664e; font-size: 13px; line-height: 1.8; }
+.empty-call p { margin: 6px 0; }
+
+/* 中等桌面宽度下，主操作需要足够空间，牌架移到下一行。 */
+@media (min-width: 821px) and (max-width: 1200px) {
+  .setup-board, .table-board { grid-template-columns: minmax(170px, .7fr) minmax(0, 1.3fr); gap: 16px; padding: 16px; }
+  .setup-board > .tavern-rail, .table-board > .tavern-rail { grid-column: 1 / -1; }
+  .tavern-rail .tavern-strategies { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 820px) {
+  .left-rail .app-header p, .left-rail .brand-mark { display: none; }
+  .left-rail { padding: 12px; gap: 8px; }
+  .left-rail .app-header { padding-bottom: 0; }
+  .left-rail .app-header h1 { margin: 0; font-size: 20px; }
+  .rail-nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .rail-item { min-width: 0; padding: 8px 10px; font-size: 12px; }
+  .quick-start { min-height: 44px; }
+  .app-main { padding: 20px 12px 40px; }
+  .setup-board, .table-board { min-width: 0; padding: 12px; gap: 14px; }
+  .setup-board > *, .table-board > * { min-width: 0; }
+  .player-board { padding: 10px 14px; }
+  .player-board:not([open]) { min-height: 0; }
+  .play-guide, .review-focus { padding: 12px 14px; }
+  .play-guide ol { display: block; }
+  .seat-preview .info-list { font-size: 12px; }
+  .call-board .step { padding: 12px; }
+  .call-log { min-height: 180px; max-height: 42vh; }
+  .track-cell { height: 28px; min-width: 0; }
+  .call-track { gap: 3px; padding: 5px; }
+  .reply-box .actions { flex-wrap: wrap; }
+}
+/* 观察问题与原文对照保持靠近通话,长证据按需展开。 */
+.observation-picker { margin: 14px 0; padding: 14px; border: 1px solid #b9a584; border-radius: 10px; background: #f6eddc; color: #382e24; }
+.observation-picker legend { padding: 0 6px; font-weight: 700; }
+.observation-picker label { display: inline-flex; align-items: center; gap: 6px; padding: 6px 8px; cursor: pointer; }
+.observation-picker input { width: auto; margin: 0; accent-color: #527958; }
+.observation-picker p { margin: 8px 0; }
+.observation-reminder { display: grid; gap: 5px; margin-bottom: 12px; padding: 12px; background: rgba(109, 143, 111, .12); border: 1px solid #647859; border-radius: 8px; color: #f3e4c1; }
+.observation-reminder span { font-size: .82rem; color: #e5d9c7; }
+.observation-reminder .hint { color: #e5d9c7; }
+.call-product-facts { font-size: .82rem; }
+.call-product-facts summary { cursor: pointer; padding: 6px 0; }
+.call-product-facts li strong { margin-right: 12px; }
+.live-fact-notes { font-size: .82rem; }
+.live-fact-notes summary { cursor: pointer; padding: 6px 0; color: #ffe4a3; }
+.observation-review, .replay-comparison { margin: 18px 0; padding: 16px; border: 1px solid var(--line, #cbc4b1); border-radius: 10px; }
+.observation-review ul { list-style: none; padding: 0; }
+.review-product-facts { margin: 10px 0; padding: 10px; background: #f6eddc; border: 1px dashed #b9a584; border-radius: 6px; }
+.review-product-facts summary { cursor: pointer; font-weight: 700; }
+.review-product-facts ul { padding-left: 16px; list-style: disc; }
+.review-product-facts li strong { margin-right: 12px; }
+.observation-review li + li { border-top: 1px solid var(--line, #cbc4b1); margin-top: 12px; padding-top: 12px; }
+.observation-review blockquote, .comparison-pair blockquote { margin: 10px 0; padding-left: 12px; border-left: 3px solid #7a9575; }
+.replay-comparison summary { cursor: pointer; font-weight: 700; }
+.comparison-rounds { padding-left: 24px; }
+.comparison-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.comparison-pair section { padding: 12px; border: 1px solid var(--line, #cbc4b1); border-radius: 8px; min-width: 0; overflow-wrap: anywhere; }
+.replay-focus-picker { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-top: 10px; }
+.replay-focus-picker select { width: auto; max-width: 100%; }
+.failed-draft { margin-top: 8px; padding: 10px; border: 1px solid var(--line, #cbc4b1); border-radius: 8px; }
+.failed-draft button { margin: 4px; }
+.latest-reply { margin: 6px 0; }
+@media (max-width: 640px) {
+  .comparison-pair { grid-template-columns: minmax(0, 1fr); }
+  .observation-review, .replay-comparison { padding: 12px; }
+}

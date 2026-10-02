@@ -130,8 +130,8 @@ export const DIALOGUE_CASES: DialogueCase[] = [
   },
   {
     id: "stop-intent-ladder",
-    title: "停止意图梯度:暂时不用→再说吧→别再打了,累计三次才收口",
-    source: "ef781c8(2026-09-26)统一三次拒绝规则;SC3 停止条件",
+    title: "停止意图梯度:犹豫征询继续，明确离场即时收口",
+    source: "game-design-fixes G03：当前意图与 SC3 停止条件",
     personaId: "p03-dingqi-huashao",
     turns: [
       { customer: "喂", expect: [...openingExpectations(), ...noFabricatedIdentity()] },
@@ -145,7 +145,7 @@ export const DIALOGUE_CASES: DialogueCase[] = [
         ],
       },
       {
-        customer: "再说吧,我不感兴趣",
+        customer: "再说吧,我还要考虑一下",
         expect: [
           ({ output }: { output: ManagerTurnOutput }) => {
             expect(output.shouldEnd, "第二次拒绝仍不应收口").not.toBe(true);
@@ -156,10 +156,10 @@ export const DIALOGUE_CASES: DialogueCase[] = [
         customer: "不用了,别再打了",
         expect: [
           ({ output }: { output: ManagerTurnOutput }) => {
-            expect(output.shouldEnd, "累计第三次拒绝应收口").toBe(true);
+            expect(output.shouldEnd, "明确离场应收口").toBe(true);
           },
           ({ reply }: { reply: string }) => {
-            expect(reply, `收口应留一句联系渠道:"${reply}"`).toMatch(/随时找我|随时联系|联系我|微信/);
+            expect(reply, `收口应留一句联系渠道:"${reply}"`).toMatch(/随时找我|随时联系|联系我|微信|官方渠道/);
           },
           ({ reply }: { reply: string }) => {
             expect(reply, `收口不得带后续钩子:"${reply}"`).not.toMatch(/过阵子|到时候我再联系|下次我再联系/);
@@ -171,8 +171,8 @@ export const DIALOGUE_CASES: DialogueCase[] = [
   },
   {
     id: "explicit-stop-first",
-    title: "首次明确终止:现行计数规则下不立即挂断(玩法边界钉子)",
-    source: "spec 分歧1:即时收口例外只是建议、未实施;本案钉住现行三次规则的行为",
+    title: "首次明确终止：立即体面收口",
+    source: "game-design-fixes G03：第一次明确离场也必须结束",
     personaId: "p01-daifagua",
     turns: [
       { customer: "喂", expect: openingExpectations() },
@@ -180,7 +180,7 @@ export const DIALOGUE_CASES: DialogueCase[] = [
         customer: "别再打了,我要挂了",
         expect: [
           ({ output }: { output: ManagerTurnOutput }) => {
-            expect(output.shouldEnd, "首次明确拒绝按现行规则计数,不立即挂断").not.toBe(true);
+            expect(output.shouldEnd, "首次明确拒绝应立即结束").toBe(true);
           },
           ({ reply }: { reply: string }) => expectNoProductNumbers(reply),
           ({ reply }: { reply: string }) => expectAtMostThreeSentences(reply),

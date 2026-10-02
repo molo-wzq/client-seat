@@ -128,6 +128,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
       endReason: asOptionalString(raw.endReason),
       outcomeSummary: asOptionalString(raw.outcomeSummary),
       logicHint: asOptionalString(raw.logicHint),
+      ...(Array.isArray(raw.factCheckNotes) ? { factCheckNotes: raw.factCheckNotes.filter((note): note is string => typeof note === "string" && Boolean(note.trim())).slice(0, 3).map((note) => note.trim().slice(0, 500)) } : {}),
     };
   }
 

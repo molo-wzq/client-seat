@@ -109,8 +109,8 @@ export function createHttpProductCore(baseUrl = ""): ProductCore {
     listPersonas: () => request("/personas"),
     savePersona: (input) =>
       request("/personas", { method: "POST", body: JSON.stringify(input) }),
-    startConversation: (personaId) =>
-      request("/conversations", { method: "POST", body: JSON.stringify({ personaId }) }),
+    startConversation: (personaId, options) =>
+      request("/conversations", { method: "POST", body: JSON.stringify({ personaId, ...options }) }),
     quickStart: () => request("/quickstart", { method: "POST" }),
     getConversation: (conversationId) =>
       request(`/conversations/${encodeURIComponent(conversationId)}`),
@@ -126,6 +126,12 @@ export function createHttpProductCore(baseUrl = ""): ProductCore {
       request(`/conversations/${encodeURIComponent(conversationId)}/regenerate`, {
         method: "POST",
       }),
+    branchConversation: (conversationId, customerTurnNumber, replacementText) =>
+      request(`/conversations/${encodeURIComponent(conversationId)}/branch`, {
+        method: 'POST', body: JSON.stringify({ customerTurnNumber, replacementText }),
+      }),
+    saveObservation: (conversationId, observation) =>
+      request(`/conversations/${encodeURIComponent(conversationId)}/observations`, { method: 'PUT', body: JSON.stringify(observation) }),
     finishConversation: (conversationId) =>
       request(`/conversations/${encodeURIComponent(conversationId)}/finish`, { method: "POST" }),
     getResult: (conversationId) =>
