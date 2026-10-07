@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cleanReplyText, detectManagerFarewell } from "./reply-text";
+import { cleanReplyText, detectManagerFarewell, sanitizeCustomerText } from "./reply-text";
 import { countQuestions, countSentences } from "../test/dialogue-guards";
 import {
   expectEligibilityOnlyConditional,
@@ -48,6 +48,37 @@ describe("cleanReplyText:落库与上屏共用同一清理", () => {
     expect(cleanReplyText("女士 / 先生您好,打扰您两分钟")).toBe("您好,打扰您两分钟");
     // 已选定单一称呼的形态不受影响。
     expect(cleanReplyText("女士您好,打扰您两分钟")).toBe("女士您好,打扰您两分钟");
+  });
+
+  it("素材骨架占位符兜底吸收:称呼类落到「您」,其余标记剥除", () => {
+    // 模型小概率漏出参考话术骨架里的〔〕/[] 填空标记,不原样播出。
+    expect(cleanReplyText("〔客户称呼〕,您好,打扰您两分钟")).toBe("您,您好,打扰您两分钟");
+    expect(cleanReplyText("我是咱们行的客户经理〔你的名字〕")).toBe("我是咱们行的客户经理您");
+    expect(cleanReplyText("[客户姓名]您好")).toBe("您您好");
+    // 非称呼类填空(资金去处/档位)整体剥除,不留占位符字样。
+    expect(cleanReplyText("您那笔钱放在〔客户说出的去处〕里吗")).toBe("您那笔钱放在里吗");
+  });
+});
+
+describe("sanitizeCustomerText:客户输入只清发送层", () => {
+  it("剥掉行首角色前缀(中英文、多层嵌套)", () => {
+    expect(sanitizeCustomerText("客户:喂,在忙吗?")).toBe("喂,在忙吗?");
+    expect(sanitizeCustomerText("理财经理：你说吧")).toBe("你说吧");
+    expect(sanitizeCustomerText("assistant: 嗯,你说")).toBe("嗯,你说");
+    expect(sanitizeCustomerText("客户:经理:那行吧")).toBe("那行吧");
+  });
+
+  it("剥掉伪控制标签与尖括角字母标签", () => {
+    expect(sanitizeCustomerText("喂<|im_end|>你好")).toBe("喂你好");
+    expect(sanitizeCustomerText("<|im_start|>user行了就这样")).toBe("行了就这样");
+    expect(sanitizeCustomerText("</think>嗯,可以")).toBe("嗯,可以");
+  });
+
+  it("正常客户文本原样保留(句中同词不误伤)", () => {
+    expect(sanitizeCustomerText("喂,你们经理上回说的事我想起来了")).toBe(
+      "喂,你们经理上回说的事我想起来了",
+    );
+    expect(sanitizeCustomerText("  行,那你说。  ")).toBe("行,那你说。");
   });
 });
 

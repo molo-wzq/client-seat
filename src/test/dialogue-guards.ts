@@ -48,16 +48,22 @@ export function expectNumbersOnlyFromProductCard(reply: string): void {
     expect(value, `收益百分比超出产品卡区间:"${reply}"`).toBeGreaterThanOrEqual(1.5);
     expect(value).toBeLessThanOrEqual(3.5);
   }
+  // 产品卡只给区间表述:具体点值利率(「大概2.7的利率」)是卡外数字,整数
+  // 区间口径(2%到3%)不受影响。
+  expect(reply, `出现卡外具体利率点值:"${reply}"`).not.toMatch(
+    /\d\.\d+\s*(?:的)?(?:%|年化|利率|收益)/,
+  );
 }
 
 /**
  * 保本/保证类表述必须带否定:「不能保证本金」「不保本」是合法风险说明,
  * 未否定的「保本」「保证收益」是违规承诺。只查否定窗口,不猜语义。
+ * 窗口取 6 字:口语否定常隔几个字(「谁也没法跟您说保本」,「没」在 5 字外)。
  */
 export function expectNoUnconditionalGuarantee(reply: string): void {
   for (const match of reply.matchAll(/保本|保证|稳赚|绝对安全|百分之百/g)) {
     const start = match.index ?? 0;
-    const before = reply.slice(Math.max(0, start - 4), start);
+    const before = reply.slice(Math.max(0, start - 6), start);
     expect(
       /不|没|无|非/.test(before),
       `出现未否定的保证性表述 "${match[0]}":"${reply}"`,

@@ -144,10 +144,10 @@ describe("证据与客户事实不误导", () => {
     const replies = quickReplies({ ...conversation, turns: [{ number: 2, speaker: "manager", text: "您那笔15万接下来怎么安排?" }] }, [SEED_PERSONA_P03]);
     expect(replies).toContain("你想了解哪方面?");
     expect(replies.join(" ")).not.toMatch(/股市|报名|报上|存着定期/);
-    const opening = quickReplies({ ...conversation, turns: [{ number: 2, speaker: "manager", text: "我是理财经理小李，行里有个活动，您现在方便吗?" }] }, [SEED_PERSONA_P03]);
+    const opening = quickReplies({ ...conversation, turns: [{ number: 2, speaker: "manager", text: "我是理财经理小王，行里有个活动，您现在方便吗?" }] }, [SEED_PERSONA_P03]);
     expect(opening.join(" ")).not.toMatch(/收益|取用|报名|立减金/);
     const stranger = { ...SEED_PERSONA_P02, visible: ["年长客户，与经理首次接触"] };
-    expect(quickReplies({ ...conversation, personaId: stranger.id }, [stranger])).not.toContain("喂,是小李啊");
+    expect(quickReplies({ ...conversation, personaId: stranger.id }, [stranger])).not.toContain("喂,是小王啊");
   });
 
   it("明牌不把动作链首项当作本轮事实,未匹配也不提示等待", () => {

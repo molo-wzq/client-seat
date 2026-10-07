@@ -2,8 +2,10 @@ import {
   assembleAnalystSystemPrompt,
   assembleManagerMetaPrompt,
   assembleManagerSystemPrompt,
+  STYLE_DEMO_MESSAGES,
+  TAIL_STYLE_REMINDER,
 } from "./prompts";
-import { cleanReplyText } from "../domain/reply-text";
+import { cleanReplyText, sanitizeCustomerText } from "../domain/reply-text";
 import type {
   CopywritingPort,
   DialoguePort,
@@ -18,6 +20,43 @@ import type {
 
 // cleanReplyText 已移入领域(流式上屏与落库共用同一清理);此处 re-export 保持既有引用。
 export { cleanReplyText };
+
+/**
+ * p13 实验开关(默认关):尾部语体短提醒 / 开场语体示范轮。小样本冒烟证据
+ * 不一致(v1 示范开场稳但偶发问法漏印,v2 示范开场方差放大),按 spec
+ * 「确有收益才保留」口径退为显式开启。置 1 启用,如 LLM_TAIL_REMINDER=1。
+ */
+export const PROMPT_TUNING_ENV = {
+  tailReminder: "LLM_TAIL_REMINDER",
+  styleDemo: "LLM_STYLE_DEMO",
+} as const;
+
+function tuningEnabled(name: string): boolean {
+  // 经 globalThis 取 process:本文件同时进浏览器包,src 侧 tsconfig 无 node 类型。
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
+    ?.env;
+  return env?.[name] === "1";
+}
+
+/**
+ * 流式首部缓冲(hold buffer,手册 14.4):称谓前缀/舞台指示若随增量先上屏,
+ * 会在终态清洗时「闪现再消失」。开头先暂扣 LEAD_HOLD 个字符,剥净已知
+ * 前缀形态后一次性放行,后续增量直通;流提前结束则在收尾补一次放行。
+ * 只影响推送给 onReplyDelta 的视图,content 累积仍是原文,终态清洗不变。
+ */
+const LEAD_HOLD = 20;
+const LEAD_ROLE_PREFIX =
+  /^\s*(?:理财经理(?:小王)?|小王|经理|话术|AI|客服|assistant|user|system)\s*[:：]\s*/i;
+const LEAD_STAGE_DIRECTION = /^\s*[（(][^（）()\n]{0,20}[）)]\s*/;
+
+function stripStreamLead(text: string): string {
+  let rest = text;
+  for (;;) {
+    const next = rest.replace(LEAD_STAGE_DIRECTION, "").replace(LEAD_ROLE_PREFIX, "");
+    if (next === rest) return rest.replace(/^\s+/, "");
+    rest = next;
+  }
+}
 
 /**
  * 真实语言模型适配器:OpenAI 兼容 chat/completions 接口。
@@ -36,10 +75,15 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
   constructor(private readonly config: ModelAdapterConfig) {}
 
   async analyzeTranscript(transcript: string): Promise<TranscriptAnalysis> {
-    const { content, reasoning } = await this.chat([
-      { role: "system", content: assembleAnalystSystemPrompt() },
-      { role: "user", content: `素材标题:${DEFAULT_MATERIAL_TITLE}\n\n转写稿:\n${transcript}` },
-    ]);
+    const { content, reasoning } = await this.chat(
+      [
+        { role: "system", content: assembleAnalystSystemPrompt() },
+        { role: "user", content: `素材标题:${DEFAULT_MATERIAL_TITLE}\n\n转写稿:\n${transcript}` },
+      ],
+      undefined,
+      // 抽取归纳任务:低温压「无中生有」的动作链与舞台(p14)。
+      { temperature: 0.2 },
+    );
     // 分析输出不直接播出,推理模型的 reasoning_content 同样可用作解析源。
     const source = content.trim() ? content : reasoning;
     const raw = parseJsonObject(source) as {
@@ -69,14 +113,26 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
   ): Promise<ManagerTurnOutput> {
     const messages: Array<{ role: string; content: string }> = [
       { role: "system", content: assembleManagerSystemPrompt(input) },
+      // 语体示范轮(p13 实验,默认关):只学口吻,不进历史不落库。
+      ...(tuningEnabled(PROMPT_TUNING_ENV.styleDemo) ? STYLE_DEMO_MESSAGES : []),
     ];
     for (const turn of input.history) {
-      messages.push({ role: turn.speaker === "customer" ? "user" : "assistant", content: turn.text });
+      messages.push({
+        role: turn.speaker === "customer" ? "user" : "assistant",
+        content: turn.speaker === "customer" ? sanitizeCustomerText(turn.text) : turn.text,
+      });
     }
-    messages.push({ role: "user", content: input.customerText });
+    messages.push({ role: "user", content: sanitizeCustomerText(input.customerText) });
+    // 尾部语体短提醒(p13 实验,默认关):越靠近生成点权重越高,只回声既有规则。
+    if (tuningEnabled(PROMPT_TUNING_ENV.tailReminder)) {
+      messages.push({ role: "system", content: TAIL_STYLE_REMINDER });
+    }
 
-    const { content: streamedReply } = await this.chatStream(messages, onReplyDelta);
+    const { content: streamedReply, reasoning } = await this.chatStream(messages, onReplyDelta);
     const reply = cleanReplyText(streamedReply);
+    // 思考通道原文沉淀给复盘(p14):超长截断,空则不携带;不进下一轮输入。
+    const managerReasoning = reasoning.trim() ? reasoning.trim().slice(0, 8000) : undefined;
+    const withReasoning = managerReasoning ? { reasoning: managerReasoning } : {};
 
     const meta = await this.extractManagerMeta(input, reply).catch((error) => {
       // 降级而非失败:话术已经生成且播给用户,此时抛错会回滚整轮;
@@ -84,8 +140,8 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
       console.warn("[adapter] 元数据提取失败,本轮降级为无元数据:", (error as Error).message);
       return null;
     });
-    if (!meta) return { reply };
-    return { reply, ...meta };
+    if (!meta) return { reply, ...withReasoning };
+    return { reply, ...withReasoning, ...meta };
   }
 
   /** 第二次调用:裁判提取元数据。任何失败由调用方 catch 后降级。 */
@@ -97,9 +153,12 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     // (通话有 12 经理轮上限,历史长度可控,不会撑爆裁判上下文)。
     const dialogue = [
       ...input.history.map(
-        (turn) => `${turn.speaker === "customer" ? "客户" : "经理"}:${turn.text}`,
+        (turn) =>
+          `${turn.speaker === "customer" ? "客户" : "经理"}:${
+            turn.speaker === "customer" ? sanitizeCustomerText(turn.text) : turn.text
+          }`,
       ),
-      `客户:${input.customerText}`,
+      `客户:${sanitizeCustomerText(input.customerText)}`,
       `经理(刚说):${reply}`,
     ].join("\n");
     const { content, reasoning } = await this.chat(
@@ -108,6 +167,8 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
         { role: "user", content: `对话记录:\n${dialogue}\n\n请输出元数据 JSON。` },
       ],
       { response_format: { type: "json_object" } },
+      // 裁判是分类任务不是创作:低温换判定稳定(p13 参数分层)。
+      { temperature: 0.1 },
     );
     const source = content.trim() ? content : reasoning;
     const raw = parseJsonObject(source) as Partial<ManagerTurnOutput> & { signal?: unknown; goal?: unknown };
@@ -154,6 +215,9 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
           messages,
           temperature: 0.7,
           max_tokens: 16384,
+          // 显式关掉重复惩罚:垫字与口癖要的就是反复出现(p13)。
+          frequency_penalty: 0,
+          presence_penalty: 0,
           stream: true,
         }),
       });
@@ -174,6 +238,9 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";
+    // 首部缓冲状态:未放行前先攒进 lead,攒够 LEAD_HOLD 或流结束时剥净放行。
+    let lead = "";
+    let leadFlushed = false;
     for (;;) {
       const { done, value } = await reader.read();
       if (done) break;
@@ -194,15 +261,31 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
           } catch {
             continue; // 半截 JSON(理论上不会出现,残包已在 buffer 层拦截)
           }
-          const delta = parsed.choices?.[0]?.delta;
+          const delta = parsed.choices?.[0].delta;
           if (!delta) continue;
           if (delta.reasoning_content) reasoning += delta.reasoning_content;
           if (delta.content) {
             content += delta.content;
-            onReplyDelta?.(delta.content);
+            if (!onReplyDelta) continue;
+            if (leadFlushed) {
+              onReplyDelta(delta.content);
+              continue;
+            }
+            lead += delta.content;
+            if (lead.length >= LEAD_HOLD) {
+              leadFlushed = true;
+              const rest = stripStreamLead(lead);
+              lead = "";
+              if (rest) onReplyDelta(rest);
+            }
           }
         }
       }
+    }
+    // 流在攒够 LEAD_HOLD 前结束:剥净首部后补一次放行,短回复不丢增量。
+    if (!leadFlushed && lead) {
+      const rest = stripStreamLead(lead);
+      if (rest) onReplyDelta?.(rest);
     }
     if (!content.trim() && !reasoning.trim()) {
       console.warn("[adapter] 语言模型流式返回缺少内容");
@@ -219,6 +302,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
   private async chat(
     messages: Array<{ role: string; content: string }>,
     extraBody?: Record<string, unknown>,
+    options?: { temperature?: number },
   ): Promise<{ content: string; reasoning: string }> {
     let response: Response;
     try {
@@ -234,8 +318,10 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
         body: JSON.stringify({
           model: this.config.model,
           messages,
-          temperature: 0.7,
+          temperature: options?.temperature ?? 0.7,
           max_tokens: 16384,
+          frequency_penalty: 0,
+          presence_penalty: 0,
           ...extraBody,
         }),
       });

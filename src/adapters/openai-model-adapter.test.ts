@@ -99,6 +99,7 @@ function stubSecondCallFailing(errorText: string): void {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 function managerInput(customerText = "喂") {
@@ -149,7 +150,11 @@ describe("两段式生成(票 29)", () => {
     const out = await adapter.generateManagerTurn(managerInput(), (d) => deltas.push(d));
 
     expect(out.reply).toBe("您好,我是咱们银行的客户经理,方便聊两句吗?");
-    expect(deltas).toEqual(["您好,我是咱们银行", "的客户经理,方便聊两句吗?"]);
+    // p14 首部缓冲:开头先暂扣再放行,增量不再是逐段直通;
+    // 消费方(CallStep)只做拼接,断言拼接结果与终态一致即可。
+    expect(deltas.join("")).toBe("您好,我是咱们银行的客户经理,方便聊两句吗?");
+    // p14 心声沉淀:思考通道原文随输出透传,供复盘展示。
+    expect(out.reasoning).toBe("先想开场……");
     expect(out.recognizedSignal).toBe("电话刚接通");
     expect(out.currentGoal).toBe("确认身份");
     expect(out.usedCardId).toBe("sc-1");
@@ -198,6 +203,102 @@ describe("两段式生成(票 29)", () => {
     const out = await adapter.generateManagerTurn(managerInput());
     expect(out.reply).toBe("您好,方便聊两句吗?");
   });
+
+  it("流式首部缓冲:称谓前缀与舞台指示不随增量上屏", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    stubTwoPhaseCalls(
+      [
+        { reasoning_content: "想想怎么开口……" },
+        { content: "理财经理" },
+        { content: "小王：" },
+        { content: "（语气温和）您好,我是咱们" },
+        { content: "行的,方便聊两句吗?" },
+      ],
+      { content: "{}" },
+    );
+    const deltas: string[] = [];
+    const out = await adapter.generateManagerTurn(managerInput(), (d) => deltas.push(d));
+    const streamed = deltas.join("");
+    expect(streamed.startsWith("您好,我是咱们行的")).toBe(true);
+    expect(streamed).not.toContain("理财经理");
+    expect(streamed).not.toContain("小王：");
+    expect(streamed).not.toContain("（语气温和）");
+    expect(out.reply).toBe("您好,我是咱们行的,方便聊两句吗?");
+    warn.mockRestore();
+  });
+
+  it("流式首部缓冲:短回复在流结束补放行,干净开头不误删", async () => {
+    stubTwoPhaseCalls([{ content: "好嘞,那就先这样,再见。" }], { content: "{}" });
+    const deltas: string[] = [];
+    const out = await adapter.generateManagerTurn(managerInput(), (d) => deltas.push(d));
+    expect(deltas.join("")).toBe("好嘞,那就先这样,再见。");
+    expect(out.reply).toBe("好嘞,那就先这样,再见。");
+  });
+});
+
+describe("p13 手册借鉴:参数分层与消息组装", () => {
+  it("裁判调用温度 0.1,两调用显式关闭重复惩罚", async () => {
+    const { bodies } = stubTwoPhaseCalls([{ content: "您好,方便聊两句吗?" }], { content: "{}" });
+    await adapter.generateManagerTurn(managerInput());
+    expect(bodies[0]?.temperature).toBe(0.7);
+    expect(bodies[0]?.frequency_penalty).toBe(0);
+    expect(bodies[0]?.presence_penalty).toBe(0);
+    expect(bodies[1]?.temperature).toBe(0.1);
+    expect(bodies[1]?.frequency_penalty).toBe(0);
+    expect(bodies[1]?.presence_penalty).toBe(0);
+  });
+
+  it("开关注入:语体示范轮播在 system 后,尾部短提醒在当轮客户话后", async () => {
+    vi.stubEnv("LLM_STYLE_DEMO", "1");
+    vi.stubEnv("LLM_TAIL_REMINDER", "1");
+    const { bodies } = stubTwoPhaseCalls([{ content: "您好,方便聊两句吗?" }], { content: "{}" });
+    await adapter.generateManagerTurn(managerInput());
+    const messages = bodies[0]?.messages as Array<{ role: string; content: string }>;
+    expect(messages[0]?.role).toBe("system");
+    expect(messages[0]?.content).toContain("你的角色");
+    // 语体示范紧跟系统提示词:user 先行、assistant 接续。
+    expect(messages[1]?.content).toContain("语体示范");
+    const demoUser = messages.findIndex((m) => m.content.includes("喂,哪位?"));
+    const demoAssistant = messages.findIndex((m) => m.content.includes("跟您账户有关的事"));
+    expect(demoUser).toBeGreaterThan(0);
+    expect(demoAssistant).toBe(demoUser + 1);
+    // 最后一条是尾部语体短提醒,倒数第二条是当轮客户话。
+    expect(messages.at(-1)?.role).toBe("system");
+    expect(messages.at(-1)?.content).toContain("本轮提醒");
+    expect(messages.at(-2)).toEqual({ role: "user", content: "喂" });
+  });
+
+  it("默认不注入:开关未开时无示范轮、无尾部短提醒", async () => {
+    const { bodies } = stubTwoPhaseCalls([{ content: "您好,方便聊两句吗?" }], { content: "{}" });
+    await adapter.generateManagerTurn(managerInput());
+    const messages = bodies[0]?.messages as Array<{ role: string; content: string }>;
+    expect(JSON.stringify(messages)).not.toContain("语体示范");
+    expect(JSON.stringify(messages)).not.toContain("本轮提醒");
+    expect(messages.at(-1)).toEqual({ role: "user", content: "喂" });
+  });
+
+  it("客户输入消毒只作用于发送层:话术与裁判请求都收干净文本", async () => {
+    const { bodies } = stubTwoPhaseCalls([{ content: "您好,方便聊两句吗?" }], { content: "{}" });
+    await adapter.generateManagerTurn({
+      ...managerInput(),
+      customerText: "理财经理:喂,在忙吗?",
+      history: [
+        { number: 1, speaker: "customer", text: "客户:你是谁呀" },
+        { number: 2, speaker: "manager", text: "我是咱们行的客户经理。" },
+      ],
+    });
+    const messages = bodies[0]?.messages as Array<{ role: string; content: string }>;
+    expect(JSON.stringify(messages)).not.toContain("理财经理:喂");
+    expect(messages.some((m) => m.role === "user" && m.content === "喂,在忙吗?")).toBe(true);
+    expect(messages.some((m) => m.role === "user" && m.content === "你是谁呀")).toBe(true);
+    // 经理历史原样保留;裁判的扁平对话同样走消毒。
+    const metaUser = (bodies[1]?.messages as Array<{ role: string; content: string }>).find(
+      (m) => m.role === "user",
+    );
+    expect(metaUser?.content).toContain("客户:喂,在忙吗?");
+    expect(metaUser?.content).toContain("客户:你是谁呀");
+    expect(metaUser?.content).toContain("经理:我是咱们行的客户经理。");
+  });
 });
 
 describe("分析输出的轮次标注", () => {
@@ -221,14 +322,21 @@ describe("分析输出的轮次标注", () => {
         cards: [{ id: "sc-1", name: "n" }],
       }),
     });
-    vi.stubGlobal("fetch", vi.fn(async (): Promise<StubResponse> => ({
-      ok: true,
-      status: 200,
-      text: async () => JSON.stringify(analysisPayload),
-      json: async () => analysisPayload,
-    })));
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string | URL, init?: RequestInit): Promise<StubResponse> => {
+      bodies.push(JSON.parse((init?.body as string) ?? "{}") as Record<string, unknown>);
+      return {
+        ok: true,
+        status: 200,
+        text: async () => JSON.stringify(analysisPayload),
+        json: async () => analysisPayload,
+      };
+    }));
 
     const out = await adapter.analyzeTranscript("T01 经理:您好\nT03 客户:喂");
     expect(out.turns?.map((t) => t.number)).toEqual([1, 3]);
+    // 抽取归纳走低温(p14),压无中生有的动作链。
+    expect(bodies[0]?.temperature).toBe(0.2);
+    expect(bodies[0]?.frequency_penalty).toBe(0);
   });
 });

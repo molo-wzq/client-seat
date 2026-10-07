@@ -254,7 +254,7 @@ describe("快捷回复台词跟画像走(p3 人生阶段用词)", () => {
 
   it("年长画像按已知关系开场,探询快捷回复不虚构资金事实", () => {
     expect(quickReplies(conversationWith(), [ELDERLY])).toEqual([
-      "喂,是小李啊",
+      "喂,是小王啊",
       "喂,哪位?",
       "你们谁啊?",
     ]);

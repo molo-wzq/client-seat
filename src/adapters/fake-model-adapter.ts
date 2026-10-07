@@ -99,8 +99,8 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
       const address = elderlyAddress(persona);
       return {
         reply: hasPayrollBasis
-          ? `${address}您好,我是咱们行的理财经理小李,看系统里您工资是咱行代发的。这会儿方便说两句吗?行里有个面向代发客户的资金活动,想跟您说一声。`
-          : `${address}您好,我是咱们行的理财经理小李。这会儿方便说两句吗?行里有个客户资金活动想跟您说一声,不耽误您太久。`,
+          ? `${address}您好,我是咱们行的理财经理小王,看系统里您工资是咱行代发的。这会儿方便说两句吗?行里有个面向代发客户的资金活动,想跟您说一声。`
+          : `${address}您好,我是咱们行的理财经理小王。这会儿方便说两句吗?行里有个客户资金活动想跟您说一声,不耽误您太久。`,
         recognizedSignal: "电话刚接通,客户应答",
         currentGoal: "让客户确认这是本行客户经理的正常服务来电,愿意继续听下去",
         usedCardId: SEED_CARD_IDS.opening,

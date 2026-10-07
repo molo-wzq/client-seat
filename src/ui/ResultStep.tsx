@@ -358,6 +358,13 @@ export function ResultStep({
               </div> : null}
             </dl>
                 <blockquote>“{turn.text}”</blockquote>
+                {turn.managerReasoning && (
+                  <details className="source-evidence manager-reasoning">
+                    <summary>经理心声 · 开口前的真实思考</summary>
+                    <p className="hint">生成这轮话术时模型的思考通道原文;与上方裁判的信号/用卡/归因候选是两个来源,互相独立。</p>
+                    <blockquote className="source-turns"><p>{turn.managerReasoning}</p></blockquote>
+                  </details>
+                )}
                 {entry?.source && (
                   <p className="source">
                     来源:{entry.source.materialTitle} {entry.source.turnRange}

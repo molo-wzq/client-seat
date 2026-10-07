@@ -78,7 +78,7 @@ describe("经理系统提示词:规则 6(原 9)客户属性防护", () => {
     expect(prompt).toContain("至多留一句官方服务渠道");
     expect(prompt).toContain("不得带未来回拨或营销钩子");
     // p3:身份不再靠"不编造姓名"约束,而是角色区给定固定身份。
-    expect(prompt).toContain("理财经理小李");
+    expect(prompt).toContain("理财经理小王");
     expect(prompt).toContain("不另起名字");
   });
 
@@ -95,6 +95,16 @@ describe("分析提示词:场景读法(票 14)", () => {
     expect(prompt).toContain("期限届满");
     expect(prompt).toContain("不得混用");
     expect(prompt).toMatch(/按转写原文用词判断/);
+  });
+
+  it("输出顺序核心置前:analysis、cards 在逐句抄写的 turns 之前(p14)", () => {
+    const prompt = assembleAnalystSystemPrompt();
+    const atAnalysis = prompt.indexOf('"analysis"');
+    const atCards = prompt.indexOf('"cards"');
+    const atTurns = prompt.indexOf('"turns"');
+    expect(atAnalysis).toBeGreaterThan(-1);
+    expect(atCards).toBeGreaterThan(atAnalysis);
+    expect(atTurns).toBeGreaterThan(atCards);
   });
 });
 

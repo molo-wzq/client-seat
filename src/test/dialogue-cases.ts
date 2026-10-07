@@ -158,9 +158,8 @@ export const DIALOGUE_CASES: DialogueCase[] = [
           ({ output }: { output: ManagerTurnOutput }) => {
             expect(output.shouldEnd, "明确离场应收口").toBe(true);
           },
-          ({ reply }: { reply: string }) => {
-            expect(reply, `收口应留一句联系渠道:"${reply}"`).toMatch(/随时找我|随时联系|联系我|微信|官方渠道/);
-          },
+          // 提示词规则是「收口前至多留一句官方服务渠道」——渠道可选,一句不留
+          // 也是体面收口;这里只钉「不得带后续钩子」与句数。
           ({ reply }: { reply: string }) => {
             expect(reply, `收口不得带后续钩子:"${reply}"`).not.toMatch(/过阵子|到时候我再联系|下次我再联系/);
           },

@@ -294,7 +294,7 @@ export function createProductCore(deps: {
         persona,
         publishedCards: structuredClone(publishedCards),
         product: productFacts,
-        history: conversation.turns.slice(0, -1).map(({ strategyEvidence: _privateEvidence, promptVersion: _version, factCheckNotes: _factNotes, ...turn }) => turn),
+        history: conversation.turns.slice(0, -1).map(({ strategyEvidence: _privateEvidence, promptVersion: _version, factCheckNotes: _factNotes, managerReasoning: _reasoning, ...turn }) => turn),
         customerText: customerTurn.text,
       },
       onReplyDelta,
@@ -330,6 +330,7 @@ export function createProductCore(deps: {
       currentGoal: output.currentGoal,
       ...(retrievable && output.cardMatchBasis ? { cardMatchBasis: output.cardMatchBasis } : {}),
       ...(output.logicHint ? { logicHint: output.logicHint } : {}),
+      ...(output.reasoning ? { managerReasoning: output.reasoning } : {}),
       ...(factCheckNotes.length ? { factCheckNotes } : {}),
       ...(outOfCardFact ? { outOfCardFact: true } : {}),
     };

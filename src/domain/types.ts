@@ -238,6 +238,12 @@ export interface ConversationTurn {
    * 本局客户口述、此前经理已报过的数字之外)。只标不拦,复盘如实呈现。
    */
   outOfCardFact?: boolean;
+  /**
+   * 仅经理轮:当轮话术生成时模型的思考通道原文(reasoning_content)。
+   * 是生成侧真实过程记录,与裁判解释候选(cardMatchBasis/logicHint)区分;
+   * 只用于复盘展示,绝不进入下一轮生成输入。旧记录无此字段,如实缺失。
+   */
+  managerReasoning?: string;
 }
 
 export type ConversationStatus = "ongoing" | "ended";

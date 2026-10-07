@@ -21,7 +21,7 @@ export function quickReplies(conversation: Conversation | null, personas: Person
   const acquainted = persona?.visible.some((line) => /已相识|已认识|与经理熟悉/.test(line)) ?? false;
   const lastManager = [...turns].reverse().find((t) => t.speaker === "manager");
   if (!lastManager) {
-    return elderly && acquainted ? ["喂,是小李啊", "喂,哪位?", "你们谁啊?"] : ["喂", "喂,你好,哪位?", "你谁啊?"];
+    return elderly && acquainted ? ["喂,是小王啊", "喂,哪位?", "你们谁啊?"] : ["喂", "喂,你好,哪位?", "你谁啊?"];
   }
   if (/立减金|报名|活动.*(?:参加|领取)|(?:参加|领取).*活动/.test(lastManager.text)) {
     return elderly

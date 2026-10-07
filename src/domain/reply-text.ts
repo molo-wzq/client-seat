@@ -15,8 +15,14 @@
 export function cleanReplyText(reply: string): string {
   return reply
     .replace(/[（(][^（）()]*[）)]/g, "")
+    // 素材骨架〔〕/[] 填空标记漏出时兜底吸收(穿帮痕迹两边都不留):
+    // 称呼/姓名类填空落到「您」,其余标记整体剥除,不原样播出占位符字样。
+    .replace(/〔([^〔〕\n]{1,20})〕|\[([^\[\]\n]{1,20})\]/g, (_match, lenticular: string, square: string) => {
+      const inner = (lenticular ?? square ?? "").trim();
+      return /称呼|姓名|名字/.test(inner) ? "您" : "";
+    })
     .replace(/先生\s*\/\s*女士|女士\s*\/\s*先生/g, "")
-    .replace(/^(?:理财经理|经理|AI|客服|话术)\s*[:：]\s*/, "")
+    .replace(/^(?:理财经理(?:小王)?|小王|经理|AI|客服|话术)\s*[:：]\s*/, "")
     .replace(
       /\n[ \t]*(?:user|assistant)[^\n]*$|\n[ \t]*(?:客户|经理|理财经理)\s*[:：][^\n]*$/i,
       "",
@@ -24,6 +30,34 @@ export function cleanReplyText(reply: string): string {
     .replace(/^["「『“]+|["」』”]+$/g, "")
     .replace(/\s{2,}/g, " ")
     .trim();
+}
+
+/**
+ * 客户输入的发送层消毒:玩家可能敲出「理财经理:」「客户:」类角色前缀或
+ * `<|im_end|>` 样式的伪控制标签,原样进 messages 会干扰角色边界、污染裁判
+ * 的扁平对话。只清洗发给模型的内容;存储、显示与意图守卫仍在原文上运行。
+ */
+export function sanitizeCustomerText(text: string): string {
+  const stripPrefix = (value: string) =>
+    value
+      // 裸 user/assistant 紧贴汉字(实测网关形态,无冒号);后跟 ASCII 时不剥,防误伤
+      .replace(/^(?:user|assistant)(?=[^\x00-\x7f])/i, "")
+      // 角色前缀要求带冒号:「经理,你好」这类正常称呼不剥
+      .replace(/^(?:客户|经理|理财经理|话务员|AI|客服|assistant|user|system)\s*[:：]\s*/i, "")
+      .trim();
+  let cleaned = text
+    // 伪控制标签(<|im_start|> 等)与尖括角字母标签整体剥除
+    .replace(/<\|[^|>\r\n]*\|>/g, "")
+    .replace(/<\/?[a-z_][a-z0-9_-]*>/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  // 多层前缀(「客户:经理:…」)剥到不再变化为止
+  let previous = "";
+  for (let i = 0; i < 3 && cleaned !== previous; i += 1) {
+    previous = cleaned;
+    cleaned = stripPrefix(cleaned);
+  }
+  return cleaned;
 }
 
 /**

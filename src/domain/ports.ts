@@ -44,6 +44,12 @@ export interface ManagerTurnInput {
 export interface ManagerTurnOutput {
   /** 纯对话内容:经理要说的电话口语,无前缀无旁白。 */
   reply: string;
+  /**
+   * 生成侧思考通道原文(reasoning_content):模型产出这句话术时的真实推理
+   * 过程,与裁判事后给出的解释候选(cardMatchBasis)是两种东西。仅沉淀给
+   * 复盘展示,绝不进下一轮生成输入;适配器不支持思考通道时缺省。
+   */
+  reasoning?: string;
   recognizedSignal?: string;
   currentGoal?: string;
   /** 本轮使用的策略卡 id(须为已发布卡;无对应卡时缺省)。 */
