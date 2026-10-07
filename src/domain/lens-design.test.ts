@@ -112,34 +112,31 @@ describe("透镜改进:历史证据与学习循环", () => {
     expect(result.strategyPath).toEqual([]);
   });
 
-  it("观察点/重试关联持久保存,不把观察点、隐藏牌或来源快照发给模型", async () => {
+  it("重试关联持久保存,不把重试来源、隐藏牌或来源快照发给模型", async () => {
     const { core, generateManagerTurn } = fixture();
     const first = await core.quickStart();
     await core.finishConversation(first.id);
-    const next = await core.startConversation(first.personaId, { observationFocus: "conditions", replayOfId: first.id });
+    const next = await core.startConversation(first.personaId, { replayOfId: first.id });
     await core.sendCustomerTurn(next.id, "喂");
     await core.sendCustomerTurn(next.id, "规则怎么参加？");
     const input = generateManagerTurn.mock.calls[1][0];
-    expect(input).not.toHaveProperty("observationFocus");
     expect(input).not.toHaveProperty("replayOfId");
     expect(input.persona).not.toHaveProperty("hidden");
     expect(input.history.every((t) => !t.strategyEvidence)).toBe(true);
-    expect((await core.getConversation(next.id))).toMatchObject({ observationFocus: "conditions", replayOfId: first.id });
+    expect((await core.getConversation(next.id))).toMatchObject({ replayOfId: first.id });
     await core.finishConversation(next.id);
-    expect(await core.getResult(next.id)).toMatchObject({ observationFocus: "conditions", replayOfId: first.id });
+    expect(await core.getResult(next.id)).toMatchObject({ replayOfId: first.id });
     const retry = await core.startConversation(next.personaId, { replayOfId: next.id });
-    expect(retry.observationFocus).toBe("conditions");
     expect(retry.turns).toEqual([]);
     expect((await core.getConversation(first.id)).turns).toEqual([]);
   });
 
-  it("不能把其他客户或未结束的对局当原局,非法观察点拒绝且不新建记录", async () => {
+  it("不能把其他客户或未结束的对局当原局,拒绝且不新建记录", async () => {
     const { core } = fixture();
     const call = await core.quickStart();
     await expect(core.startConversation(call.personaId, { replayOfId: call.id })).rejects.toThrow("已结束");
     await core.finishConversation(call.id);
     await expect(core.startConversation(SEED_PERSONA_P02.id, { replayOfId: call.id })).rejects.toThrow("同一客户");
-    await expect(core.startConversation(call.personaId, { observationFocus: "score" as never })).rejects.toThrow("观察点不合法");
     expect(await core.listConversations()).toHaveLength(1);
   });
 

@@ -129,8 +129,6 @@ export interface MaterialDraftPatch {
 
 export type Speaker = "customer" | "manager";
 
-export type ObservationFocus = "signals" | "conditions" | "next-step" | "free";
-
 /**
  * 换位体感心情戳:玩家以客户身份听到经理话术后的第一直觉。
  * 与判断/依据同为玩家自产观察,不进经理或裁判输入,仅用于复盘对照。
@@ -162,9 +160,8 @@ export const FEELING_STAMP_META: Record<FeelingStamp, FeelingStampMeta> = {
   touched: { key: "touched", label: "被打动", seal: "暖", desc: "觉得被理解,想听下去", tone: "positive" },
 };
 
-/** 玩家选择的观察问题与重试来源,不进入经理或裁判输入。 */
+/** 重试来源,不进入经理或裁判输入。 */
 export interface ConversationStartOptions {
-  observationFocus?: ObservationFocus;
   replayOfId?: string;
 }
 
@@ -253,7 +250,6 @@ export interface Conversation {
   /** 持久变更序号用于忽略网络延迟造成的旧响应；旧记录缺省。 */
   revision?: number;
   personaId: string;
-  observationFocus?: ObservationFocus;
   replayOfId?: string;
   /** 开局时的虚拟产品事实,旧记录缺失不回填。 */
   productFacts?: VirtualProductCard;
@@ -274,7 +270,6 @@ export interface Conversation {
 /** 结果页视图:解释本轮打法,不评价扮演客户的用户。 */
 export interface ConversationResult {
   conversationId: string;
-  observationFocus?: ObservationFocus;
   replayOfId?: string;
   productFacts?: VirtualProductCard;
   resources?: ConversationResources;

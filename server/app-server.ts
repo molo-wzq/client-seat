@@ -151,7 +151,6 @@ export function createRequestListener(deps: {
     if (req.method === "POST" && pathname === "/api/conversations") {
       const input = body as ConversationStartOptions & { personaId?: string };
       const conversation = await core.startConversation(input.personaId || "", {
-        observationFocus: input.observationFocus,
         replayOfId: input.replayOfId,
       });
       respondJson(res, 200, conversation);

@@ -40,13 +40,6 @@ html body { min-width: 0; }
 .setup-board .roster-copy small { font-size: 13px; line-height: 1.65; }
 .setup-board .roster-card .badge { font-size: 12px; }
 .setup-board .roster-card.seated .badge { background: #28553b; }
-.app-main .observation-picker { min-width: 0; border: 0; padding: 14px 16px; }
-.observation-picker legend { float: left; width: 100%; margin: 0 0 10px; padding: 0; font-size: 15px; }
-.observation-picker .quick-chips { clear: both; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.observation-picker label { min-height: 44px; margin: 0; padding: 8px 10px; border: 1px solid #b8a88b; border-radius: 5px; background: #fff8e9; font-size: 14px; }
-.observation-picker label:has(input:checked) { border-color: #315c40; background: #dfebdc; box-shadow: inset 3px 0 #315c40; font-weight: 700; }
-.observation-picker p { font-size: 14px; }
-.observation-picker small { display: block; font-size: 13px; color: #635848; line-height: 1.65; }
 .connect-actions { align-items: center; gap: 12px; margin: 16px 0; }
 .connect-actions small { color: #f2e4c9; font-size: 13px; }
 .setup-deck-reference, .setup-reference { padding: 0 14px; border: 1px solid #8b9573; border-radius: 7px; color: #f2e4c9; }
@@ -177,7 +170,6 @@ html body { min-width: 0; }
   .history-title .history-preview { white-space: normal; }
 }
 @media (max-width: 380px) {
-  .observation-picker .quick-chips { grid-template-columns: minmax(0, 1fr); }
   .reply-box .actions .ghost { width: 100%; order: 3; }
   .history-list .catalog-item { flex-direction: column; gap: 8px; }
 }

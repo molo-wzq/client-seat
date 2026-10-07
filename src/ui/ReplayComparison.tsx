@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ProductCore } from "../domain/product-core";
 import type { ConversationResult } from "../domain/types";
-import { observationFocus } from "./observation-focus";
 
 export function ReplayComparison({ api, result }: { api: ProductCore; result: ConversationResult }) {
   const [baseline, setBaseline] = useState<ConversationResult | null>(null);
@@ -27,7 +26,6 @@ export function ReplayComparison({ api, result }: { api: ProductCore; result: Co
     {!baseline && !error && <p role="status">正在找回原局…</p>}
     {error && <p role="alert">原局暂不可用，可能已被存储上限清理：{error}。仍可查看本局复盘。 <button type="button" className="ghost" onClick={() => setAttempt((n) => n + 1)}>重试加载原局</button></p>}
     {baseline && <>
-      <p className="hint">原局观察点：{observationFocus(baseline.observationFocus).label} · 本局观察点：{observationFocus(result.observationFocus).label}</p>
       <p className="hint">开局提示词版本：原局 {baseline.promptVersion ?? "未记录"} / 本局 {result.promptVersion ?? "未记录"}。生成规则、策略库也可能变化，以每轮记录为准。</p>
       {baseline.productFacts && result.productFacts && JSON.stringify(baseline.productFacts) !== JSON.stringify(result.productFacts) && <p className="hint">两局保存的产品参数不同，请先核对条件；此时也不能把回应变化只归因于客户话术。</p>}
       {(!baseline.productFacts || !result.productFacts) && <p className="hint">至少一局未保存当时产品参数，无法确认两局条件相同。</p>}

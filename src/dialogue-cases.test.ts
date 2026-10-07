@@ -22,7 +22,7 @@ describe("对话对照案例(伪适配器)", () => {
     });
   }
 
-  it("案例集覆盖 spec A 列出的全部观察点(迁移/停止/收益/资格/下一步/否定引用)", () => {
+  it("案例集覆盖 spec A 列出的全部边界场景(迁移/停止/收益/资格/下一步/否定引用)", () => {
     const ids = DIALOGUE_CASES.map((c) => c.id);
     expect(ids).toContain("cross-p01-stock-clue");
     expect(ids).toContain("cross-p02-maturity-clue");

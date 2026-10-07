@@ -51,16 +51,14 @@ describe("http 契约:成功与业务错误码", () => {
     expect((await request(`/api/conversations/${call.id}/observations`, 'PUT', { ...note, managerTurnNumber: 1 })).status).toBe(400);
     expect((await request(`/api/conversations/${call.id}/branch`, 'POST', { customerTurnNumber: 2, replacementText: '换句' })).status).toBe(400);
   });
-  it("浏览器接口保存观察点、原局关联并拒绝非法观察点", async () => {
+  it("浏览器接口保存原局关联", async () => {
     const api = createHttpProductCore(base);
     const first = await api.quickStart();
     await api.finishConversation(first.id);
-    const replay = await api.startConversation(first.personaId, { observationFocus: "next-step", replayOfId: first.id });
-    expect(await api.getConversation(replay.id)).toMatchObject({ observationFocus: "next-step", replayOfId: first.id });
+    const replay = await api.startConversation(first.personaId, { replayOfId: first.id });
+    expect(await api.getConversation(replay.id)).toMatchObject({ replayOfId: first.id });
     await api.finishConversation(replay.id);
-    expect(await api.getResult(replay.id)).toMatchObject({ observationFocus: "next-step", replayOfId: first.id });
-    const invalid = await request("/api/conversations", "POST", { personaId: first.personaId, observationFocus: "score" });
-    expect(invalid.status).toBe(400);
+    expect(await api.getResult(replay.id)).toMatchObject({ replayOfId: first.id });
   });
   it("合法转写分析 → 200 且返回素材", async () => {
     const { status, json } = await request("/api/materials/analyze", "POST", {

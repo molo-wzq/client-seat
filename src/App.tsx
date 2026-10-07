@@ -213,7 +213,7 @@ export function App({ api }: { api: ProductCore }) {
                 api={api}
                 personas={personas}
                 publishedCards={publishedCards}
-                onConnect={(personaId, focus) => void connect(personaId, { observationFocus: focus })}
+                onConnect={(personaId) => void connect(personaId)}
                 onCatalogChange={() => void refreshCatalog()}
                 connectBusy={entryBusy}
               />
@@ -246,7 +246,7 @@ export function App({ api }: { api: ProductCore }) {
               result={result}
               api={api}
               onRestart={restart}
-              onReplay={seatedPersona ? (focus) => void connect(seatedPersona.id, { replayOfId: result.conversationId, observationFocus: focus }) : undefined}
+              onReplay={seatedPersona ? () => void connect(seatedPersona.id, { replayOfId: result.conversationId }) : undefined}
               replayBusy={entryBusy}
               onBranch={(turnNumber, text) => branch(turnNumber, text)}
             />}

@@ -2,7 +2,6 @@ import { useState } from "react";
 import type { Conversation, Material, Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { MaterialStep } from "./MaterialStep";
-import { observationFocus } from "./observation-focus";
 
 export function MaterialsView({
   api,
@@ -113,11 +112,10 @@ export function HistoryView({
     conversation,
     name: personas.find((p) => p.id === conversation.personaId)?.name ?? "未知生客",
     date: dateLabel(conversation.createdAt),
-    focus: observationFocus(conversation.observationFocus).label,
     opening: conversation.turns.find((turn) => turn.speaker === "customer")?.text,
-  })).filter(({ conversation, name, date, focus, opening }) =>
+  })).filter(({ conversation, name, date, opening }) =>
     (status === "all" || conversation.status === status)
-    && `${name} ${date} ${focus} ${opening ?? ""} ${conversation.promptVersion ?? ""} ${conversation.endReason ?? ""}`
+    && `${name} ${date} ${opening ?? ""} ${conversation.promptVersion ?? ""} ${conversation.endReason ?? ""}`
       .toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()),
   ).sort((a, b) => {
     // 全部按时间倒序,避免旧进行中通话把新复盘挤到后页。
@@ -133,7 +131,7 @@ export function HistoryView({
         <>
           <div className="history-toolbar">
             <label>查找通话
-              <input type="search" value={query} placeholder="客户、时间、观察点或开场原话" onChange={(event) => { setQuery(event.target.value); setLimit(12); }} />
+              <input type="search" value={query} placeholder="客户、时间或开场原话" onChange={(event) => { setQuery(event.target.value); setLimit(12); }} />
             </label>
             <label>通话状态
               <select value={status} onChange={(event) => { setStatus(event.target.value); setLimit(12); }}>
@@ -145,12 +143,12 @@ export function HistoryView({
           </div>
           <p className="hint" role="status">找到 {rows.length} 通 · 按时间倒序，可筛选进行中通话</p>
           {rows.length === 0 ? <p>没有符合条件的记录。可以更换关键词或通话状态。</p> : <ul className="catalog-list history-list">
-            {rows.slice(0, limit).map(({ conversation, name, date, focus, opening }) => (
+            {rows.slice(0, limit).map(({ conversation, name, date, opening }) => (
               <li key={conversation.id}>
                 <button type="button" className="catalog-item" onClick={() => void onOpen(conversation)}>
                   <span className="history-title">
                     <strong>{name}</strong>
-                    <span>{date} · {conversation.turns.filter((turn) => turn.speaker === "manager").length} 轮经理回应 · {focus}</span>
+                    <span>{date} · {conversation.turns.filter((turn) => turn.speaker === "manager").length} 轮经理回应</span>
                     {opening && <span className="history-preview">开场：{opening}</span>}
                     <span>{conversation.endReason ?? (conversation.status === "ongoing" ? "可继续通话" : "结束原因未记录")}{conversation.promptVersion ? ` · ${conversation.promptVersion}` : ""}</span>
                   </span>

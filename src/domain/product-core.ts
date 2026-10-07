@@ -208,9 +208,6 @@ export function createProductCore(deps: {
   }
 
   async function startConversationLocked(personaId: string, options: ConversationStartOptions = {}): Promise<Conversation> {
-    if (options.observationFocus !== undefined && !["signals", "conditions", "next-step", "free"].includes(options.observationFocus)) {
-      throw new ValidationError("观察点不合法");
-    }
     if (options.replayOfId !== undefined && (typeof options.replayOfId !== "string" || !options.replayOfId.trim())) {
       throw new ValidationError("原局标识不合法");
     }
@@ -223,7 +220,6 @@ export function createProductCore(deps: {
       id: randomId(),
       revision: 0,
       personaId,
-      observationFocus: options.observationFocus ?? original?.observationFocus ?? "signals",
       productFacts: structuredClone(original?.productFacts ?? SEED_PRODUCT_CARD),
       resources,
       openingGoal: '确认沟通意愿，了解必要需求，在客户同意后争取适合的下一步',
@@ -613,7 +609,7 @@ export function createProductCore(deps: {
         if (position < 0 || manager?.speaker !== 'manager') throw new ValidationError('只能从已有经理回应的客户轮创建分支');
         if (!original.resources || !original.productFacts) throw new ValidationError('旧局缺少资源快照，无法锁定分支前情；请新开一局后再试');
         const branch: Conversation = {
-          id: randomId(), revision: 0, personaId: original.personaId, observationFocus: original.observationFocus,
+          id: randomId(), revision: 0, personaId: original.personaId,
           replayOfId: original.id, resources: structuredClone(original.resources), productFacts: structuredClone(original.productFacts),
           openingGoal: original.openingGoal, status: 'ongoing', createdAt: now().toISOString(), promptVersion: PROMPT_VERSION,
           turns: [...structuredClone(original.turns.slice(0, position)), { number: customerTurnNumber, speaker: 'customer', text: replacementText.trim() }],
@@ -677,7 +673,6 @@ export function createProductCore(deps: {
 
       return {
         conversationId: conversation.id,
-        ...(conversation.observationFocus ? { observationFocus: conversation.observationFocus } : {}),
         ...(conversation.replayOfId ? { replayOfId: conversation.replayOfId } : {}),
         ...(conversation.productFacts ? { productFacts: conversation.productFacts } : {}),
         ...(conversation.resources ? { resources: conversation.resources } : {}),

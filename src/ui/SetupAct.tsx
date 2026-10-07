@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import type { ObservationFocus, Persona, StrategyCard } from "../domain/types";
+import type { Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { PersonaAvatar } from "./PersonaAvatar";
 import { PersonaStep } from "./PersonaStep";
 import { UiIcon } from "./UiIcon";
 import { LogicRail } from "./TavernRail";
-import { OBSERVATION_FOCI, observationFocus } from "./observation-focus";
 import "./frontend-lenses.css";
 
 export function SetupAct({
@@ -19,12 +18,11 @@ export function SetupAct({
   api: ProductCore;
   personas: Persona[];
   publishedCards: StrategyCard[];
-  onConnect: (personaId: string, focus: ObservationFocus) => void;
+  onConnect: (personaId: string) => void;
   onCatalogChange: () => void;
   connectBusy: boolean;
 }) {
   const [seated, setSeated] = useState<Persona | null>(null);
-  const [focus, setFocus] = useState<ObservationFocus>("signals");
   const [dragged, setDragged] = useState<string | null>(null);
   // 拖拽悬停在客户席上时高亮邀请;dragleave 在经过子元素时也会触发,
   // 需确认 relatedTarget 真正离开了席位才熄灭,否则高亮会闪烁。
@@ -160,19 +158,8 @@ export function SetupAct({
               </>
             )}
           </div>
-          <fieldset className="observation-picker" disabled={connectBusy}>
-            <legend>这局想观察什么？</legend>
-            <div className="quick-chips">
-              {OBSERVATION_FOCI.map((option) => <label key={option.id}>
-                <input type="radio" name="observation-focus" value={option.id} checked={focus === option.id} onChange={() => setFocus(option.id)} />
-                {option.label}
-              </label>)}
-            </div>
-            <p>{observationFocus(focus).question}</p>
-            <small>只帮助你聚焦；不向经理透露，不要求你配合成交。</small>
-          </fieldset>
           <div className="actions connect-actions">
-            <button onClick={() => seated && onConnect(seated.id, focus)} disabled={connectBusy || !seated}>
+            <button onClick={() => seated && onConnect(seated.id)} disabled={connectBusy || !seated}>
               <UiIcon name="phone" />{connectBusy ? "正在接通…" : "接通电话,开始对局"}
             </button>
             <small>{seated ? `已入座：${seated.name}` : "先从名册选一位客户"}</small>

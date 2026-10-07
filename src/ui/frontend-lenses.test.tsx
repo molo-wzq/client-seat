@@ -52,10 +52,9 @@ describe("界面透镜：历史可辨认与定位", () => {
   const records: Conversation[] = Array.from({ length: 13 }, (_, index) => ({
     id: `history-${index}`, personaId: SEED_PERSONA_P02.id, status: index === 0 ? "ongoing" : "ended",
     createdAt: `2026-10-${String(index + 1).padStart(2, "0")}T08:00:00Z`,
-    observationFocus: "conditions", promptVersion: "p11",
+    promptVersion: "p11",
     turns: [{ number: 1, speaker: "customer", text: index === 4 ? "我要找的取用问题" : `开场 ${index}` }, { number: 2, speaker: "manager", text: "实际回应" }],
   }));
-
   it("同名记录显示时间与轮次,新复盘不被旧进行中挡住,更多记录仍能找到", async () => {
     const user = userEvent.setup();
     render(<HistoryView conversations={records} personas={[SEED_PERSONA_P02]} onOpen={() => {}} />);
@@ -65,7 +64,7 @@ describe("界面透镜：历史可辨认与定位", () => {
     expect(rows[0]).toHaveTextContent("已结束");
     expect(rows[0]).toHaveTextContent("结束原因未记录");
     expect(rows[0]).toHaveTextContent("2026/10/13");
-    expect(rows[0]).toHaveTextContent("1 轮经理回应 · 核对条件");
+    expect(rows[0]).toHaveTextContent("1 轮经理回应");
     await user.click(screen.getByRole("button", { name: /显示更多记录/ }));
     expect(within(list).getAllByRole("button")).toHaveLength(13);
     expect(within(list).getAllByRole("button").at(-1)).toHaveTextContent("进行中");

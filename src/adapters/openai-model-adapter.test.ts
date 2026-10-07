@@ -117,7 +117,7 @@ describe("两段式生成(票 29)", () => {
     const { bodies, fetchMock } = stubTwoPhaseCalls([{ content: "活动也面向三方存管客户" }], {
       content: JSON.stringify({ factCheckNotes: [" 活动对象与产品对象混用，需核对参数。 ", null, 9, "", "第二个待核对点", "第三个待核对点", "超出三条"] }),
     });
-    const input = Object.assign(managerInput(), { observationFocus: "conditions", persona: { ...managerInput().persona, hidden: ["private-test-hidden"] } });
+    const input = Object.assign(managerInput(), { persona: { ...managerInput().persona, hidden: ["private-test-hidden"] } });
     const out = await adapter.generateManagerTurn(input);
     expect(fetchMock).toHaveBeenCalledTimes(2);
     expect(out.factCheckNotes).toEqual(["活动对象与产品对象混用，需核对参数。", "第二个待核对点", "第三个待核对点"]);
@@ -126,7 +126,6 @@ describe("两段式生成(票 29)", () => {
     expect(JSON.stringify(bodies[1])).toContain("经理可见的客户画像");
     expect(JSON.stringify(bodies[1])).toContain("开场未罗列所有档位");
     expect(JSON.stringify(bodies)).not.toContain("private-test-hidden");
-    expect(JSON.stringify(bodies)).not.toContain("observationFocus");
   });
   it("话术增量逐段回调,元数据由第二次调用合并", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});

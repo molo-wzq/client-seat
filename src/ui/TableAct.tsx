@@ -7,7 +7,6 @@ import { CallStep } from "./CallStep";
 import { UiIcon } from "./UiIcon";
 import { PersonaAvatar } from "./PersonaAvatar";
 import { StrategyRail } from "./TavernRail";
-import { observationFocus } from "./observation-focus";
 import { ProductFacts } from "./ProductFacts";
 import { SEED_PRODUCT_CARD } from "../domain/seed";
 import { ObservationNotebook } from './ObservationNotebook';
@@ -80,8 +79,7 @@ export function TableAct({
         </details>
 
         <div className="call-board">
-          <aside className="observation-reminder" aria-label="本局观察点">
-            <strong>{observationFocus(conversation?.observationFocus).question}</strong>
+          <aside className="observation-reminder" aria-label="本局提示">
             <span>按画像自然回应，结束后用原话核对。{conversation?.replayOfId ? " 本局结算可与原局对照。" : ""}</span>
             <details className="call-product-facts">
               <summary>查看参数 · 活动与产品</summary>

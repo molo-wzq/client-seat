@@ -1,11 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import type { ConversationResult, ObservationFocus } from "../domain/types";
+import type { ConversationResult } from "../domain/types";
 import { FEELING_STAMP_META } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { CALL_LOGIC_LAWS } from "../domain/call-logic";
 import { playSfx } from "./game-feel";
 import { FeelingSeal } from "./feeling-stamps";
-import { OBSERVATION_FOCI, observationFocus, observationPairs } from "./observation-focus";
 import { ReplayComparison } from "./ReplayComparison";
 import { ProductFacts } from "./ProductFacts";
 import { SEED_PRODUCT_CARD } from "../domain/seed";
@@ -21,16 +20,13 @@ export function ResultStep({
   result: ConversationResult;
   api?: ProductCore;
   onRestart: () => void;
-  onReplay?: (focus: ObservationFocus) => void;
+  onReplay?: () => void;
   replayBusy?: boolean;
   onBranch?: (customerTurnNumber: number, text: string) => Promise<void>;
 }) {
   // 回放原文时在完整对话里闪烁定位目标轮次;同轮连续点击也要能重触发,
   // 所以先清空再在下一帧置回,动画由 CSS 的 li.flash 承担。
   const [flashTurn, setFlashTurn] = useState<number | null>(null);
-  const [replayFocus, setReplayFocus] = useState<ObservationFocus>(result.observationFocus ?? "free");
-  const observation = observationFocus(result.observationFocus);
-  const pairs = observationPairs(result);
   const flashTimer = useRef<number | undefined>(undefined);
   const [branchTurn, setBranchTurn] = useState<number | null>(null);
   const [branchText, setBranchText] = useState('');
@@ -129,13 +125,8 @@ export function ResultStep({
           </button>
         </> : <p>你在经理回应前结束了通话。可以重试这位客户，说声「喂」后观察开场。</p>}
         <p className="hint">下一局只换一个回应，比较经理怎样接话；这些记录数量不代表打法质量。</p>
-        {onReplay && <label className="replay-focus-picker">下局观察点
-          <select value={replayFocus} onChange={(e) => setReplayFocus(e.target.value as ObservationFocus)} disabled={replayBusy}>
-            {OBSERVATION_FOCI.map((focus) => <option key={focus.id} value={focus.id}>{focus.label}</option>)}
-          </select>
-        </label>}
         <div className="actions">
-          {onReplay && <button type="button" onClick={() => onReplay(replayFocus)} disabled={replayBusy}>同一客户再试</button>}
+          {onReplay && <button type="button" onClick={() => onReplay()} disabled={replayBusy}>同一客户再试</button>}
           <button type="button" className="ghost" onClick={onRestart} disabled={replayBusy}>再来一局</button>
         </div>
       </aside>
@@ -207,22 +198,12 @@ export function ResultStep({
       </dl>
       </details>
 
-      <aside className="observation-review" aria-label="围绕观察点核对">
-        <h3>{observation.question}</h3>
-        <p>{observation.check}</p>
+      <aside className="observation-review" aria-label="本局参数核对">
         <details className="review-product-facts">
           <summary>核对参数 · 活动资格与产品取用</summary>
           <p className="hint">{result.productFacts ? "以下参数按本局开局时保存。" : "旧记录未保存当时产品参数，以下是当前默认参数，不能保证与当时相同。"}</p>
           <ProductFacts product={result.productFacts ?? SEED_PRODUCT_CARD} />
         </details>
-        {pairs.length ? <>
-          <p className="hint">按客户原话定位到 {pairs.length} 处核对入口，先看前 {Math.min(3, pairs.length)} 处；是否接住信号仍需对照实际回应。</p>
-          <ul>{pairs.slice(0, 3).map(({ customer, manager }) => <li key={manager.number}>
-            <p>客户：{customer.text}</p>
-            <blockquote>{manager.text}</blockquote>
-            <button type="button" className="ghost" onClick={() => inspectTurn(manager.number)}>核对本轮打法 T{String(manager.number).padStart(2, "0")}</button>
-          </li>)}</ul>
-        </> : <p>本局尚未定位到与这个观察点相关的客户原话；可检查完整复盘，或下局表达一项符合画像的顾虑／追问。不据此判定经理做得好或不好。</p>}
       </aside>
 
       {noteError && <p role="alert">{noteError}</p>}

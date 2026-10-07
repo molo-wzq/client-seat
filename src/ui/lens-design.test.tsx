@@ -12,7 +12,7 @@ import { ResultStep } from "./ResultStep";
 
 const call: Conversation = { id: "lens-call", personaId: "p01", status: "ongoing", turns: [], createdAt: "2026-10-02T00:00:00Z" };
 const result: ConversationResult = {
-  conversationId: call.id, observationFocus: "conditions", mainGoal: "未知", outcome: "未知", endReason: "客户主动结束通话", strategyPath: [],
+  conversationId: call.id, mainGoal: "未知", outcome: "未知", endReason: "客户主动结束通话", strategyPath: [],
   turns: [{ number: 1, speaker: "customer", text: "怎么取用，收益保证吗？" }, { number: 2, speaker: "manager", text: "这是我的实际回应，未确认用卡。" }],
 };
 
@@ -25,22 +25,18 @@ describe("透镜改进:观察问题与两局对照", () => {
     expect(screen.getByText(/候选不是已确认错误/)).toBeInTheDocument();
     expect(screen.getByText(/未记录疑点不代表通过事实核验/)).toBeInTheDocument();
   });
-  it("从布置到结算保持玩家观察点,重试同客户后能展开两局原文", async () => {
+  it("重试同客户后能展开两局原文", async () => {
     const user = userEvent.setup();
     const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
     render(<App api={api} />);
     await user.click(await screen.findByRole("button", { name: /到期资金·稳健阿姨/ }));
-    await user.click(screen.getByRole("radio", { name: "核对条件" }));
     await user.click(screen.getByRole("button", { name: "接通电话,开始对局" }));
-    expect(await screen.findByLabelText("本局观察点")).toHaveTextContent("经理怎样把条件说清楚");
     await user.type(await screen.findByLabelText("客户回复"), "规则怎么参加？{Enter}");
     await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "结束并查看结果" }));
-    const firstReview = await screen.findByLabelText("围绕观察点核对");
-    expect(firstReview).toHaveTextContent("规则怎么参加？");
     const [original] = await api.listConversations();
     await user.click(screen.getByRole("button", { name: "同一客户再试" }));
-    expect(await screen.findByLabelText("本局观察点")).toHaveTextContent("本局结算可与原局对照");
+    expect(await screen.findByLabelText("本局提示")).toHaveTextContent("本局结算可与原局对照");
     await user.type(await screen.findByLabelText("客户回复"), "收益保证吗？{Enter}");
     await waitFor(() => expect(screen.queryByRole("status")).not.toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: "结束并查看结果" }));
@@ -49,15 +45,8 @@ describe("透镜改进:观察问题与两局对照", () => {
     expect(await screen.findByLabelText("原局第1次回应")).toHaveTextContent("规则怎么参加？");
     expect(screen.getByLabelText("本局第1次回应")).toHaveTextContent("收益保证吗？");
     const newCall = (await api.listConversations()).find((c) => c.id !== original.id)!;
-    expect(newCall).toMatchObject({ personaId: SEED_PERSONA_P02.id, observationFocus: "conditions", replayOfId: original.id });
+    expect(newCall).toMatchObject({ personaId: SEED_PERSONA_P02.id, replayOfId: original.id });
     expect((await api.getConversation(original.id)).turns[0].text).toBe("规则怎么参加？");
-  });
-
-  it("缺少相关客户原话时不给观察动作盖章", () => {
-    const unmatched = { ...result, turns: [{ number: 1, speaker: "customer" as const, text: "喂" }, result.turns[1]] };
-    render(<ResultStep result={unmatched} onRestart={() => {}} />);
-    expect(screen.getByLabelText("围绕观察点核对")).toHaveTextContent("尚未定位到");
-    expect(screen.getByLabelText("围绕观察点核对")).toHaveTextContent("不据此判定经理做得好或不好");
   });
 
   it("查看旧局参数和素材证据时如实说明未保存当时记录", async () => {
@@ -76,7 +65,6 @@ describe("透镜改进:观察问题与两局对照", () => {
     render(<ResultStep api={{ getResult } as unknown as ProductCore} result={{ ...result, replayOfId: "original" }} onRestart={() => {}} />);
     await user.click(screen.getByText("两局对照 · 原局 → 本局"));
     expect(await screen.findByRole("alert")).toHaveTextContent("仍可查看本局复盘");
-    expect(screen.getByLabelText("围绕观察点核对")).toHaveTextContent("怎么取用，收益保证吗");
     await user.click(screen.getByRole("button", { name: "重试加载原局" }));
     expect(await screen.findByLabelText("原局第1次回应")).toHaveTextContent("怎么取用，收益保证吗");
   });
