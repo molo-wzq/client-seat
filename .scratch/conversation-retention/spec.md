@@ -1,6 +1,6 @@
 # Spec: 对话存储上限(最大存储时间 + 最大存储对话数)
 
-Status: ready-for-agent
+Status: ready-for-human
 
 ## 背景与动机
 
@@ -39,3 +39,7 @@ Status: ready-for-agent
 - [x] 集成:配置 maxCount 后开新通话自动挤掉最旧对话;maxAge 过期对话在开新通话时清理
 - [x] env 读取:默认值、0=不限、非法值报错
 - [x] README/CONTEXT.md 记录配置项与术语
+
+## Comments
+
+- 2026-10-12:已由 3f5a602(feat: 对话记录存储上限)实现,验收五项均已勾选;`src/domain/conversation-retention.test.ts` 10 项通过,README「对话存储上限」一节已记录配置。状态由 ready-for-agent 改为 ready-for-human,待人工验收。
