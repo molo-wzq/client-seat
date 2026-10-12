@@ -354,7 +354,7 @@ button:disabled {
 
 .strategy-path .source-turns .who {
   color: var(--muted);
-  font-family: Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
 }
 
@@ -400,7 +400,7 @@ button.ghost {
   flex-shrink: 0;
   font-size: 12px;
   color: var(--muted);
-  font-family: Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .material-turn button {
@@ -723,6 +723,10 @@ select {
   --muted: #625f59;
   --line: #b8aa96;
   --surface: var(--page-paper);
+  /* 字体 token:标题宋体、正文黑体、盖章楷体;补 Noto CJK 兜底,无宋体的机器不再落到系统默认衬线。 */
+  --font-display: "Songti SC", "STZhongsong", "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "SimSun", serif;
+  --font-body: "Noto Sans SC", "Source Han Sans SC", "Noto Sans CJK SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --font-kai: "KaiTi", "STKaiti", "Kaiti SC", var(--font-display);
   font-synthesis: none;
 }
 
@@ -735,7 +739,7 @@ body {
     linear-gradient(90deg, rgba(93, 71, 48, 0.025) 1px, transparent 1px),
     radial-gradient(circle at 20% 10%, rgba(255, 255, 255, 0.48), transparent 28%);
   background-size: 180px 180px, 17px 17px, 19px 19px, auto;
-  font-family: "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", "PingFang SC", sans-serif;
+  font-family: var(--font-body);
   overflow-x: hidden;
 }
 
@@ -807,19 +811,11 @@ h3 svg,
   height: 100svh;
   overflow-y: auto;
   border: 0;
-  border-right: 8px solid #2b1b10;
+  border-right: 3px solid #2b1b10;
   padding: 24px 18px;
   color: var(--paper-white);
   background-color: var(--wood);
   background-image:
-    /* 木板拼缝:每块板末端一条深缝 + 受光亮线 */
-    repeating-linear-gradient(
-      180deg,
-      transparent 0 148px,
-      rgba(10, 4, 1, 0.5) 148px 150px,
-      rgba(255, 246, 230, 0.06) 150px 151px,
-      transparent 151px 156px
-    ),
     /* 节疤:三处椭圆暗芯 */
     radial-gradient(ellipse 16px 12px at 22% 26%, rgba(0, 0, 0, 0.24) 0 28%, transparent 68%),
     radial-gradient(ellipse 10px 8px at 80% 52%, rgba(0, 0, 0, 0.18) 0 30%, transparent 70%),
@@ -834,7 +830,8 @@ h3 svg,
     ),
     linear-gradient(90deg, rgba(255, 255, 255, 0.025), transparent 15%, rgba(0, 0, 0, 0.1) 72%, transparent),
     linear-gradient(120deg, #3d281b, #563b27 48%, #382317);
-  box-shadow: inset -1px 0 rgba(255, 255, 255, 0.08), 8px 0 24px rgba(45, 30, 17, 0.18);
+  /* 黄铜细线收边,和纸面页之间用柔和投影过渡,侧栏与页面读作同一张牌桌。 */
+  box-shadow: inset -1px 0 rgba(221, 183, 118, 0.35), 1px 0 0 rgba(178, 140, 82, 0.55), 10px 0 28px rgba(45, 30, 17, 0.16);
   gap: 20px;
 }
 
@@ -847,7 +844,7 @@ h3 svg,
 .act-kicker,
 .card-code,
 .seat-label {
-  font-family: "Noto Sans SC", "Microsoft YaHei", sans-serif;
+  font-family: var(--font-body);
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -861,7 +858,7 @@ h3 svg,
 .left-rail .app-header h1 {
   margin: 8px 0 10px;
   color: #fff6e8;
-  font-family: "Songti SC", "STZhongsong", "SimSun", serif;
+  font-family: var(--font-display);
   font-size: 25px;
   line-height: 1.22;
   letter-spacing: 0.03em;
@@ -912,8 +909,9 @@ h3 svg,
 }
 
 .rail-item:disabled {
-  color: #9c8d7e;
-  background: rgba(20, 12, 7, 0.12);
+  color: #a89a8a;
+  background: rgba(22, 13, 8, 0.2);
+  opacity: 0.6;
 }
 
 .rail-count {
@@ -922,7 +920,7 @@ h3 svg,
   border: 1px solid rgba(237, 224, 217, 0.28);
   border-radius: 99px;
   color: #e4d6c5;
-  font-family: "Roboto Mono", Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   text-align: center;
 }
@@ -950,7 +948,7 @@ h3 svg,
 .result-heading h2 {
   margin: 0 0 8px;
   color: var(--felt-deep);
-  font-family: "Songti SC", "STZhongsong", "SimSun", serif;
+  font-family: var(--font-display);
   font-size: clamp(25px, 2.5vw, 33px);
   line-height: 1.2;
   letter-spacing: -0.015em;
@@ -1179,7 +1177,7 @@ h3 svg,
   padding: 3px 8px;
   border: 2px double var(--brick-red);
   color: var(--brick-red);
-  font-family: "Songti SC", "STZhongsong", "SimSun", serif;
+  font-family: var(--font-display);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.08em;
@@ -1203,9 +1201,10 @@ h3 svg,
 .setup-board .card-tile,
 .strategy-board .card-tile {
   position: relative;
+  overflow: hidden;
   min-height: 88px;
   align-items: flex-end;
-  padding: 32px 10px 10px;
+  padding: 32px 56px 10px 10px; /* 右侧让出水印编号位,长卡名不压字 */
   border: 2px solid var(--brick-muted);
   background: var(--card-paper);
   color: var(--ink-black);
@@ -1490,7 +1489,7 @@ h3 svg,
   border: 1px solid rgba(237,224,217,.35);
   background: rgba(237,224,217,.14);
   color: #ded2c1;
-  font-family: "Roboto Mono", Consolas, monospace;
+  font-family: var(--font-mono);
 }
 
 .track-cell:nth-child(3n)::after {
@@ -1644,7 +1643,7 @@ select {
   padding: 9px 13px;
   border: 3px double var(--brick-muted);
   color: var(--brick-muted);
-  font-family: "Songti SC", "STZhongsong", "SimSun", serif;
+  font-family: var(--font-display);
   font-size: 13px;
   font-weight: 800;
   letter-spacing: .08em;
@@ -1923,13 +1922,13 @@ select {
 .strategy-board .card-tile::after {
   content: counter(case-no, decimal-leading-zero);
   position: absolute;
-  right: 8px;
-  bottom: 2px;
-  color: rgba(165, 60, 43, 0.13);
-  font-family: "Songti SC", "STZhongsong", "SimSun", serif;
-  font-size: 46px;
+  right: 10px;
+  bottom: 6px;
+  color: rgba(165, 60, 43, 0.11);
+  font-family: var(--font-display);
+  font-size: 40px;
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1;
   pointer-events: none;
 }
 
@@ -2836,13 +2835,13 @@ button:active:not(:disabled) {
 .track-feeling,
 .feeling-seal > span:first-child,
 .node-seal {
-  font-family: "KaiTi", "STKaiti", "Kaiti SC", "Noto Serif SC", "SimSun", serif;
+  font-family: var(--font-kai);
 }
 
 /* --- 经理气泡上的盖章行:安静常驻,盖章不打断打字 --- */
 .feeling-stamps {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: flex-end;
   gap: 5px;
   margin-top: 8px;
@@ -2855,7 +2854,8 @@ button:active:not(:disabled) {
   align-items: center;
   gap: 5px;
   min-height: 0;
-  padding: 3px 10px 3px 3px;
+  padding: 3px 8px 3px 3px;
+  white-space: nowrap;
   border: 1px dashed #9fb2c8;
   border-radius: 999px;
   background: rgba(255, 253, 248, 0.78);
