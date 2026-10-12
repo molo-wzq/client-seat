@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { assembleAnalystSystemPrompt, assembleManagerMetaPrompt, assembleManagerSystemPrompt } from "./prompts";
+import { MAX_MANAGER_TURNS } from "../domain/product-core";
 import {
   SEED_CARDS,
   SEED_PERSONA,
@@ -34,11 +35,11 @@ describe("经理系统提示词:规则 6(原 9)客户属性防护", () => {
     expect(prompt).toContain("报名截止只约束报名");
     expect(prompt).toContain("不得编造「先占名额」");
     expect(prompt).toContain("活动面向对象:代发工资客户");
-    expect(prompt).toContain("产品面向三方存管客户,不代表三方存管客户就能参加这项活动");
+    expect(prompt).toContain("产品面向代发工资客户、三方存管客户,符合产品面向对象不代表就能参加这项活动");
     expect(prompt).toContain("有资金到账不等于符合活动资格");
     expect(prompt).not.toContain("如告知客户可参加的资金活动");
     expect(prompt).toContain("活动资金的持有、退出条件未提供");
-    expect(prompt).toContain("不能仅凭产品 T+1 替活动作答");
+    expect(prompt).toContain("不能仅凭产品的「T+1到账」替活动作答");
   });
   it("可见信息无代发时,提示词含带反例的明确禁令", () => {
     const prompt = promptFor(P03_VISIBLE);
@@ -109,6 +110,36 @@ describe("分析提示词:场景读法(票 14)", () => {
 });
 
 describe("两段式输出契约(票 29)", () => {
+  it("p14 开场只留一个征询问句,来意挂客户自己的钱,活动面向对象推迟", () => {
+    const prompt = promptFor(SEED_PERSONA.visible);
+    expect(prompt).toContain("整轮至多三句、只有这一个问句");
+    expect(prompt).toContain("开场后一句「暂时不用,谢谢」也是软犹豫");
+    expect(prompt).toContain("产品的面向对象不是活动资格");
+    expect(prompt).toContain("来意优先挂在画像写明的、客户自己的钱或关系上");
+    expect(prompt).toContain("活动面向哪类客户等真正介绍活动时再说");
+    expect(prompt).not.toContain("如介绍行里资金活动并核对是否适合");
+  });
+
+  it("p14 禁表态口头禅,保本直答,不说定死的「参加不了」", () => {
+    const prompt = promptFor(SEED_PERSONA.visible);
+    expect(prompt).toContain("「跟您说实话」");
+    expect(prompt).toContain("直接答「不保本」或「不承诺保本」");
+    expect(prompt).toContain("不说「确实参加不了」这类定死的话");
+  });
+
+  it("p14 本局参数不再硬编码:轮数上限、产品面向对象、取用到账由参数渲染", () => {
+    const prompt = assembleManagerSystemPrompt({
+      persona: SEED_PERSONA,
+      publishedCards: [],
+      product: { ...SEED_PRODUCT_CARD, flexibleProduct: { ...SEED_PRODUCT_CARD.flexibleProduct, name: "灵活理财", audience: "全体个人客户", liquidity: "T+0到账" } },
+    });
+    expect(prompt).toContain(`通话到第${MAX_MANAGER_TURNS}轮`);
+    expect(prompt).toContain("产品面向全体个人客户");
+    expect(prompt).toContain("「T+0到账」");
+    expect(prompt).not.toContain("三方存管客户就能参加");
+    expect(prompt).not.toContain("T+1");
+  });
+
   it("经理话术提示词要求纯文本输出,不再索要 JSON", () => {
     const prompt = promptFor(P03_VISIBLE);
     expect(prompt).not.toContain("只输出 JSON");
