@@ -261,7 +261,8 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
           } catch {
             continue; // 半截 JSON(理论上不会出现,残包已在 buffer 层拦截)
           }
-          const delta = parsed.choices?.[0].delta;
+          // 末尾 usage 块等会带空 choices 数组(mimo-v2.6 实测):[0] 为 undefined,须继续可选链。
+          const delta = parsed.choices?.[0]?.delta;
           if (!delta) continue;
           if (delta.reasoning_content) reasoning += delta.reasoning_content;
           if (delta.content) {
