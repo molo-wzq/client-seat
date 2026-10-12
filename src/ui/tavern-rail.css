@@ -14,7 +14,7 @@
   overflow-wrap: anywhere;
 }
 .tavern-rail-heading { display: flex; align-items: center; gap: 10px; }
-.tavern-rail-heading h3 { margin: 0; color: #f7e6bd; font-family: "STZhongsong", "SimSun", serif; font-size: 20px; letter-spacing: .08em; }
+.tavern-rail-heading h3 { margin: 0; color: #f7e6bd; font-family: var(--font-display); font-size: 20px; letter-spacing: .08em; }
 .tavern-eyebrow { display: block; margin-bottom: 5px; color: #c8ad80; font-size: 10px; letter-spacing: .08em; }
 .rail-crest { display: grid; place-items: center; flex: 0 0 34px; height: 38px; border: 1px solid #b28c52; border-radius: 4px 4px 14px 14px; color: #e6bd73; background: #ffffff08; }
 .rail-crest svg { width: 23px; height: 23px; fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round; stroke-linejoin: round; }
@@ -38,7 +38,7 @@
 .tavern-rail summary::-webkit-details-marker { display: none; }
 .law-card-number { align-self: flex-start; color: #8d744e; font-family: var(--font-mono); font-size: 10px; }
 .law-emblem { display: block; width: 54px; height: 54px; margin: 3px 0 9px; fill: none; stroke: var(--law-ink); stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
-.law-card summary strong { font-family: "STZhongsong", "SimSun", serif; font-size: 16px; letter-spacing: .04em; }
+.law-card summary strong { font-family: var(--font-display); font-size: 16px; letter-spacing: .04em; }
 .law-card-cue { margin-top: 7px; text-align: center; color: #746044; font-size: 10px; line-height: 1.5; }
 .law-card-open { display: flex; justify-content: space-between; width: 100%; margin-top: auto; padding: 9px 0 0; color: #786144; font-size: 10px; }
 .law-card-open > span, .table-note-open > span, .strategy-card-details summary > span { transition: transform 160ms ease; }
@@ -84,7 +84,7 @@
 .strategy-card-top { display: flex; align-items: center; justify-content: space-between; gap: 5px; margin-bottom: 10px; color: #8a6e45; font-size: 10px; }
 .strategy-card-top > span:first-child { font-family: var(--font-mono); }
 .strategy-lit { padding: 2px 6px; border-radius: 2px; background: #854638; color: #fff2d3; }
-.tavern-rail .card-tile h4 { margin: 0 0 9px; font-family: "STZhongsong", "SimSun", serif; font-size: 15px; line-height: 1.6; }
+.tavern-rail .card-tile h4 { margin: 0 0 9px; font-family: var(--font-display); font-size: 15px; line-height: 1.6; }
 .strategy-card-purpose { margin: 0 0 9px; color: #75634b; font-size: 11px; line-height: 1.7; }
 .strategy-card-effect { border-top: 1px solid #b19a7350; padding-top: 8px; }
 .strategy-card-effect > span, .strategy-card-details div > span { color: #896240; font-size: 10px; font-weight: 700; }

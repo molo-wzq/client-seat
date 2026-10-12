@@ -24,7 +24,7 @@ html body { min-width: 0; }
 .app-main :is(button, summary) { min-height: 44px; }
 .app-main :is(input:not([type='radio']):not([type='checkbox']), select) { min-height: 44px; }
 .app-main summary { display: flex; align-items: center; gap: 8px; line-height: 1.6; cursor: pointer; }
-.app-main summary::before { content: '+'; flex: 0 0 auto; font-family: Consolas, monospace; font-weight: 700; }
+.app-main summary::before { content: '+'; flex: 0 0 auto; font-family: var(--font-mono); font-weight: 700; }
 .app-main details[open] > summary::before { content: '−'; }
 .app-main summary::-webkit-details-marker { display: none; }
 .app-main summary { list-style: none; }
@@ -118,7 +118,8 @@ html body { min-width: 0; }
 .history-title .history-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70ch; }
 .history-list .badge { flex: 0 0 auto; font-size: 12px; }
 @media (min-width: 1280px) {
-  .app-main .table-board { grid-template-columns: minmax(190px, .65fr) minmax(320px, 1.65fr) minmax(240px, .85fr); }
+  /* 画像栏给足宽度,客户名与画像要点不再一行两三字地折行;解释栏收起时只是一段提示,让出空间。 */
+  .app-main .table-board { grid-template-columns: minmax(240px, .8fr) minmax(360px, 1.6fr) minmax(220px, .7fr); }
   .table-board > .tavern-rail { grid-column: auto; }
   .table-board .tavern-strategies { grid-template-columns: 1fr; }
   .table-board > .strategy-board { position: sticky; top: 18px; max-height: calc(100svh - 36px); overflow: auto; }
