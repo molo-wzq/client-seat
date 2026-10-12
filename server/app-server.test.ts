@@ -158,6 +158,41 @@ describe("http 契约:成功与业务错误码", () => {
   });
 });
 
+describe("http 契约:用户输入与状态错误返回 400,不落 500", () => {
+  it("空发言、非文字发言、已结束通话发言 → 400", async () => {
+    const call = (await request("/api/quickstart", "POST", {})).json as { id: string };
+    const blank = await request(`/api/conversations/${call.id}/turns`, "POST", { text: "  " });
+    expect(blank.status).toBe(400);
+    expect(blank.json?.error).toBe("客户发言为空");
+    const numeric = await request(`/api/conversations/${call.id}/turns`, "POST", { text: 123 });
+    expect(numeric.status).toBe(400);
+    expect(numeric.json?.error).not.toContain("is not a function");
+    await request(`/api/conversations/${call.id}/finish`, "POST", {});
+    expect((await request(`/api/conversations/${call.id}/turns`, "POST", { text: "喂" })).status).toBe(400);
+    expect((await request(`/api/conversations/${call.id}/regenerate`, "POST", {})).status).toBe(400);
+  });
+
+  it("未结束通话取结果、无经理轮重新生成 → 400", async () => {
+    const call = (await request("/api/quickstart", "POST", {})).json as { id: string };
+    expect((await request(`/api/conversations/${call.id}/result`)).status).toBe(400);
+    expect((await request(`/api/conversations/${call.id}/regenerate`, "POST", {})).status).toBe(400);
+  });
+
+  it("素材分析缺转写稿或标题非文字 → 400", async () => {
+    const missing = await request("/api/materials/analyze", "POST", {});
+    expect(missing.status).toBe(400);
+    expect(missing.json?.error).toBe("转写稿内容为空");
+    expect((await request("/api/materials/analyze", "POST", { transcript: "  " })).status).toBe(400);
+    expect((await request("/api/materials/analyze", "POST", { transcript: "经理:您好", title: 7 })).status).toBe(400);
+  });
+
+  it("自定义画像含非文字条目 → 丢弃该条目,仍 200", async () => {
+    const { status, json } = await request("/api/personas", "POST", { name: 5, visible: ["  年长  ", 3, null], hidden: [{}] });
+    expect(status).toBe(200);
+    expect(json).toMatchObject({ name: "自定义生客", visible: ["年长"], hidden: [] });
+  });
+});
+
 describe("流式轮次端点(票 29)", () => {
   it("SSE 依次输出 delta 与 done,done 携带权威会话", async () => {
     const start = await request("/api/quickstart", "POST", {});

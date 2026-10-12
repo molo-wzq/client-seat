@@ -250,9 +250,11 @@ export function createProductCore(deps: {
     // 两个请求基于同一旧快照生成相同轮次号,后写覆盖先写会静默丢轮次。
     return serialize(`conversation:${conversationId}`, async () => {
       const conversation = await requireConversation(conversationId);
-      if (conversation.status === "ended") throw new Error("通话已结束");
+      if (conversation.status === "ended") throw new ValidationError("通话已结束");
+      // HTTP 入参未经类型收窄:非字符串直接 .trim() 会抛 TypeError 落成 500 并泄露内部信息。
+      if (typeof text !== "string") throw new ValidationError("客户发言必须是文字");
       const customerText = text.trim();
-      if (!customerText) throw new Error("客户发言为空");
+      if (!customerText) throw new ValidationError("客户发言为空");
 
       const customerTurn: ConversationTurn = {
         number: conversation.turns.length + 1,
@@ -354,8 +356,10 @@ export function createProductCore(deps: {
 
   return {
     async analyzeTranscript({ title, transcript, kind }) {
+      if (typeof transcript !== "string") throw new ValidationError("转写稿内容为空");
+      if (title != null && typeof title !== "string") throw new ValidationError("素材标题必须是文字");
       const text = transcript.trim();
-      if (!text) throw new Error("转写稿内容为空");
+      if (!text) throw new ValidationError("转写稿内容为空");
       if (kind !== undefined && !isMaterialKind(kind)) throw new ValidationError("素材类型不合法");
 
       const { analysis, cards, turns: adapterTurns } = await copywriting.analyzeTranscript(text);
@@ -394,7 +398,7 @@ export function createProductCore(deps: {
     async publishMaterialCards(materialId) {
       const material = await requireMaterial(materialId);
       const cardIds = material.cards.filter((c) => c.status === "draft").map((c) => c.id);
-      if (cardIds.length === 0) throw new Error("没有可发布的草稿策略卡");
+      if (cardIds.length === 0) throw new ValidationError("没有可发布的草稿策略卡");
       return this.publishCards(materialId, cardIds);
     },
 
@@ -408,26 +412,28 @@ export function createProductCore(deps: {
 
         if (patch.turns) {
           if (!Array.isArray(patch.turns) || patch.turns.length === 0) {
-            throw new Error("轮次数据不合法");
+            throw new ValidationError("轮次数据不合法");
           }
           // 序号必须唯一且为正整数:它是对话结果回溯素材片段的坐标,不重排。
           const seen = new Set<number>();
           for (const turn of patch.turns) {
             if (
+              typeof turn !== "object" ||
+              turn === null ||
               typeof turn.number !== "number" ||
               !Number.isInteger(turn.number) ||
               turn.number < 1 ||
               seen.has(turn.number)
             ) {
-              throw new Error(`轮次序号不合法:${JSON.stringify(turn.number)}`);
+              throw new ValidationError(`轮次序号不合法:${JSON.stringify(turn.number)}`);
             }
             seen.add(turn.number);
             if (typeof turn.text !== "string" || !turn.text.trim()) {
-              throw new Error("轮次内容不能为空");
+              throw new ValidationError("轮次内容不能为空");
             }
             // 说话人只认 manager/customer:拼写错误静默纠偏会把经理话当客户话入库。
             if (turn.speaker !== "manager" && turn.speaker !== "customer") {
-              throw new Error(`轮次说话人不合法:${JSON.stringify(turn.speaker)}`);
+              throw new ValidationError(`轮次说话人不合法:${JSON.stringify(turn.speaker)}`);
             }
           }
           material.turns = patch.turns.map((turn) => ({
@@ -446,18 +452,19 @@ export function createProductCore(deps: {
             typeof analysis.overallGoal !== "string" ||
             !Array.isArray(analysis.stages)
           ) {
-            throw new Error("分析数据不合法");
+            throw new ValidationError("分析数据不合法");
           }
           material.analysis = analysis;
         }
 
         if (patch.cards) {
-          if (!Array.isArray(patch.cards)) throw new Error("策略卡数据不合法");
+          if (!Array.isArray(patch.cards)) throw new ValidationError("策略卡数据不合法");
           for (const incoming of patch.cards) {
+            if (typeof incoming !== "object" || incoming === null) throw new ValidationError("策略卡数据不合法");
             const current = material.cards.find((c) => c.id === incoming.id);
             if (!current) throw new NotFoundError(`策略卡不存在:${incoming.id}`);
             if (current.status === "published") {
-              throw new Error(`策略卡已发布,不可修改:${current.name}`);
+              throw new ValidationError(`策略卡已发布,不可修改:${current.name}`);
             }
           }
           material.cards = material.cards.map((card) => {
@@ -492,10 +499,10 @@ export function createProductCore(deps: {
     async savePersona(input) {
       const persona: Persona = {
         id: randomId(),
-        name: input.name.trim() || "自定义生客",
-        // 只做去空格与去空行;不存在的属性保持未知,不自动补全。
-        visible: input.visible.map((line) => line.trim()).filter(Boolean),
-        hidden: input.hidden.map((line) => line.trim()).filter(Boolean),
+        name: (typeof input.name === "string" ? input.name.trim() : "") || "自定义生客",
+        // 只做去空格与去空行;不存在的属性保持未知,不自动补全。非文字条目丢弃,不让 .trim() 落成 500。
+        visible: input.visible.filter((line): line is string => typeof line === "string").map((line) => line.trim()).filter(Boolean),
+        hidden: input.hidden.filter((line): line is string => typeof line === "string").map((line) => line.trim()).filter(Boolean),
       };
       await storage.savePersona(persona);
       return persona;
@@ -564,10 +571,10 @@ export function createProductCore(deps: {
     async regenerateManagerTurn(conversationId) {
       return serialize(`conversation:${conversationId}`, async () => {
         const conversation = await requireConversation(conversationId);
-        if (conversation.status === "ended") throw new Error("通话已结束,无法重新生成");
+        if (conversation.status === "ended") throw new ValidationError("通话已结束,无法重新生成");
         const last = conversation.turns.at(-1);
         if (!last || last.speaker !== "manager") {
-          throw new Error("最后一轮不是经理回复,无法重新生成");
+          throw new ValidationError("最后一轮不是经理回复,无法重新生成");
         }
         // 保存旧版本，回到以客户发言结尾的状态，复用生成路径。
         const observation = conversation.observations?.find((item) => item.managerTurnNumber === last.number);
@@ -637,7 +644,7 @@ export function createProductCore(deps: {
 
     async getResult(conversationId) {
       const conversation = await requireConversation(conversationId);
-      if (conversation.status !== "ended") throw new Error("通话尚未结束,无法生成结果");
+      if (conversation.status !== "ended") throw new ValidationError("通话尚未结束,无法生成结果");
 
       const materials = await storage.listMaterials();
       // 结果追溯只承认已发布卡:草稿卡本就不该进入对话。
