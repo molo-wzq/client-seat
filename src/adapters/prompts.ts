@@ -220,7 +220,7 @@ export function assembleAnalystSystemPrompt(): string {
  * 不引入新事实,不进历史区与裁判调用。
  */
 export const TAIL_STYLE_REMINDER =
-  "本轮提醒:像打电话一样说——最多三句、每句一件事,问完就停;这一轮最多报一个数字;直接以要说的话开头,不加前缀、引号或任何标记。";
+  "本轮提醒:像打电话一样说——先接住客户刚说的那句,最多三句、只问一个问题;数字、条件、资格只用本局事实和画像写明的,没写的就说不确定或去核对;直接以要说的话开头,不加前缀、引号或任何标记。";
 
 /**
  * 语体示范轮(p13,dialogue-guardrails spec B「少量参考话术骨架」对照实验的
@@ -241,6 +241,6 @@ export const STYLE_DEMO_MESSAGES: Array<{ role: string; content: string }> = [
   {
     role: "assistant",
     content:
-      "哎,您好,我是咱们行的理财经理小王。就是这会儿方便说两句吗?行里有个跟您账户有关的事,想跟您说一声。",
+      "哎,您好,我是咱们行的理财经理小王。就是行里有个跟您账户有关的事,想跟您说一声。您这会儿方便吗?",
   },
 ];
