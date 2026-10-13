@@ -29,7 +29,16 @@ export { cleanReplyText };
 export const PROMPT_TUNING_ENV = {
   tailReminder: "LLM_TAIL_REMINDER",
   styleDemo: "LLM_STYLE_DEMO",
+  /** p15 实验:话术流式调用关闭思维链(thinking.type=disabled),缩短首字延迟。 */
+  managerNoThinking: "LLM_MANAGER_NO_THINKING",
 } as const;
+
+/** 默认开启的开关:仅显式置 0 时关闭(p15 起尾部提醒默认开)。 */
+function tuningDisabled(name: string): boolean {
+  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
+    ?.env;
+  return env?.[name] === "0";
+}
 
 function tuningEnabled(name: string): boolean {
   // 经 globalThis 取 process:本文件同时进浏览器包,src 侧 tsconfig 无 node 类型。
@@ -124,7 +133,8 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     }
     messages.push({ role: "user", content: sanitizeCustomerText(input.customerText) });
     // 尾部语体短提醒(p13 实验,默认关):越靠近生成点权重越高,只回声既有规则。
-    if (tuningEnabled(PROMPT_TUNING_ENV.tailReminder)) {
+    // p15 起默认开:靠近生成点的短提醒在 2.6 pro 对照中 9/9(关时 7/9),置 0 可关。
+    if (!tuningDisabled(PROMPT_TUNING_ENV.tailReminder)) {
       messages.push({ role: "system", content: TAIL_STYLE_REMINDER });
     }
 
@@ -219,6 +229,9 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
           frequency_penalty: 0,
           presence_penalty: 0,
           stream: true,
+          ...(tuningEnabled(PROMPT_TUNING_ENV.managerNoThinking)
+            ? { thinking: { type: "disabled" } }
+            : {}),
         }),
       });
     } catch (error) {
