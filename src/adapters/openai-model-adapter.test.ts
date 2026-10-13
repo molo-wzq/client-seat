@@ -267,13 +267,27 @@ describe("p13 手册借鉴:参数分层与消息组装", () => {
     expect(messages.at(-2)).toEqual({ role: "user", content: "喂" });
   });
 
-  it("默认不注入:开关未开时无示范轮、无尾部短提醒", async () => {
+  it("默认(p15):尾部短提醒注入在当轮客户话后,示范轮不注入,思维链不改", async () => {
     const { bodies } = stubTwoPhaseCalls([{ content: "您好,方便聊两句吗?" }], { content: "{}" });
     await adapter.generateManagerTurn(managerInput());
     const messages = bodies[0]?.messages as Array<{ role: string; content: string }>;
     expect(JSON.stringify(messages)).not.toContain("语体示范");
+    expect(messages.at(-1)?.role).toBe("system");
+    expect(messages.at(-1)?.content).toContain("本轮提醒");
+    expect(messages.at(-2)).toEqual({ role: "user", content: "喂" });
+    expect(bodies[0]?.thinking).toBeUndefined();
+  });
+
+  it("LLM_TAIL_REMINDER=0 关闭尾部提醒;LLM_MANAGER_NO_THINKING=1 只关话术调用的思维链", async () => {
+    vi.stubEnv("LLM_TAIL_REMINDER", "0");
+    vi.stubEnv("LLM_MANAGER_NO_THINKING", "1");
+    const { bodies } = stubTwoPhaseCalls([{ content: "您好,方便聊两句吗?" }], { content: "{}" });
+    await adapter.generateManagerTurn(managerInput());
+    const messages = bodies[0]?.messages as Array<{ role: string; content: string }>;
     expect(JSON.stringify(messages)).not.toContain("本轮提醒");
     expect(messages.at(-1)).toEqual({ role: "user", content: "喂" });
+    expect(bodies[0]?.thinking).toEqual({ type: "disabled" });
+    expect(bodies[1]?.thinking).toBeUndefined();
   });
 
   it("客户输入消毒只作用于发送层:话术与裁判请求都收干净文本", async () => {
