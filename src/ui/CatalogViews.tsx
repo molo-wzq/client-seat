@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { Conversation, Material, Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { MaterialStep } from "./MaterialStep";
+import { CardArt } from "./CardArt";
 
 export function MaterialsView({
   api,
@@ -72,8 +73,8 @@ export function CardsView({ cards }: { cards: StrategyCard[] }) {
       ) : (
         <div className="cards">
           {cards.map((card, i) => (
-            <article key={card.id} className="card">
-              <span className="card-code" aria-hidden="true">CASE / {String(i + 1).padStart(2, "0")}</span>
+            <article key={card.id} className="card" data-status={card.status} data-gem={String(i + 1).padStart(2, "0")}>
+              <CardArt card={card} index={i} />
               <header>
                 <strong>{card.name}</strong>
                 <span className={`badge badge-${card.status}`}>{card.status === "draft" ? "草稿" : "已发布"}</span>
@@ -82,6 +83,7 @@ export function CardsView({ cards }: { cards: StrategyCard[] }) {
                 {card.currentPurpose}
                 {card.sourceExcerpt.materialTitle ? ` · 来自 ${card.sourceExcerpt.materialTitle}` : ""}
               </p>
+              <span className="card-code" aria-hidden="true">策略卡 · CASE / {String(i + 1).padStart(2, "0")}</span>
             </article>
           ))}
         </div>
