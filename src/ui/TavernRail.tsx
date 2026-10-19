@@ -3,6 +3,7 @@ import { CALL_LOGIC_LAWS } from "../domain/call-logic";
 import { SEED_PRODUCT_CARD } from "../domain/seed";
 import type { StrategyCard } from "../domain/types";
 import { UiIcon } from "./UiIcon";
+import { CardArt } from "./CardArt";
 
 const lawArt: Record<string, { cue: string; path: ReactNode }> = {
   map: {
@@ -133,7 +134,9 @@ export function StrategyRail({
             <li
               key={isSlamming ? `${card.id}-slam-${slam.seq}` : card.id}
               className={`card-tile${isActive ? " active" : ""}${isSlamming ? " slam" : ""}`}
+              data-gem={String(number).padStart(2, "0")}
             >
+              <CardArt card={card} index={number - 1} className="card-tile-art" />
               <div className="strategy-card-top">
                 <span>策略 · {String(number).padStart(2, "0")}</span>
                 {isActive && <span className="strategy-lit">匹配候选</span>}

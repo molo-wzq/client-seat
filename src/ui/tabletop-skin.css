@@ -1,0 +1,826 @@
+/* ==========================================================================
+   实体桌游皮肤 · tabletop skin
+   方向 A：像一盒印刷精良的实体桌游——米白卡纸、墨绿桌垫、扁平配色。
+   - 不用发光、金属渐变、厚木框；层次只靠纸张、细线和轻阴影；
+   - 策略卡 = 卡纸 + 色块插画条 + 编号圆标；隐藏牌 = 藏青卡背；
+   - 12 轮通话轨道 = 桌游计分格，走过的格子涂金色。
+   本层最后加载，只改观感，不改结构与交互。
+   ========================================================================== */
+:root {
+  --tt-linen: #eee5d3;
+  --tt-paper: #fbf6ea;
+  --tt-paper-2: #f3ead8;
+  --tt-line: #ddd0b6;
+  --tt-line-2: #cbbd9f;
+  --tt-ink: #2b2a26;
+  --tt-muted: #7b6f5b;
+  --tt-green: #1f3d34;
+  --tt-felt: #2f5d4f;
+  --tt-felt-ink: #c9d8cf;
+  --tt-cream: #efe6d3;
+  --tt-brick: #b4452f;
+  --tt-brick-lo: #7c2c1d;
+  --tt-navy: #2b3a55;
+  --tt-gold: #d9b46a;
+  --tt-mustard: #c98b2b;
+  --tt-jade: #2f7a55;
+  --tt-card-shadow: 0 2px 0 rgba(0, 0, 0, 0.16), 0 8px 16px rgba(0, 0, 0, 0.16);
+  --tt-serif: "Noto Serif SC", "Noto Serif CJK SC", "Source Han Serif SC", "Songti SC", "STZhongsong", serif;
+}
+
+/* 0. 桌布：米色亚麻，去掉方格线 -------------------------------------------- */
+html:root body {
+  background-color: var(--tt-linen);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/><feColorMatrix values='0 0 0 0 .35 0 0 0 0 .28 0 0 0 0 .18 0 0 0 .07 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+  background-size: 160px 160px;
+  color: var(--tt-ink);
+}
+
+::selection { background: rgba(217, 180, 106, 0.45); }
+
+/* 1. 标题：宋体加粗，墨绿 ------------------------------------------------ */
+.app-shell .app-main .act > h2,
+.app-shell .result-heading h2 {
+  color: var(--tt-green);
+  font-family: var(--tt-serif);
+  font-weight: 900;
+  text-shadow: none;
+}
+
+.app-shell .app-main .act > .act-kicker {
+  color: var(--tt-brick);
+  font-weight: 700;
+  letter-spacing: 0.14em;
+}
+
+.app-shell .app-main .act > .hint { color: var(--tt-muted); }
+
+/* 2. 按钮：主操作砖红，次操作卡纸，危险操作砖红描边 -------------------------- */
+:where(.app-shell) button {
+  border: 0;
+  border-radius: 8px;
+  background: var(--tt-brick);
+  color: #fff8ec;
+  font-weight: 700;
+  box-shadow: 0 3px 0 var(--tt-brick-lo);
+  text-shadow: none;
+  transition: transform 120ms ease, box-shadow 120ms ease, background-color 120ms ease;
+}
+
+/* 悬停/按下/禁用只作用于没有自带样式的主按钮，避免把反馈印章等染成砖红 */
+:where(.app-shell button:not([class]):hover:not(:disabled), .app-shell button.primary:hover:not(:disabled)) { background: #c04f38; }
+:where(.app-shell button:active:not(:disabled)) { transform: translateY(2px); }
+:where(.app-shell button:not([class]):disabled, .app-shell button.primary:disabled) { background: #d8cfbf; color: #8f8574; box-shadow: 0 2px 0 #bfb4a1; }
+
+.app-shell button.ghost,
+.app-shell .setup-board button.ghost,
+.app-shell .reply-box .actions .ghost {
+  border: 1px solid var(--tt-line-2);
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.12);
+}
+
+.app-shell button.ghost:hover:not(:disabled) { background: #fff; }
+.app-shell button.ghost:disabled { background: var(--tt-paper-2); color: #a69a85; }
+
+.app-shell .call-heading .call-exit,
+.app-shell button.danger {
+  border: 0;
+  background: var(--tt-brick);
+  color: #fff8ec;
+  box-shadow: 0 3px 0 var(--tt-brick-lo);
+}
+
+.app-shell .quick-chips .chip,
+.app-shell .quick-chips button {
+  border: 1px solid var(--tt-line-2);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--tt-ink);
+  font-weight: 500;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+.app-shell .quick-chips .chip:hover:not(:disabled) { border-color: var(--tt-green); background: #f4f8f5; }
+
+.app-shell textarea,
+.app-shell input:not([type='radio']):not([type='checkbox']),
+.app-shell select {
+  border: 1px solid var(--tt-line-2);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--tt-ink);
+  box-shadow: none;
+}
+
+.app-shell textarea:focus-visible,
+.app-shell input:focus-visible,
+.app-shell select:focus-visible {
+  outline: 2px solid var(--tt-felt);
+  outline-offset: 1px;
+  border-color: var(--tt-felt);
+}
+
+/* 3. 左栏：墨绿纯色，当前项是一张米白卡 ------------------------------------- */
+.app-shell .left-rail {
+  border-right: 0;
+  background: var(--tt-green);
+  background-image: none;
+  color: var(--tt-cream);
+  box-shadow: none;
+}
+
+.app-shell .left-rail::before,
+.app-shell .left-rail::after { content: none; }
+
+.app-shell .left-rail .brand-mark,
+.app-shell .left-rail .app-header .kicker,
+.app-shell .left-rail .app-header > p:first-child { color: var(--tt-gold); }
+
+.app-shell .left-rail .app-header h1 {
+  color: #fbf4e4;
+  font-family: var(--tt-serif);
+  font-weight: 900;
+  text-shadow: none;
+  background: none;
+  -webkit-text-fill-color: currentColor;
+}
+
+.app-shell .left-rail .app-header p { color: rgba(239, 230, 211, 0.72); }
+
+.app-shell .left-rail .quick-start {
+  border: 0;
+  border-radius: 10px;
+  background: var(--tt-brick);
+  color: #fff8ec;
+  box-shadow: 0 3px 0 var(--tt-brick-lo);
+}
+
+.app-shell .left-rail .quick-start:disabled { background: #6f5a4c; color: #e5d9c8; }
+
+.app-shell .left-rail .rail-item {
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: #e6dcc7;
+  box-shadow: none;
+}
+
+.app-shell .left-rail .rail-item:hover:not(:disabled) { background: rgba(239, 230, 211, 0.08); color: #fff; }
+
+.app-shell .left-rail .rail-item.current {
+  background: var(--tt-cream);
+  color: var(--tt-green);
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.app-shell .left-rail .rail-item.current::before,
+.app-shell .left-rail .rail-item.current::after { content: none; }
+
+.app-shell .left-rail .rail-item:disabled { color: rgba(239, 230, 211, 0.4); }
+
+.app-shell .left-rail .rail-count {
+  min-width: 22px;
+  height: 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--tt-gold);
+  color: var(--tt-green);
+  font-family: var(--font-body);
+  font-weight: 700;
+  box-shadow: none;
+}
+
+/* 4. 牌桌：墨绿桌垫 + 一圈米白细线 ---------------------------------------- */
+.app-shell .app-main .setup-board,
+.app-shell .app-main .table-board {
+  border: 0;
+  border-radius: 16px;
+  background: var(--tt-felt);
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2'/><feColorMatrix values='0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 .12 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+  box-shadow: inset 0 0 0 6px var(--tt-felt), inset 0 0 0 7px rgba(239, 230, 211, 0.32), 0 6px 18px rgba(60, 45, 20, 0.18);
+}
+
+.app-shell .app-main .setup-board::before,
+.app-shell .app-main .table-board::before,
+.app-shell .app-main .setup-board::after,
+.app-shell .app-main .table-board::after { content: none; }
+
+.app-shell .setup-board > div > h3,
+.app-shell .table-board > * > h3:not(.seated-copy h3) {
+  color: #fbf4e4;
+  font-family: var(--tt-serif);
+  font-weight: 900;
+  text-shadow: none;
+}
+
+.app-shell .setup-board > div > h3::before { content: none; }
+
+.app-shell .setup-board :is(.setup-deck-reference, .setup-reference) {
+  border: 1px solid rgba(239, 230, 211, 0.2);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
+  color: var(--tt-cream);
+  box-shadow: none;
+}
+
+.app-shell .setup-board :is(.setup-deck-reference, .setup-reference) > summary { color: #fbf4e4; font-weight: 700; }
+.app-shell .setup-board :is(.setup-deck-reference, .setup-reference) :is(h3, h4, strong):not(.law-card *, .card-tile *, .table-note *) { color: #fbf4e4; }
+.app-shell .setup-board :is(.setup-deck-reference, .setup-reference) .hint { color: var(--tt-felt-ink); }
+
+/* 5. 头像：米白圆框 + 墨绿细圈，像桌游角色标记 ---------------------------- */
+.app-shell .persona-avatar {
+  border: 3px solid var(--tt-paper);
+  border-radius: 50%;
+  background: var(--tt-paper-2);
+  box-shadow: 0 0 0 2px var(--tt-green);
+}
+
+/* 6. 生客名册：一张张角色卡 ----------------------------------------------- */
+.app-shell .app-main .setup-board .roster-card {
+  border: 0;
+  border-radius: 12px;
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  box-shadow: var(--tt-card-shadow);
+}
+
+.app-shell .app-main .setup-board .roster-card:hover:not(:disabled) { transform: translateY(-2px); }
+
+.app-shell .app-main .setup-board .roster-card.seated {
+  background: #fffaf0;
+  box-shadow: 0 0 0 3px var(--tt-gold), var(--tt-card-shadow);
+}
+
+.app-shell .setup-board .roster-copy strong { color: var(--tt-green); font-family: var(--tt-serif); font-weight: 900; }
+.app-shell .setup-board .roster-copy small { color: var(--tt-muted); }
+.app-shell .setup-board .roster-code { color: var(--tt-muted); opacity: 0.8; }
+
+.app-shell .app-main .setup-board .roster-card .badge {
+  border: 0;
+  border-radius: 999px;
+  background: var(--tt-navy);
+  color: #eef0f6;
+  box-shadow: none;
+}
+
+.app-shell .app-main .setup-board .roster-card.seated .badge { background: var(--tt-jade); color: #fff; }
+
+/* 7. 客户席：空位是虚线座位，入座后是一张大角色卡 --------------------------- */
+.app-shell .seat {
+  border: 2px dashed rgba(239, 230, 211, 0.45);
+  border-radius: 14px;
+  background: rgba(0, 0, 0, 0.1);
+  color: var(--tt-cream);
+  box-shadow: none;
+}
+
+.app-shell .seat.drag-over { border-color: var(--tt-gold); background: rgba(217, 180, 106, 0.12); }
+
+.app-shell .seat.occupied {
+  border: 0;
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  box-shadow: 0 0 0 3px var(--tt-gold), var(--tt-card-shadow);
+}
+
+.app-shell .seat:not(.occupied) .seat-label { color: var(--tt-gold); }
+.app-shell .seat:not(.occupied) h3 { color: #fbf4e4; font-family: var(--tt-serif); }
+.app-shell .seated-copy h3 { color: var(--tt-green); font-family: var(--tt-serif); font-weight: 900; }
+.app-shell .seat-preview { border-top: 1px dashed var(--tt-line-2); background: none; }
+
+/* 8. 编号圆标：所有策略卡左上角的印刷圆标(data-gem) -------------------------- */
+.app-shell :is(.cards .card, .card-tile)[data-gem]::before {
+  content: attr(data-gem);
+  position: absolute;
+  z-index: 3;
+  top: 14px;
+  left: 14px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border-radius: 50%;
+  background: var(--tt-paper);
+  color: var(--tt-navy);
+  font-family: var(--font-body);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 0;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* 卡面插画：一块扁平色块 + 米白线描图标 */
+.app-shell :is(.card-art, .card-tile-art) {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 8px;
+  background: var(--art-bg, var(--tt-navy));
+  color: var(--tt-paper);
+}
+
+.app-shell :is(.card-art, .card-tile-art)[data-motif='call'] { --art-bg: var(--tt-jade); }
+.app-shell :is(.card-art, .card-tile-art)[data-motif='probe'] { --art-bg: var(--tt-navy); }
+.app-shell :is(.card-art, .card-tile-art)[data-motif='offer'] { --art-bg: var(--tt-mustard); }
+.app-shell :is(.card-art, .card-tile-art)[data-motif='close'] { --art-bg: var(--tt-brick); }
+
+.app-shell :is(.card-art, .card-tile-art) svg {
+  width: 44px;
+  height: 44px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.app-shell :is(.card-art, .card-tile-art) svg .art-fill { fill: rgba(255, 255, 255, 0.16); }
+
+/* 9. 策略卡页：竖版卡纸 ---------------------------------------------------- */
+.app-shell[data-view='cards'] .app-main .cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 240px));
+  gap: 24px;
+  max-width: none;
+  padding: 8px 0;
+}
+
+.app-shell .app-main .cards .card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 330px;
+  margin: 0;
+  padding: 8px 8px 12px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 12px;
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  box-shadow: var(--tt-card-shadow);
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.app-shell .app-main .cards .card::after { content: none; }
+
+@media (hover: hover) {
+  .app-shell .app-main .cards .card:hover { transform: translateY(-3px); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.16), 0 14px 24px rgba(0, 0, 0, 0.2); }
+}
+
+.app-shell .cards .card .card-art { height: 120px; }
+.app-shell .cards .card .card-art svg { width: 52px; height: 52px; }
+
+.app-shell .app-main .cards .card header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 12px 6px 6px;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.app-shell .app-main .cards .card header strong {
+  color: #1f2a40;
+  font-family: var(--tt-serif);
+  font-size: 16px;
+  font-weight: 900;
+  line-height: 1.45;
+  text-shadow: none;
+}
+
+.app-shell .app-main .cards .card header .badge {
+  order: -1;
+  padding: 1px 8px;
+  border: 0;
+  border-radius: 999px;
+  background: #e3efe7;
+  color: var(--tt-jade);
+  font-size: 11px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.app-shell .app-main .cards .card[data-status='draft'] header .badge { background: #f6e6bf; color: #8a5a12; }
+
+.app-shell .app-main .cards .card > .hint {
+  flex: 1;
+  margin: 0 6px;
+  color: #4a4436;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.app-shell .app-main .cards .card .card-code {
+  position: static;
+  margin: 10px 6px 0;
+  padding-top: 8px;
+  border-top: 1px dashed var(--tt-line-2);
+  color: var(--tt-muted);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  opacity: 1;
+}
+
+/* 10. 布置幕的桌上策略卡：一排迷你卡 --------------------------------------- */
+.app-shell .setup-board .setup-deck-reference .card-tiles {
+  grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  gap: 14px;
+}
+
+.app-shell .setup-board .card-tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  min-height: 0;
+  padding: 6px 6px 10px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  box-shadow: var(--tt-card-shadow);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.app-shell .setup-board .card-tile::after { content: none; }
+.app-shell .setup-board .card-tile .card-tile-art { height: 64px; }
+.app-shell .setup-board .card-tile .card-tile-art svg { width: 30px; height: 30px; }
+
+.app-shell .setup-board .card-tile .card-tile-name {
+  display: block;
+  margin: 8px 4px 0;
+  color: #1f2a40;
+  font-family: var(--tt-serif);
+  font-weight: 900;
+}
+
+.app-shell .setup-board .card-tile[data-gem]::before { top: 10px; left: 10px; width: 22px; height: 22px; font-size: 10.5px; }
+
+/* 11. 对局右栏"桌面明牌" --------------------------------------------------- */
+.app-shell .app-main .tavern-rail {
+  border: 1px solid rgba(239, 230, 211, 0.2);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
+  color: var(--tt-cream);
+  box-shadow: none;
+}
+
+.app-shell .app-main .tavern-rail::before,
+.app-shell .app-main .tavern-rail::after { content: none; }
+
+.app-shell .tavern-rail-heading h3 { color: #fbf4e4; font-family: var(--tt-serif); font-weight: 900; text-shadow: none; }
+.app-shell .tavern-rail-heading :is(p, small, .hint) { color: var(--tt-felt-ink); }
+
+.app-shell .rail-crest {
+  border: 0;
+  border-radius: 8px;
+  background: var(--tt-cream);
+  color: var(--tt-green);
+  box-shadow: none;
+}
+
+.app-shell .rail-brass-count { border: 0; color: var(--tt-gold); text-shadow: none; }
+
+.app-shell .tavern-rail .current-goal {
+  border: 0;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--tt-cream);
+  box-shadow: none;
+}
+
+.app-shell .tavern-rail .current-goal span { color: var(--tt-gold); }
+
+.app-shell .tavern-rail .tavern-strategies { gap: 10px; }
+
+/* 未亮的卡：一张小卡，左侧色块图标 */
+.app-shell .app-main .tavern-rail .card-tile {
+  position: relative;
+  overflow: hidden;
+  padding: 10px 12px 10px 58px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  box-shadow: var(--tt-card-shadow);
+}
+
+.app-shell .app-main .tavern-rail .card-tile::after { content: none; }
+.app-shell .app-main .tavern-rail .card-tile:not(.active)[data-gem]::before { content: none; }
+
+.app-shell .tavern-rail .card-tile:not(.active) .card-tile-art {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  width: 34px;
+  height: 34px;
+}
+
+.app-shell .tavern-rail .card-tile:not(.active) .card-tile-art svg { width: 20px; height: 20px; }
+
+.app-shell .tavern-rail .card-tile h4 {
+  margin: 0 0 4px;
+  color: #1f2a40;
+  font-family: var(--tt-serif);
+  font-size: 14px;
+  font-weight: 900;
+  line-height: 1.45;
+  text-shadow: none;
+}
+
+.app-shell .tavern-rail .card-tile :is(.strategy-card-top, .strategy-card-purpose, .strategy-card-details summary, .strategy-card-details div > span, dt) { color: var(--tt-muted); }
+.app-shell .tavern-rail .card-tile :is(.strategy-card-details ul, .strategy-card-details ol, .strategy-card-details p, dd) { color: #3d3a33; }
+.app-shell .tavern-rail .card-tile .strategy-card-details { border-top-color: var(--tt-line); }
+
+/* 亮出的那张：完整卡面，金色描边 */
+.app-shell .app-main .tavern-rail .card-tile.active {
+  padding: 8px 8px 12px;
+  background: var(--tt-paper);
+  box-shadow: 0 0 0 3px var(--tt-gold), 0 10px 22px rgba(0, 0, 0, 0.28);
+}
+
+.app-shell .tavern-rail .card-tile.active .card-tile-art { height: 92px; margin: 0 0 10px; }
+.app-shell .tavern-rail .card-tile.active .card-tile-art svg { width: 44px; height: 44px; }
+.app-shell .tavern-rail .card-tile.active > :not(.card-tile-art) { margin-inline: 6px; }
+.app-shell .tavern-rail .card-tile.active h4 { font-size: 16px; margin-block: 2px 8px; }
+
+.app-shell .tavern-rail .strategy-lit {
+  border: 0;
+  border-radius: 999px;
+  background: #f6e6bf;
+  color: #7a4f0e;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.app-shell .table-board > aside.strategy-board:not(:has(.tavern-strategies)) h3 { color: #fbf4e4; }
+
+/* 12. 通话逻辑卡(四条钱规律) ----------------------------------------------- */
+.app-shell .law-card {
+  border: 0;
+  border-radius: 12px;
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  box-shadow: var(--tt-card-shadow);
+}
+
+@media (hover: hover) {
+  .app-shell .law-card:hover { transform: translateY(-2px); }
+}
+
+.app-shell .law-card-number {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--tt-navy);
+  color: var(--tt-paper);
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.app-shell .law-emblem {
+  border: 0;
+  border-radius: 12px;
+  background: var(--tt-navy);
+  stroke: var(--tt-paper);
+  box-shadow: none;
+}
+
+.app-shell .law-card summary strong { color: #1f2a40; font-family: var(--tt-serif); font-weight: 900; }
+
+.app-shell .table-note {
+  border: 0;
+  border-radius: 12px;
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  box-shadow: var(--tt-card-shadow);
+}
+
+.app-shell .table-note :is(p, .hint, span, small) { color: #4a4436; }
+.app-shell .table-note summary { color: var(--tt-ink); }
+
+/* 13. 对局左栏：客户角色卡 + 可见信息 + 藏青隐藏牌 -------------------------- */
+.app-shell .table-board .player-board {
+  border: 1px solid rgba(239, 230, 211, 0.2);
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.16);
+  color: var(--tt-cream);
+  box-shadow: none;
+}
+
+.app-shell .identity-badge {
+  border: 0;
+  border-radius: 999px;
+  background: var(--tt-cream);
+  color: var(--tt-green);
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.app-shell .player-profile h3 { color: #fbf4e4; font-family: var(--tt-serif); font-weight: 900; }
+.app-shell .player-profile p { color: var(--tt-felt-ink); }
+
+.app-shell .player-board .info-list:not(.hidden-hand) {
+  border: 0;
+  border-radius: 12px;
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  box-shadow: var(--tt-card-shadow);
+}
+
+.app-shell .hidden-hand,
+.app-shell .seat-preview details .info-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  box-shadow: none;
+}
+
+.app-shell :is(.hidden-hand, .seat-preview details .info-list) > li {
+  position: relative;
+  list-style: none;
+  padding: 10px 12px 10px 42px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--tt-navy) repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.05) 0 6px, transparent 6px 12px);
+  color: #eef0f6;
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.22), inset 0 0 0 3px var(--tt-navy), inset 0 0 0 4px rgba(238, 240, 246, 0.3);
+}
+
+.app-shell :is(.hidden-hand, .seat-preview details .info-list) > li::before {
+  content: "";
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--tt-cream) url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232b3a55' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'><rect x='5' y='11' width='14' height='9' rx='2'/><path d='M8 11V8a4 4 0 0 1 8 0v3'/></svg>") center / 13px no-repeat;
+  box-shadow: none;
+}
+
+.app-shell .player-board h3 svg { color: var(--tt-gold); }
+
+/* 14. 通话轨道 = 桌游计分格 ------------------------------------------------ */
+.app-shell .app-main .call-track {
+  gap: 6px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.18);
+  box-shadow: none;
+}
+
+.app-shell .app-main .call-track .track-cell {
+  border: 0;
+  border-radius: 6px;
+  background: var(--tt-paper);
+  color: var(--tt-muted);
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.app-shell .app-main .call-track .track-cell::before,
+.app-shell .app-main .call-track .track-cell::after { content: none; }
+
+.app-shell .app-main .call-track .track-cell.passed { background: var(--tt-gold); color: #3b2c10; }
+.app-shell .app-main .call-track .track-cell.passed[aria-current='step'] { box-shadow: inset 0 0 0 2px var(--tt-brick); }
+.app-shell .app-main .call-track .track-cell:last-child { background: #ecd9d2; color: var(--tt-brick); }
+.app-shell .app-main .call-track .track-cell.passed:last-child { background: var(--tt-brick); color: #fff; }
+
+.app-shell .track-guidance { color: var(--tt-felt-ink); }
+.app-shell .track-guidance.near-end { color: #f3c4b8; }
+
+/* 15. 通话面板：一张大卡纸，两色对话条 --------------------------------------- */
+.app-shell .call-board .step {
+  border: 0;
+  border-radius: 12px;
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  box-shadow: var(--tt-card-shadow);
+}
+
+.app-shell .call-board .step h2 { color: var(--tt-green); font-family: var(--tt-serif); font-weight: 900; text-shadow: none; }
+
+.app-shell .call-log {
+  border: 0;
+  border-radius: 8px;
+  background: var(--tt-paper-2);
+  box-shadow: none;
+}
+
+.app-shell .call-log .turn-manager {
+  border: 1px solid var(--tt-line);
+  border-left: 4px solid var(--tt-navy);
+  border-radius: 10px;
+  background: #fff;
+  color: var(--tt-ink);
+  box-shadow: none;
+}
+
+.app-shell .call-log .turn-customer {
+  border: 1px solid #c3d6ca;
+  border-right: 4px solid var(--tt-felt);
+  border-radius: 10px;
+  background: #e6efe9;
+  color: var(--tt-ink);
+  box-shadow: none;
+}
+
+.app-shell .observation-reminder,
+.app-shell .observation-notebook {
+  border: 1px solid var(--tt-line);
+  border-radius: 10px;
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  box-shadow: none;
+}
+
+.app-shell .observation-reminder > span { color: #4a4436; }
+.app-shell .observation-reminder summary { color: var(--tt-ink); }
+
+/* 16. 结算：一张复盘卡纸 --------------------------------------------------- */
+.app-shell .result-act {
+  border: 0;
+  border-radius: 14px;
+  background: var(--tt-paper);
+  color: var(--tt-ink);
+  box-shadow: 0 0 0 6px var(--tt-paper), 0 0 0 7px var(--tt-line-2), 0 10px 24px rgba(60, 45, 20, 0.16);
+}
+
+.app-shell .result-act::before { content: none; }
+
+.app-shell .result-act .review-focus {
+  border: 0;
+  border-left: 4px solid var(--tt-gold);
+  border-radius: 10px;
+  background: #fffaf0;
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+.app-shell .strategy-path > li {
+  border: 1px solid var(--tt-line);
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: none;
+}
+
+/* 17. 其他纸面 ------------------------------------------------------------- */
+.app-shell .play-guide {
+  border: 0;
+  border-left: 4px solid var(--tt-felt);
+  border-radius: 12px;
+  background: var(--tt-paper);
+  box-shadow: var(--tt-card-shadow);
+}
+
+.app-shell .catalog-item {
+  border: 1px solid var(--tt-line);
+  border-left: 4px solid var(--tt-felt);
+  border-radius: 10px;
+  background: var(--tt-paper);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.06);
+}
+
+/* 图例圆点：可见 = 翡翠绿，隐藏 = 藏青(与隐藏牌同色) */
+.app-shell .dot-vis { background: var(--tt-jade); }
+.app-shell .dot-hid { border: 0; background: var(--tt-navy); }
+
+/* 18. 响应式与无障碍 ------------------------------------------------------- */
+@media (max-width: 820px) {
+  .app-shell .left-rail { box-shadow: 0 2px 0 rgba(0, 0, 0, 0.18); }
+  .app-shell[data-view='cards'] .app-main .cards { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); }
+}
+
+@media (max-width: 500px) {
+  .app-shell .app-main .setup-board,
+  .app-shell .app-main .table-board { border-radius: 12px; box-shadow: inset 0 0 0 4px var(--tt-felt), inset 0 0 0 5px rgba(239, 230, 211, 0.3); }
+  .app-shell .app-main .call-track { gap: 3px; padding: 6px; }
+  .app-shell .app-main .call-track .track-cell { font-size: 10px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell .app-main .cards .card,
+  .app-shell .law-card,
+  .app-shell .app-main .setup-board .roster-card { transition: none; }
+}

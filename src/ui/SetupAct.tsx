@@ -5,6 +5,7 @@ import { PersonaAvatar } from "./PersonaAvatar";
 import { PersonaStep } from "./PersonaStep";
 import { UiIcon } from "./UiIcon";
 import { LogicRail } from "./TavernRail";
+import { CardArt } from "./CardArt";
 import "./frontend-lenses.css";
 
 export function SetupAct({
@@ -172,9 +173,10 @@ export function SetupAct({
             {publishedCards.length === 0 ? (
               <li className="hint">还没有已发布策略卡。直接接通会按一般服务原则回应；快速开始会用种子卡兜底。</li>
             ) : (
-              publishedCards.map((card) => (
-                <li key={card.id} className="card-tile">
-                  {card.name}
+              publishedCards.map((card, index) => (
+                <li key={card.id} className="card-tile" data-gem={String(index + 1).padStart(2, "0")}>
+                  <CardArt card={card} index={index} className="card-tile-art" />
+                  <span className="card-tile-name">{card.name}</span>
                 </li>
               ))
             )}
