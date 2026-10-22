@@ -78,7 +78,7 @@ export interface ModelAdapterConfig {
 }
 
 export const DEFAULT_MODEL_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1";
-export const DEFAULT_MODEL_NAME = "mimo-v2.5";
+export const DEFAULT_MODEL_NAME = "mimo-v2.6-pro";
 
 export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePort {
   constructor(private readonly config: ModelAdapterConfig) {}
