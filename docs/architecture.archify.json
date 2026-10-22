@@ -237,7 +237,7 @@
       "id": "mimo-llm",
       "type": "external",
       "label": "MIMO 语言模型",
-      "sublabel": "mimo-v2.5",
+      "sublabel": "mimo-v2.6-pro",
       "tag": "OpenAI 兼容",
       "pos": [
         1135,
@@ -364,7 +364,7 @@
       "title": "端口与适配器",
       "items": [
         "产品核心只调用 CopywritingPort / DialoguePort,不认识具体模型(依赖倒置)",
-        "已配置密钥时由 OpenAI 兼容适配器调用 MIMO mimo-v2.5,提示词组装见 prompts.ts",
+        "已配置密钥时由 OpenAI 兼容适配器调用 MIMO mimo-v2.6-pro,提示词组装见 prompts.ts",
         "未配置 MIMO_API_KEY 时自动回退伪适配器(FakeModelAdapter),仅供测试与演示",
         "种子数据内置 C01 素材、SC1–SC3 策略卡、P01 画像(ADR 0002)"
       ]

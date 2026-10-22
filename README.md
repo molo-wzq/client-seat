@@ -76,7 +76,7 @@ npm run dev
 ```env
 MIMO_API_KEY=你的密钥
 MIMO_BASE_URL=https://token-plan-cn.xiaomimimo.com/v1
-MIMO_MODEL=mimo-v2.5
+MIMO_MODEL=mimo-v2.6-pro
 # 转写(录音→文字)与对话共用同一供应商时,上面一组就够。
 # 换转写供应商时,补下面一组(ASR 专用,纯音频转文字):
 # ASR_API_KEY=...
