@@ -3,6 +3,7 @@ import path from "node:path";
 import { numberTurns, parseTranscriptTurns } from "../src/domain/transcript";
 import type { ProductStorage } from "../src/domain/ports";
 import type { Conversation, Material, Persona } from "../src/domain/types";
+import type { RoleCard } from "../src/domain/role-card";
 
 /**
  * 本地 JSON 文件存储(spec.md:不引入数据库)。
@@ -15,6 +16,7 @@ export class FileStorage implements ProductStorage {
   private materials = new Map<string, Material>();
   private conversations = new Map<string, Conversation>();
   private personas = new Map<string, Persona>();
+  private roles = new Map<string, RoleCard>();
   private flushChain: Promise<void> = Promise.resolve();
   private serial = 0;
 
@@ -25,6 +27,7 @@ export class FileStorage implements ProductStorage {
         materials?: Material[];
         conversations?: Conversation[];
         personas?: Persona[];
+        roles?: RoleCard[];
       };
       for (const material of data.materials ?? []) {
         this.materials.set(material.id, migrateMaterial(material));
@@ -32,6 +35,7 @@ export class FileStorage implements ProductStorage {
       for (const conversation of data.conversations ?? [])
         this.conversations.set(conversation.id, conversation);
       for (const persona of data.personas ?? []) this.personas.set(persona.id, persona);
+      for (const role of data.roles ?? []) this.roles.set(role.id, role);
     }
   }
 
@@ -73,12 +77,21 @@ export class FileStorage implements ProductStorage {
     return [...this.personas.values()].map((p) => structuredClone(p));
   }
 
+  async saveRole(role: RoleCard): Promise<void> {
+    this.roles.set(role.id, structuredClone(role));
+    await this.flush();
+  }
+  async listRoles(): Promise<RoleCard[]> {
+    return [...this.roles.values()].map((r) => structuredClone(r));
+  }
+
   /** 快照在入队时取,写按入队顺序串行执行;前一次失败不阻塞后续写。 */
   private flush(): Promise<void> {
     const data = {
       materials: [...this.materials.values()],
       conversations: [...this.conversations.values()],
       personas: [...this.personas.values()],
+      roles: [...this.roles.values()],
     };
     const content = JSON.stringify(data, null, 2);
     const serial = ++this.serial;

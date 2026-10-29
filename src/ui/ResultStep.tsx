@@ -8,7 +8,6 @@ import { FeelingSeal } from "./feeling-stamps";
 import { ReplayComparison } from "./ReplayComparison";
 import { ProductFacts } from "./ProductFacts";
 import { SEED_PRODUCT_CARD } from "../domain/seed";
-
 export function ResultStep({
   result,
   api,
@@ -27,6 +26,8 @@ export function ResultStep({
   // 回放原文时在完整对话里闪烁定位目标轮次;同轮连续点击也要能重触发,
   // 所以先清空再在下一帧置回,动画由 CSS 的 li.flash 承担。
   const [flashTurn, setFlashTurn] = useState<number | null>(null);
+  // 复盘标尺随本局经理角色快照;旧记录无快照回落默认规律。
+  const logicLaws = result.resources?.role?.callLogic ?? CALL_LOGIC_LAWS;
   const flashTimer = useRef<number | undefined>(undefined);
   const [branchTurn, setBranchTurn] = useState<number | null>(null);
   const [branchText, setBranchText] = useState('');
@@ -186,6 +187,10 @@ export function ResultStep({
           <dt>开局目标</dt>
           <dd>{result.mainGoal}</dd>
         </div>
+        <div>
+          <dt>本局经理</dt>
+          <dd>{result.resources?.role ? `${result.resources.role.name}（${result.resources.role.tags.join("·") || "自定义"}打法）` : "旧记录未保存,按默认打法回溯"}</dd>
+        </div>
         <div><dt>最后动作（候选）</dt><dd>{result.lastAction ?? '旧记录未单独保存'}</dd></div>
         <div>
           <dt>沟通结果</dt>
@@ -260,10 +265,10 @@ export function ResultStep({
         信号、目的、用卡与事实核对提示为话术生成后的候选,以实际话术、参数与素材原文为准。未记录疑点不代表通过事实核验。
       </p>
       <aside className="call-logic-panel" aria-label="通话逻辑复盘标尺">
-        <strong>复盘标尺</strong>
-        {/* 四条规律名做一行锚点,整句进悬停;逐轮归因已在下方链路里。 */}
+        <strong>复盘标尺{result.resources?.role ? ` · ${result.resources.role.name}的规律` : ""}</strong>
+        {/* 规律名做一行锚点,整句进悬停;逐轮归因已在下方链路里。 */}
         <ul>
-          {CALL_LOGIC_LAWS.map((law) => (
+          {logicLaws.map((law) => (
             <li key={law.key} title={law.law}>
               {law.name}
             </li>

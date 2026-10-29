@@ -11,6 +11,9 @@ import { PROMPT_VERSION } from "./prompt-version";
 import { detectManagerFarewell } from "./reply-text";
 import { hasOutOfCardNumber, factRelationNotes } from "./product-facts";
 import { customerIntent } from "./customer-intent";
+import { selectCardsForTurn } from "./card-retrieval";
+import { PROMPT_TUNING_ENV, tuningEnabled } from "./prompt-tuning";
+import { DEFAULT_ROLE_CARD, parseRoleCard, SEED_ROLES, type RoleCard } from "./role-card";
 import type { CopywritingPort, DialoguePort, ProductStorage, ManagerTurnOutput } from "./ports";
 import type {
   Conversation,
@@ -51,6 +54,10 @@ export interface ProductCore {
   /** 从预设或修改后的属性保存一位自定义生客;留空字段保持未知,不自动补全。 */
   savePersona(input: PersonaInput): Promise<Persona>;
   listPersonas(): Promise<Persona[]>;
+  /** 内置角色在前,导入的角色按保存顺序并入;整套打法(人设/规律/规则/示范/尾部提醒)随卡携带。 */
+  listRoles(): Promise<RoleCard[]>;
+  /** 导入一张角色卡(JSON):逐字段校验,未知字段保留;每次导入分配新 id,不覆盖已有角色。 */
+  saveRole(input: unknown): Promise<RoleCard>;
   startConversation(personaId: string, options?: ConversationStartOptions): Promise<Conversation>;
   /** 快速开始:库中无已发布策略卡时以种子素材(已发布态)兜底,用第一个内置画像直接开一通对话;幂等。 */
   quickStart(): Promise<Conversation>;
@@ -147,16 +154,29 @@ export function createProductCore(deps: {
     return persona;
   }
 
+  async function listAllRoles(): Promise<RoleCard[]> {
+    // 内置角色在前(默认小王、稳重型老陈),导入的角色按保存顺序并入。
+    return [...SEED_ROLES, ...(await storage.listRoles())];
+  }
+
+  async function requireRole(roleId?: string): Promise<RoleCard> {
+    const resolved = roleId ?? DEFAULT_ROLE_CARD.id;
+    const role = (await listAllRoles()).find((r) => r.id === resolved);
+    if (!role) throw new NotFoundError(`经理角色不存在:${resolved}`);
+    return role;
+  }
+
   /** 构造对话生成可读的画像视图:隐藏信息不离开领域层。 */
   function toVisiblePersona(persona: Persona): VisiblePersona {
     return { id: persona.id, name: persona.name, visible: persona.visible };
   }
 
-  async function snapshotResources(personaId: string): Promise<ConversationResources> {
+  async function snapshotResources(personaId: string, role: RoleCard): Promise<ConversationResources> {
     const materials = await storage.listMaterials();
     const cards = materials.flatMap((material) => material.cards.filter((card) => card.status === 'published'));
     return structuredClone({
       persona: await requirePersona(personaId), cards,
+      role,
       evidence: cards.map((card) => ({
         cardId: card.id, cardName: card.name, source: card.sourceExcerpt,
         sourceTurns: resolveTurnRange(card.sourceExcerpt.turnRange, locateSourceMaterial(card.sourceExcerpt, materials)?.turns ?? []),
@@ -211,11 +231,16 @@ export function createProductCore(deps: {
     if (options.replayOfId !== undefined && (typeof options.replayOfId !== "string" || !options.replayOfId.trim())) {
       throw new ValidationError("原局标识不合法");
     }
+    if (options.roleId !== undefined && (typeof options.roleId !== "string" || !options.roleId.trim())) {
+      throw new ValidationError("经理角色标识不合法");
+    }
     const original = options.replayOfId ? await requireConversation(options.replayOfId) : undefined;
     if (original && (original.status !== "ended" || original.personaId !== personaId)) {
       throw new ValidationError("只能重试同一客户已结束的通话");
     }
-    const resources = original?.resources ? structuredClone(original.resources) : await snapshotResources(personaId);
+    // 角色随开局快照:重试沿用原局角色,新局解析本次所选(缺省默认小王)。
+    const role = original?.resources?.role ?? await requireRole(options.roleId);
+    const resources = original?.resources ? structuredClone(original.resources) : await snapshotResources(personaId, role);
     const conversation: Conversation = {
       id: randomId(),
       revision: 0,
@@ -278,9 +303,16 @@ export function createProductCore(deps: {
 
     const persona = toVisiblePersona(conversation.resources?.persona ?? await requirePersona(conversation.personaId));
     const productFacts = conversation.productFacts ?? SEED_PRODUCT_CARD;
+    // 旧局没有角色快照时回退默认卡:渲染与当年一致,不猜当时用的哪套打法。
+    const role = conversation.resources?.role ?? DEFAULT_ROLE_CARD;
     // 用卡与来源从同一份本轮库快照读取,避免生成期间编辑造成证据错位。
     const turnMaterials = conversation.resources ? [] : await storage.listMaterials();
     const publishedCards = conversation.resources?.cards ?? turnMaterials.flatMap((m) => m.cards.filter((c) => c.status === "published"));
+    const history = conversation.turns.slice(0, -1).map(({ strategyEvidence: _privateEvidence, promptVersion: _version, factCheckNotes: _factNotes, managerReasoning: _reasoning, injectedCardIds: _injected, ...turn }) => turn);
+    // 检索注入实验(LLM_CARD_RETRIEVAL=1):按最近客户发言的关键词决定
+    // 哪些已发布卡上桌;无触发词的卡常驻。开关默认关,全量注入不变。
+    const cardRetrieval = tuningEnabled(PROMPT_TUNING_ENV.cardRetrieval);
+    const onTableCards = cardRetrieval ? selectCardsForTurn(publishedCards, history, customerTurn.text) : publishedCards;
     const leaving = customerIntent(customerTurn.text) === 'leave';
     // 明确离场是客户的选择，模型故障或错误归因不能让客户被迫继续。
     const output: ManagerTurnOutput = leaving ? {
@@ -290,9 +322,11 @@ export function createProductCore(deps: {
     } : await dialogue.generateManagerTurn(
       {
         persona,
-        publishedCards: structuredClone(publishedCards),
+        role,
+        publishedCards: structuredClone(onTableCards),
+        ...(cardRetrieval ? { cardRetrieval: true } : {}),
         product: productFacts,
-        history: conversation.turns.slice(0, -1).map(({ strategyEvidence: _privateEvidence, promptVersion: _version, factCheckNotes: _factNotes, managerReasoning: _reasoning, ...turn }) => turn),
+        history,
         customerText: customerTurn.text,
       },
       onReplyDelta,
@@ -318,6 +352,9 @@ export function createProductCore(deps: {
       promptVersion: PROMPT_VERSION,
       text: output.reply,
       usedCardId: retrievable ? output.usedCardId : undefined,
+      // 检索开启时记录本轮实际注入的卡,复盘据此核对模型当时看到了什么;
+      // 不进下一轮输入,与 strategyEvidence 同为私有追溯字段。
+      ...(cardRetrieval ? { injectedCardIds: onTableCards.map((card) => card.id) } : {}),
       ...(retrievable && usedCard ? { strategyEvidence: conversation.resources?.evidence.find((item) => item.cardId === usedCard.id) ?? {
         cardId: usedCard.id,
         cardName: usedCard.name,
@@ -494,6 +531,22 @@ export function createProductCore(deps: {
     async listPersonas() {
       // 预设画像在前,自定义画像按保存顺序并入;新增预设只改种子数据。
       return listAllPersonas();
+    },
+
+    async listRoles() {
+      return listAllRoles();
+    },
+
+    async saveRole(input) {
+      let parsed: Omit<RoleCard, "id">;
+      try {
+        parsed = parseRoleCard(input);
+      } catch (error) {
+        throw new ValidationError(`角色卡不合法:${(error as Error).message}`);
+      }
+      const role: RoleCard = { ...parsed, id: randomId() };
+      await storage.saveRole(role);
+      return role;
     },
 
     async savePersona(input) {

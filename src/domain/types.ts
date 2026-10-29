@@ -1,4 +1,5 @@
 /** 领域词汇以根目录 CONTEXT.md 为准。 */
+import type { RoleCard } from "./role-card";
 
 export type CardStatus = "draft" | "published";
 
@@ -48,6 +49,13 @@ export interface StrategyCard {
   status: CardStatus;
   sourceExcerpt: SourceExcerpt;
   triggerSignals: string[];
+  /**
+   * 字面触发词:客户口中说得出、可做子串匹配的词,供检索注入实验
+   * (LLM_CARD_RETRIEVAL)按最近客户发言决定是否上桌。
+   * 缺省或为空=常驻上桌(世界书蓝灯语义);与 triggerSignals 分工:
+   * 信号是语义描述,触发词是字面词。旧数据缺省,零迁移。
+   */
+  triggerKeywords?: string[];
   applicableScenario: string;
   currentPurpose: string;
   actionChain: string[];
@@ -163,6 +171,8 @@ export const FEELING_STAMP_META: Record<FeelingStamp, FeelingStampMeta> = {
 /** 重试来源,不进入经理或裁判输入。 */
 export interface ConversationStartOptions {
   replayOfId?: string;
+  /** 本局理财经理角色卡 id;缺省用默认角色。 */
+  roleId?: string;
 }
 
 /** 开局冻结实际资源和画像，来源证据一同保存；不包含新编策略。 */
@@ -170,6 +180,8 @@ export interface ConversationResources {
   persona: Persona;
   cards: StrategyCard[];
   evidence: StrategyEvidence[];
+  /** 本局经理角色卡快照(整套打法:人设、规律、规则、示范、尾部提醒);旧记录缺省,回退默认角色。 */
+  role?: RoleCard;
 }
 
 export interface ReplyRevision {
@@ -235,6 +247,11 @@ export interface ConversationTurn {
    * 本局客户口述、此前经理已报过的数字之外)。只标不拦,复盘如实呈现。
    */
   outOfCardFact?: boolean;
+  /**
+   * 仅经理轮:检索注入实验(LLM_CARD_RETRIEVAL)开启时,记录本轮实际
+   * 上桌的策略卡 id。开关关闭时不写字段;复盘据此核对模型当时看到了什么。
+   */
+  injectedCardIds?: string[];
   /**
    * 仅经理轮:当轮话术生成时模型的思考通道原文(reasoning_content)。
    * 是生成侧真实过程记录,与裁判解释候选(cardMatchBasis/logicHint)区分;

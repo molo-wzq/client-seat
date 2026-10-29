@@ -10,6 +10,7 @@ import type {
   VirtualProductCard,
   VisiblePersona,
 } from "./types";
+import type { RoleCard } from "./role-card";
 import type { ParsedTurn } from "./transcript";
 
 /**
@@ -33,9 +34,16 @@ export interface TranscriptAnalysis {
 export interface ManagerTurnInput {
   /** 仅可见信息;隐藏画像不得进入对话生成。 */
   persona: VisiblePersona;
-  /** 只有已发布策略卡会进入对话输入(全量注入,检索语义保留为接口)。 */
+  /**
+   * 进入对话输入的已发布策略卡:默认全量注入;检索注入实验
+   * (cardRetrieval=true)开启时为按客户发言关键词命中的子集。
+   */
   publishedCards: StrategyCard[];
   product: VirtualProductCard;
+  /** 本局经理角色卡(整套打法);缺省由适配器回退默认角色。 */
+  role?: RoleCard;
+  /** 检索注入开关的回声:开启时提示词按「检索上桌」口径渲染并落库。 */
+  cardRetrieval?: boolean;
   /** 本轮客户发言之前的全部轮次。 */
   history: ConversationTurn[];
   customerText: string;
@@ -96,6 +104,8 @@ export interface ProductStorage {
   deleteConversations(ids: string[]): Promise<void>;
   savePersona(persona: Persona): Promise<void>;
   listPersonas(): Promise<Persona[]>;
+  saveRole(role: RoleCard): Promise<void>;
+  listRoles(): Promise<RoleCard[]>;
 }
 
 export function randomId(): string {

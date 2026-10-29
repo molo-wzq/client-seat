@@ -20,8 +20,10 @@ export function quickReplies(conversation: Conversation | null, personas: Person
   const elderly = persona?.visible.some((line) => /年长|退休|阿姨|大爷/.test(line)) ?? false;
   const acquainted = persona?.visible.some((line) => /已相识|已认识|与经理熟悉/.test(line)) ?? false;
   const lastManager = [...turns].reverse().find((t) => t.speaker === "manager");
+  // 快捷语跟着本局经理的名字走;旧局没有角色快照时回落默认名。
+  const managerName = conversation?.resources?.role?.name ?? "小王";
   if (!lastManager) {
-    return elderly && acquainted ? ["喂,是小王啊", "喂,哪位?", "你们谁啊?"] : ["喂", "喂,你好,哪位?", "你谁啊?"];
+    return elderly && acquainted ? [`喂,是${managerName}啊`, "喂,哪位?", "你们谁啊?"] : ["喂", "喂,你好,哪位?", "你谁啊?"];
   }
   if (/立减金|报名|活动.*(?:参加|领取)|(?:参加|领取).*活动/.test(lastManager.text)) {
     return elderly

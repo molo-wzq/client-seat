@@ -1,12 +1,14 @@
 import { createProductCore, type ProductCore } from "../domain/product-core";
 import type { CopywritingPort, DialoguePort, ProductStorage } from "../domain/ports";
 import type { Conversation, Material, Persona } from "../domain/types";
+import type { RoleCard } from "../domain/role-card";
 
 /** 内存存储:测试与进程内组合根使用。 */
 export class InMemoryStorage implements ProductStorage {
   private materials = new Map<string, Material>();
   private conversations = new Map<string, Conversation>();
   private personas = new Map<string, Persona>();
+  private roles = new Map<string, RoleCard>();
 
   async saveMaterial(material: Material): Promise<void> {
     this.materials.set(material.id, structuredClone(material));
@@ -36,6 +38,12 @@ export class InMemoryStorage implements ProductStorage {
   }
   async listPersonas(): Promise<Persona[]> {
     return [...this.personas.values()].map((p) => structuredClone(p));
+  }
+  async saveRole(role: RoleCard): Promise<void> {
+    this.roles.set(role.id, structuredClone(role));
+  }
+  async listRoles(): Promise<RoleCard[]> {
+    return [...this.roles.values()].map((r) => structuredClone(r));
   }
 }
 

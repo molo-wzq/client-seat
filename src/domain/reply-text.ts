@@ -12,7 +12,8 @@
  * 舞台指示与斜杠称呼同理不是可播出的口语:(语气温和)(笑) 整体剥除;
  * 「先生/女士」是模型没选定称呼的占位形态,剥掉后自然落到后面的称呼语。
  */
-export function cleanReplyText(reply: string): string {
+export function cleanReplyText(reply: string, managerName = "小王"): string {
+  const escapedName = managerName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   return reply
     .replace(/[（(][^（）()]*[）)]/g, "")
     // 素材骨架〔〕/[] 填空标记漏出时兜底吸收(穿帮痕迹两边都不留):
@@ -22,7 +23,8 @@ export function cleanReplyText(reply: string): string {
       return /称呼|姓名|名字/.test(inner) ? "您" : "";
     })
     .replace(/先生\s*\/\s*女士|女士\s*\/\s*先生/g, "")
-    .replace(/^(?:理财经理(?:小王)?|小王|经理|AI|客服|话术)\s*[:：]\s*/, "")
+    // 称谓前缀按本局经理名剥除:换角色后各剥各的名字,不吃掉别的短词。
+    .replace(new RegExp(`^(?:理财经理(?:${escapedName})?|${escapedName}|经理|AI|客服|话术)\\s*[:：]\\s*`), "")
     .replace(
       /\n[ \t]*(?:user|assistant)[^\n]*$|\n[ \t]*(?:客户|经理|理财经理)\s*[:：][^\n]*$/i,
       "",

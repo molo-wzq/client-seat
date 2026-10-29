@@ -1,6 +1,8 @@
 import { buildSeedMaterial, SEED_CARDS, SEED_CARD_IDS, SEED_TRANSCRIPT } from "../domain/seed";
 import { parseTranscriptTurns } from "../domain/transcript";
 import { customerIntent } from '../domain/customer-intent';
+import { applyRoleMacros, DEFAULT_ROLE_CARD } from "../domain/role-card";
+import { MAX_MANAGER_TURNS } from "../domain/product-core";
 import type {
   CopywritingPort,
   DialoguePort,
@@ -94,13 +96,17 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
 
     // 第一轮:SC1 生客开场——自报身份、征询时机、身份依据,并一句话说清具体来意。
     // 代发关系是系统里查得到的(p3:画像写明的行内信息当功课说,不问客户)。
+    // 开场白来自本局角色卡的 first_mes;代发变体带系统信息,由脚本按画像拼。
     if (history.length === 0) {
+      const role = input.role ?? DEFAULT_ROLE_CARD;
+      const managerName = role.name;
+      const firstMes = applyRoleMacros(role.firstMes, { char: managerName, maxTurns: MAX_MANAGER_TURNS });
       const hasPayrollBasis = persona.visible.some((line) => /代发/.test(line));
       const address = elderlyAddress(persona);
       return {
         reply: hasPayrollBasis
-          ? `${address}您好,我是咱们行的理财经理小王,看系统里您工资是咱行代发的。这会儿方便说两句吗?行里有个面向代发客户的资金活动,想跟您说一声。`
-          : `${address}您好,我是咱们行的理财经理小王。这会儿方便说两句吗?行里有个客户资金活动想跟您说一声,不耽误您太久。`,
+          ? `${address}您好,我是咱们行的理财经理${managerName},看系统里您工资是咱行代发的。这会儿方便说两句吗?行里有个面向代发客户的资金活动,想跟您说一声。`
+          : `${address}${firstMes}`,
         recognizedSignal: "电话刚接通,客户应答",
         currentGoal: "让客户确认这是本行客户经理的正常服务来电,愿意继续听下去",
         usedCardId: SEED_CARD_IDS.opening,

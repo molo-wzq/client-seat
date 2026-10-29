@@ -1,8 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, ConversationResult, ConversationStartOptions, Material, Persona } from "./domain/types";
 import type { ProductCore } from "./domain/product-core";
+import type { RoleCard } from "./domain/role-card";
 import { BusyHint } from "./ui/BusyHint";
-import { CardsView, HistoryView, MaterialsView } from "./ui/CatalogViews";
+import { CardsView, HistoryView, MaterialsView, RolesView } from "./ui/CatalogViews";
 import { LeftRail, type AppView } from "./ui/LeftRail";
 import { ResultStep } from "./ui/ResultStep";
 import { SetupAct } from "./ui/SetupAct";
@@ -14,6 +15,7 @@ export function App({ api }: { api: ProductCore }) {
   const [view, setView] = useState<AppView>("setup");
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
+  const [roles, setRoles] = useState<RoleCard[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [conversation, setConversation] = useState<Conversation | null>(null);
   const [result, setResult] = useState<ConversationResult | null>(null);
@@ -31,14 +33,17 @@ export function App({ api }: { api: ProductCore }) {
   }, [view, conversation?.id, catalogBusy]);
 
   async function refreshCatalog() {
-    const [nextPersonas, nextMaterials, nextConversations] = await Promise.all([
+    const [nextPersonas, nextMaterials, nextConversations, nextRoles] = await Promise.all([
       api.listPersonas(),
       api.listMaterials(),
       api.listConversations(),
+      // 接口桩可能没有角色方法:取不到就空列表,布置幕回落默认卡。
+      typeof api.listRoles === "function" ? api.listRoles() : Promise.resolve([] as RoleCard[]),
     ]);
     setPersonas(nextPersonas);
     setMaterials(nextMaterials);
     setConversations(nextConversations);
+    setRoles(nextRoles);
   }
 
   async function initialLoad() {
@@ -173,6 +178,7 @@ export function App({ api }: { api: ProductCore }) {
         view={view}
         materialCount={materials.length}
         cardCount={publishedCards.length}
+        roleCount={roles.length}
         historyCount={conversations.length}
         sessionStatus={conversation?.status ?? null}
         hasOngoing={Boolean(ongoingCall)}
@@ -213,7 +219,8 @@ export function App({ api }: { api: ProductCore }) {
                 api={api}
                 personas={personas}
                 publishedCards={publishedCards}
-                onConnect={(personaId) => void connect(personaId)}
+                roles={roles}
+                onConnect={(personaId, roleId) => void connect(personaId, roleId ? { roleId } : undefined)}
                 onCatalogChange={() => void refreshCatalog()}
                 connectBusy={entryBusy}
               />
@@ -254,6 +261,9 @@ export function App({ api }: { api: ProductCore }) {
               <MaterialsView api={api} materials={materials} onPublished={() => void refreshCatalog()} />
             )}
             {view === "cards" && <CardsView cards={allCards} />}
+            {view === "roles" && (
+              <RolesView api={api} roles={roles} onRolesChange={() => void refreshCatalog()} />
+            )}
             {view === "history" && (
               <HistoryView conversations={conversations} personas={personas} onOpen={(item) => void openHistory(item)} />
             )}

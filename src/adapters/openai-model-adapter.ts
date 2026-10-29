@@ -2,10 +2,11 @@ import {
   assembleAnalystSystemPrompt,
   assembleManagerMetaPrompt,
   assembleManagerSystemPrompt,
-  STYLE_DEMO_MESSAGES,
-  TAIL_STYLE_REMINDER,
 } from "./prompts";
 import { cleanReplyText, sanitizeCustomerText } from "../domain/reply-text";
+import { DEFAULT_ROLE_CARD, roleDemoMessages, roleTailReminder } from "../domain/role-card";
+import { PROMPT_TUNING_ENV, tuningDisabled, tuningEnabled } from "../domain/prompt-tuning";
+import { MAX_MANAGER_TURNS } from "../domain/product-core";
 import type {
   CopywritingPort,
   DialoguePort,
@@ -20,32 +21,8 @@ import type {
 
 // cleanReplyText 已移入领域(流式上屏与落库共用同一清理);此处 re-export 保持既有引用。
 export { cleanReplyText };
-
-/**
- * p13 实验开关(默认关):尾部语体短提醒 / 开场语体示范轮。小样本冒烟证据
- * 不一致(v1 示范开场稳但偶发问法漏印,v2 示范开场方差放大),按 spec
- * 「确有收益才保留」口径退为显式开启。置 1 启用,如 LLM_TAIL_REMINDER=1。
- */
-export const PROMPT_TUNING_ENV = {
-  tailReminder: "LLM_TAIL_REMINDER",
-  styleDemo: "LLM_STYLE_DEMO",
-  /** p15 实验:话术流式调用关闭思维链(thinking.type=disabled),缩短首字延迟。 */
-  managerNoThinking: "LLM_MANAGER_NO_THINKING",
-} as const;
-
-/** 默认开启的开关:仅显式置 0 时关闭(p15 起尾部提醒默认开)。 */
-function tuningDisabled(name: string): boolean {
-  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
-    ?.env;
-  return env?.[name] === "0";
-}
-
-function tuningEnabled(name: string): boolean {
-  // 经 globalThis 取 process:本文件同时进浏览器包,src 侧 tsconfig 无 node 类型。
-  const env = (globalThis as { process?: { env?: Record<string, string | undefined> } }).process
-    ?.env;
-  return env?.[name] === "1";
-}
+// 调优开关移入领域层(检索注入在 product-core 侧也要读),此处 re-export 保持既有引用。
+export { PROMPT_TUNING_ENV };
 
 /**
  * 流式首部缓冲(hold buffer,手册 14.4):称谓前缀/舞台指示若随增量先上屏,
@@ -55,7 +32,7 @@ function tuningEnabled(name: string): boolean {
  */
 const LEAD_HOLD = 20;
 const LEAD_ROLE_PREFIX =
-  /^\s*(?:理财经理(?:小王)?|小王|经理|话术|AI|客服|assistant|user|system)\s*[:：]\s*/i;
+  /^\s*(?:理财经理\S{0,4}|经理|话术|AI|客服|assistant|user|system)\s*[:：]\s*/i;
 const LEAD_STAGE_DIRECTION = /^\s*[（(][^（）()\n]{0,20}[）)]\s*/;
 
 function stripStreamLead(text: string): string {
@@ -120,10 +97,11 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     input: ManagerTurnInput,
     onReplyDelta?: (delta: string) => void,
   ): Promise<ManagerTurnOutput> {
+    const role = input.role ?? DEFAULT_ROLE_CARD;
     const messages: Array<{ role: string; content: string }> = [
       { role: "system", content: assembleManagerSystemPrompt(input) },
-      // 语体示范轮(p13 实验,默认关):只学口吻,不进历史不落库。
-      ...(tuningEnabled(PROMPT_TUNING_ENV.styleDemo) ? STYLE_DEMO_MESSAGES : []),
+      // 语体示范轮(p13 实验,默认关):随角色卡携带,只学口吻,不进历史不落库。
+      ...(tuningEnabled(PROMPT_TUNING_ENV.styleDemo) ? roleDemoMessages(role, MAX_MANAGER_TURNS) : []),
     ];
     for (const turn of input.history) {
       messages.push({
@@ -132,14 +110,15 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
       });
     }
     messages.push({ role: "user", content: sanitizeCustomerText(input.customerText) });
-    // 尾部语体短提醒(p13 实验,默认关):越靠近生成点权重越高,只回声既有规则。
+    // 尾部语体短提醒(p13 实验):越靠近生成点权重越高,只回声本局角色的既有规则。
     // p15 起默认开:靠近生成点的短提醒在 2.6 pro 对照中 9/9(关时 7/9),置 0 可关。
     if (!tuningDisabled(PROMPT_TUNING_ENV.tailReminder)) {
-      messages.push({ role: "system", content: TAIL_STYLE_REMINDER });
+      messages.push({ role: "system", content: roleTailReminder(role, MAX_MANAGER_TURNS) });
     }
 
     const { content: streamedReply, reasoning } = await this.chatStream(messages, onReplyDelta);
-    const reply = cleanReplyText(streamedReply);
+    // 称谓前缀按本局角色名剥除:换经理后不再残留上一任的名字规则。
+    const reply = cleanReplyText(streamedReply, role.name);
     // 思考通道原文沉淀给复盘(p14):超长截断,空则不携带;不进下一轮输入。
     const managerReasoning = reasoning.trim() ? reasoning.trim().slice(0, 8000) : undefined;
     const withReasoning = managerReasoning ? { reasoning: managerReasoning } : {};
@@ -417,6 +396,7 @@ export function normalizeCard(
       turnRange: asString(source.turnRange, "未知"),
     },
     triggerSignals: asStringArray(raw.triggerSignals),
+    triggerKeywords: asStringArray(raw.triggerKeywords),
     applicableScenario: asString(raw.applicableScenario),
     currentPurpose: asString(raw.currentPurpose),
     actionChain: asStringArray(raw.actionChain),

@@ -1,7 +1,8 @@
 /**
- * 通话逻辑(行外夺金的四条钱规律):恒定层,所有对局相同。
+ * 通话逻辑类型与默认规律(行外夺金的四条钱规律)。
+ * 规律随理财经理角色卡携带:对局开局把所选角色的规律快照进 resources,
  * 生成侧(经理系统提示词)、裁判侧(元数据归因)、展示侧(布置幕卡面与复盘)
- * 共用这同一来源——规律只写一遍,改一处全局生效。
+ * 都读对局快照;这里导出的 CALL_LOGIC_LAWS 是默认卡(小王/老陈)共用的那副。
  */
 
 export interface CallLogicLaw {
@@ -42,8 +43,8 @@ export const CALL_LOGIC_LAWS: CallLogicLaw[] = [
 ];
 
 /** 提示词用的一段式文本:每条规律一行(规律+用法)。 */
-export function formatCallLogicForPrompt(): string {
-  return CALL_LOGIC_LAWS.map(
+export function formatCallLogicForPrompt(laws: CallLogicLaw[] = CALL_LOGIC_LAWS): string {
+  return laws.map(
     (law, index) => `${index + 1}. ${law.name}:${law.law}电话里:${law.usage}`,
   ).join("\n");
 }

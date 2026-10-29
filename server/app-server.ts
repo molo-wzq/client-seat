@@ -144,6 +144,15 @@ export function createRequestListener(deps: {
       respondJson(res, 200, await core.quickStart());
       return;
     }
+    if (req.method === "GET" && pathname === "/api/roles") {
+      respondJson(res, 200, await core.listRoles());
+      return;
+    }
+    // 角色卡导入:字段校验在领域层(ValidationError→400),未知字段原样保留。
+    if (req.method === "POST" && pathname === "/api/roles") {
+      respondJson(res, 200, await core.saveRole(body));
+      return;
+    }
     if (req.method === "GET" && pathname === "/api/conversations") {
       respondJson(res, 200, await core.listConversations());
       return;
@@ -152,6 +161,7 @@ export function createRequestListener(deps: {
       const input = body as ConversationStartOptions & { personaId?: string };
       const conversation = await core.startConversation(input.personaId || "", {
         replayOfId: input.replayOfId,
+        ...(input.roleId !== undefined ? { roleId: input.roleId } : {}),
       });
       respondJson(res, 200, conversation);
       return;

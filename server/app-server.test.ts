@@ -260,3 +260,46 @@ describe("重新生成路由(票 31)", () => {
     expect(status).toBe(404);
   });
 });
+
+describe("经理角色路由", () => {
+  it("GET /api/roles 返回内置角色;POST 导入合法卡 → 200,非法卡 → 400", async () => {
+    const list = await request("/api/roles");
+    expect(list.status).toBe(200);
+    const roles = list.json as Array<{ id: string; name: string }>;
+    expect(roles.map((role) => role.id)).toContain("role-xiaowang");
+    expect(roles.map((role) => role.id)).toContain("role-laochen");
+
+    const imported = await request("/api/roles", "POST", {
+      name: "老周",
+      description: "你是理财经理{{char}}。",
+      callLogic: [{ key: "a", name: "规律", law: "为何", usage: "怎么用" }],
+      rules: ["只说真话"],
+      mesExample: [{ role: "user", content: "喂" }, { role: "assistant", content: "您好" }],
+      postHistoryInstructions: "慢慢说。",
+    });
+    expect(imported.status).toBe(200);
+    const role = imported.json as { id: string };
+    expect(role.id).toBeTruthy();
+
+    const broken = await request("/api/roles", "POST", { name: "" });
+    expect(broken.status).toBe(400);
+    expect((broken.json as { error?: string }).error).toContain("角色卡不合法");
+  });
+
+  it("POST /api/conversations 带 roleId:角色随开局快照;未知角色 → 404", async () => {
+    const personas = (await request("/api/personas")).json as Array<{ id: string }>;
+    const started = await request("/api/conversations", "POST", {
+      personaId: personas[0]!.id,
+      roleId: "role-laochen",
+    });
+    expect(started.status).toBe(200);
+    const conversation = started.json as { resources?: { role?: { id: string; name: string } } };
+    expect(conversation.resources?.role).toMatchObject({ id: "role-laochen", name: "老陈" });
+
+    const missing = await request("/api/conversations", "POST", {
+      personaId: personas[0]!.id,
+      roleId: "role-nobody",
+    });
+    expect(missing.status).toBe(404);
+  });
+});

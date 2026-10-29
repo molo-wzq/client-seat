@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import type { Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
+import type { RoleCard } from "../domain/role-card";
+import { DEFAULT_ROLE_CARD } from "../domain/role-card";
 import { PersonaAvatar } from "./PersonaAvatar";
 import { PersonaStep } from "./PersonaStep";
 import { UiIcon } from "./UiIcon";
@@ -11,6 +13,7 @@ export function SetupAct({
   api,
   personas,
   publishedCards,
+  roles,
   onConnect,
   onCatalogChange,
   connectBusy,
@@ -18,17 +21,22 @@ export function SetupAct({
   api: ProductCore;
   personas: Persona[];
   publishedCards: StrategyCard[];
-  onConnect: (personaId: string) => void;
+  /** 可选的经理角色卡(内置在前);取不到时回落默认卡。 */
+  roles?: RoleCard[];
+  onConnect: (personaId: string, roleId?: string) => void;
   onCatalogChange: () => void;
   connectBusy: boolean;
 }) {
   const [seated, setSeated] = useState<Persona | null>(null);
+  const [roleId, setRoleId] = useState<string>(DEFAULT_ROLE_CARD.id);
   const [dragged, setDragged] = useState<string | null>(null);
   // 拖拽悬停在客户席上时高亮邀请;dragleave 在经过子元素时也会触发,
   // 需确认 relatedTarget 真正离开了席位才熄灭,否则高亮会闪烁。
   const [dragOver, setDragOver] = useState(false);
   const [customizing, setCustomizing] = useState(false);
   const seatRef = useRef<HTMLDivElement>(null);
+  const roleList = roles?.length ? roles : [DEFAULT_ROLE_CARD];
+  const selectedRole = roleList.find((role) => role.id === roleId) ?? roleList[0] ?? DEFAULT_ROLE_CARD;
   useEffect(() => {
     if (!seated || !window.matchMedia?.("(max-width: 820px)").matches) return;
     seatRef.current?.scrollIntoView?.({ block: "start", behavior: "auto" });
@@ -159,11 +167,32 @@ export function SetupAct({
             )}
           </div>
           <div className="actions connect-actions">
-            <button onClick={() => seated && onConnect(seated.id)} disabled={connectBusy || !seated}>
+            <button onClick={() => seated && onConnect(seated.id, selectedRole.id)} disabled={connectBusy || !seated}>
               <UiIcon name="phone" />{connectBusy ? "正在接通…" : "接通电话,开始对局"}
             </button>
-            <small>{seated ? `已入座：${seated.name}` : "先从名册选一位客户"}</small>
+            <small>{seated ? `已入座：${seated.name} · 经理：${selectedRole.name}` : "先从名册选一位客户"}</small>
           </div>
+          <details className="manager-pick" open>
+            <summary>本局经理 · {selectedRole.name}{selectedRole.tags.length ? `（${selectedRole.tags.join("·")}）` : ""}</summary>
+            <p className="hint">整套打法随经理走：人设、钱规律、通话规则、示范话术。开局后按这张卡快照生成。</p>
+            <ul className="manager-roster">
+              {roleList.map((role) => (
+                <li key={role.id}>
+                  <button
+                    type="button"
+                    className={`manager-card${selectedRole.id === role.id ? " current" : ""}`}
+                    aria-pressed={selectedRole.id === role.id}
+                    disabled={connectBusy}
+                    onClick={() => setRoleId(role.id)}
+                  >
+                    <strong>{role.name}</strong>
+                    <span>{role.tags.join("·") || "自定义"}</span>
+                    <small>{role.characterVersion ? `v${role.characterVersion}` : ""}</small>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
           <details className="setup-deck-reference">
           <summary>策略明牌 · {publishedCards.length} 张已发布，全部上桌</summary>
           <h3>桌上的策略卡(只读,全部已发布)</h3>
@@ -183,8 +212,8 @@ export function SetupAct({
         </div>
 
         <details className="setup-reference">
-          <summary>桌边参考 · 四条通话逻辑与本局参数</summary>
-          <LogicRail />
+          <summary>桌边参考 · {selectedRole.name}的通话逻辑与本局参数</summary>
+          <LogicRail laws={selectedRole.callLogic} />
         </details>
       </div>
       {customizing && (

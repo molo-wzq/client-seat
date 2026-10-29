@@ -3145,3 +3145,57 @@ button:active:not(:disabled) {
     animation: none;
   }
 }
+
+/* 本局经理选择:角色卡是一整套打法,按卡换人。 */
+.manager-pick {
+  border: 3px double #857763;
+  border-radius: 7px;
+  background: var(--card-paper);
+  padding: 10px 12px;
+  margin: 12px 0;
+}
+
+.manager-pick summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.manager-roster {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.manager-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.manager-card.current {
+  border-color: var(--warm-yellow);
+  background: #f4ead8;
+  box-shadow: 0 0 0 2px var(--felt-deep), 0 0 0 3px var(--warm-yellow);
+}
+
+.manager-card span {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.manager-card small {
+  font-size: 11px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}

@@ -239,6 +239,12 @@ export function CardEditor({
         value={draft.triggerSignals}
         onChange={(triggerSignals) => setDraft({ ...draft, triggerSignals })}
       />
+      <LinesEditor
+        label="触发关键词(一行一个,客户口中说得出的原词;留空=每局常驻上桌)"
+        value={draft.triggerKeywords ?? []}
+        onChange={(triggerKeywords) => setDraft({ ...draft, triggerKeywords })}
+        rows={3}
+      />
       <label>
         适用场景
         <textarea

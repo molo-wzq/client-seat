@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { CALL_LOGIC_LAWS } from "../domain/call-logic";
+import { CALL_LOGIC_LAWS, type CallLogicLaw } from "../domain/call-logic";
 import { SEED_PRODUCT_CARD } from "../domain/seed";
 import type { StrategyCard } from "../domain/types";
 import { UiIcon } from "./UiIcon";
@@ -31,21 +31,22 @@ function LawEmblem({ lawKey }: { lawKey: string }) {
   );
 }
 
-export function LogicRail() {
+/** 桌边通话逻辑卡:规律随本局经理角色卡携带,缺省回退默认(小王的行外夺金四条)。 */
+export function LogicRail({ laws = CALL_LOGIC_LAWS }: { laws?: CallLogicLaw[] }) {
   const { activity, flexibleProduct } = SEED_PRODUCT_CARD;
   return (
     <div className="tavern-rail logic-rail" aria-labelledby="logic-rail-title">
       <header className="tavern-rail-heading">
         <span className="rail-crest" aria-hidden="true"><UiIcon name="cards" /></span>
         <div>
-          <span className="tavern-eyebrow">牌桌上的四条规律</span>
+          <span className="tavern-eyebrow">牌桌上的规律</span>
           <h3 id="logic-rail-title">通话逻辑</h3>
         </div>
-        <span className="rail-brass-count" aria-label="四张固定逻辑卡">04</span>
+        <span className="rail-brass-count" aria-label={`${laws.length} 张固定逻辑卡`}>{String(laws.length).padStart(2, "0")}</span>
       </header>
       <p className="tavern-rail-caption">每一局都在，决定这通电话怎么走。</p>
       <div className="law-card-rack">
-        {CALL_LOGIC_LAWS.map((law, index) => (
+        {laws.map((law, index) => (
           <details className={`law-card law-card-${law.key}`} key={law.key}>
             <summary>
               <span className="law-card-number">{String(index + 1).padStart(2, "0")}</span>

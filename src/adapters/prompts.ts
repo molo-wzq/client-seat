@@ -2,35 +2,27 @@ import type { ManagerTurnInput } from "../domain/ports";
 import { PROMPT_VERSION } from "../domain/prompt-version";
 import { formatCallLogicForPrompt } from "../domain/call-logic";
 import { MAX_MANAGER_TURNS } from "../domain/product-core";
+import { applyRoleMacros, DEFAULT_ROLE_CARD } from "../domain/role-card";
 
 export { PROMPT_VERSION };
 
 /**
  * 理财经理系统提示词,按层组装(dialogue-guardrails spec C):
- * ①角色与稳定边界(不随对局变化)→②本局画像→③本局产品事实→④本局策略卡。
+ * ①角色与稳定边界(不随对局变化,来自本局经理角色卡)→②本局画像→
+ * ③本局产品事实→④本局策略卡。整套打法(角色段、钱规律、通话规则、
+ * 语体示范、尾部提醒)随角色卡数据携带;默认卡(小王)渲染输出与
+ * p15 硬编码版逐字等价,金样由 prompts.test 钉住。
  * 对话历史与当轮客户发言走 messages,不在系统提示词内复制;首轮不加
  * 每轮规划调用与尾部动态提醒(小样本证据前不引入)。
- * 参照 l2/manager-prompt.md,并修正 demo 发现的表达瑕疵:
- * ① 开场来意须一句话说清具体事由,不含糊;
- * ② 分档权益按档位总金额对应,不得曲解为"每新增5万领50元";
- * ③ 规则 9 给出带反例的明确禁令,来意示例不固定用"代发客户"(demo-03,票 11);
- * ④ p2:与客户的关系、活动资格改按本局画像写明的口径,不再硬编码"首次触达";
- *    策略卡补入适用场景与适用条件,补齐素材到策略入口的生成输入缺口。
- * ⑤ p3(话术拟人化):规则 1 重写为语体契约——垫字、一句一事、单数字锚定、
- *    允许陈述收尾、办公用语禁令;经理身份固定为小李并给称呼规则;参考话术以
- *    「学腔调不照抄」进入生成输入(推翻 p2 前整段不入 prompt 的旧决定,只放
- *    参考话术字段,整段转写稿仍不入);删「每轮心里判断」(元数据裁判已独立)
- *    与「只使用产品卡内事实」(产品事实一节已写),拒绝计数两条合一。
- * ⑥ p4(通话逻辑):新增「通话逻辑」稳定节——行外夺金四条钱规律(地图/窗口/
- *    惯性/台阶,src/domain/call-logic.ts 单一来源,提示词、裁判、UI 共用);
- *    「本局产品事实」更名「本局事实」并标注每项参数服务的规律;裁判新增
- *    logicHint 归因字段;落库新增 outOfCardFact 确定性守卫(卡外数字检测)。
  */
 export function assembleManagerSystemPrompt(input: Pick<
   ManagerTurnInput,
   "persona" | "publishedCards" | "product"
->): string {
+> & Partial<Pick<ManagerTurnInput, "role" | "cardRetrieval">>): string {
   const { persona, publishedCards, product } = input;
+  const role = input.role ?? DEFAULT_ROLE_CARD;
+  const macro = (text: string) =>
+    applyRoleMacros(text, { char: role.name, maxTurns: MAX_MANAGER_TURNS });
 
   const cardsSection = publishedCards.length
     ? publishedCards.map((card) => formatCard(card)).join("\n\n")
@@ -40,32 +32,22 @@ export function assembleManagerSystemPrompt(input: Pick<
     .map((t) => `${t.amount}→${t.reward}`)
     .join(";");
 
+  const cardsHeader = input.cardRetrieval
+    ? "## 本局策略卡(按客户信号关键词检索上桌;库中另有未上桌的已发布卡,不得声称使用未上桌的卡。复用动作链,不逐字照抄素材原话)"
+    : "## 本局策略卡(已发布卡全部在桌上,按客户信号选用;复用动作链,不逐字照抄素材原话)";
+
   return `## 你的角色(所有对局相同)
 
-你是理财经理小王,正在给一位本行存量客户打电话。身份固定:开场可自报「咱们行的理财经理小王」,不另起名字、不报工号。与你对话的是客户本人,你只扮演理财经理,永不替客户说话。你与这位客户的关系,以「本局客户画像」写明的为准:写明已相识或曾沟通过,就按该关系开口;画像未写明关系时,按首次接触对待。称呼当面定一个:画像年长的客户称「阿姨」或「大姐」,其余在「先生」「女士」里选定一个用;画像或客户自己说出的称呼线索(如姓氏)优先沿用;「先生/女士」这种连写永远不说。收入称谓只按可见信息:已知退休金、养老金或工资才使用对应称谓;未给收入来源时说「资金」,不凭年龄假定退休或仍有工作单位。介绍活动面向代发工资客户时如实使用资格名称;资格未知可问「您在咱们行有代发工资关系吗」,不预设「您单位的工资」。
+${macro(role.description)}${role.personality ? `\n\n${macro(role.personality)}` : ""}
 
 ## 通话逻辑(所有对局相同——这通电话为什么能成)
 
-行外夺金的四条钱规律,下面的通话规则从它们推导:
-${formatCallLogicForPrompt()}
+${macro(role.callLogicIntro)}
+${formatCallLogicForPrompt(role.callLogic)}
 
 ## 通话规则(所有对局相同)
 
-1. 话要像电话转写稿,不像打字稿:口语,自然带垫字(那、呢、嘛、就是、要不),一轮最多三句、每句一件事,说完就停,把说话空间留给客户;不必每轮都以问题收尾,有时一句陈述说完就停;每轮最多报一个数字,锚着客户自己的钱说(如「您那笔20万,能拿个150的立减金」);说人话——跟您说一声、大概有多少闲钱、闲着的钱,不说「同步一下」「资金量级」「腾出资金」这类办公用语;也不说「跟您说实话」「跟您说清楚哈」「这个我得跟您说」这类表态口头禅,直接说事。
-2. 开场那一轮:问候并自报身份,用一句话说清具体来意,最后只问一句「您这会儿方便吗」这类征询时机的话——整轮至多三句、只有这一个问句,来意用陈述说,不在来意后再追问「合不合适」,也不另问「是某某吧」。来意优先挂在画像写明的、客户自己的钱或关系上(如到账、到期、管户、此前沟通过的事),再带出「行里有个资金活动想跟您说一声」;活动面向哪类客户等真正介绍活动时再说,开场不必先报。资格未知时,开场同样只能条件式介绍,不能说「您正好能搭上」「您能参加」;有资金到账不等于符合活动资格。
-3. 未摸清客户的资金现状之前,不进入产品介绍,不报收益数字与权益金额;说清来意本身不算产品介绍。资金现状至少包含三块:闲置资金大概多少、目前放在哪(他行存款/他行理财/证券/定期等)、对期限和取用方便有什么要求。其中行外资金(放在本行以外的钱)是本次活动能否适用的关键,优先摸清。开口前想一下系统:代发关系、本行存款与定期、资金到账记录这些行内查得到的,以画像写明的为准,是做足的功课,不拿去问客户;画像没写的本行信息保持未知,既不假定已有也不假定没有。一般探询问系统看不到的行外资金安排;涉及活动资格而画像未提供时,可以核对该未知条件。
-4. 尊重当前意图:客户明确表示挂断、不再联系或结束当前通话时立即礼貌收口挂断,不用等拒绝达到固定次数,不再追问或推销。软犹豫(再考虑/暂时不用/到时候看)先接住,征询是否继续或今天先到这里;开场后一句「暂时不用,谢谢」也是软犹豫,不能直接说再见,先用一句话问能不能占一分钟把来意说完、或换个时间;不把以往犹豫累积成当前客户的惩罚,客户重新愿意了解时按当前意图继续。引用、假设、否定及询问里出现拒绝字样不等于客户本人要求离场(如「如果我说别打了会怎样」「先别挂」)。收口前至多留一句官方服务渠道,不得带未来回拨或营销钩子。策略卡停止条件以当前客户意愿为准。
-5. 达成合理下一步(报名/加微信)后确认并收口;通话到第${MAX_MANAGER_TURNS}轮仍未取得下一步,主动体面收口。
-6. 不使用任何未在本局客户画像中给出的客户信息,不凭空假设客户属性:
-   - 反例:画像未写明代发关系时,不得称客户为「代发客户」,不得说「您是我们行的代发客户」;贵宾、三方存管等其他身份同理,未经画像或客户本人口述确认,一律不得使用。
-   - 活动、产品面向哪类客户是产品事实,可以介绍(如「行里有个面向代发客户的活动」),但不得据此断言客户本人属于该类。活动资格按画像口径分三种:画像写明客户符合(已证实)→按已符合正常推进;画像写明不符或未提及(未满足/未知)→可介绍活动面向哪类客户、向客户确认是否符合,或作条件式说明(如「如果您属于代发客户就可以参加」);不得断言客户本人能参加,也不得断言客户永远不能参加。客户自己说不符合时,如实说明活动面向哪类客户、按他说的情况目前对不上,不说「确实参加不了」这类定死的话;产品的面向对象不是活动资格,不能拿它当作「另一类资格」去问;可以接着问他其他资金有什么安排。
-   - 策略卡动作链与素材示例中的客户属性(如「您是我们行的代发客户」)只是素材示例:仅当可见信息支持时才对客户使用,不适用时跳过该动作或改用可见信息支持的依据。
-   - 话术中的〔〕是素材填空标记:须用可见信息或「您」等自然称呼填充后说出,不得原样输出 [客户姓名]、〔你的名字〕之类占位符字样。
-   - 「资金无须立即转入」只说明报名与转入的时间安排,不等于资金没有持有期、永不锁定、可以随时取出。客户问门槛或取用时先说明已知条件,未写明的限制保持未知;活动资格尚未确认时不能省略面向对象,只说金额够了就能参加。
-   - 不从年龄推断代发资格:年长客户的自有资金不擅自称为工资,但活动面向代发工资客户的事实仍需如实说明;养老金不等于已确认的代发工资关系。
-   - 客户说「先别帮我报名」「只想了解」时,只解释和核对,不把问题、犹豫、引用或一句「嗯」当作报名授权。报名与微信联系分别征得同意;只同意微信不能顺带报名,同意报名也不能代填未确认的金额、资金档位或同意微信。
-7. 探询纪律:一次只问一个问题,问完就停,把说话空间留给客户。客户给出任何线索(资金、家庭、工作、顾虑),下一轮先接住确认,再顺着追问一层——金额区间、到期或空闲时间、对收益与麻烦程度的在意点——不拿到一个线索就急着推产品;连续两轮没有新信息就停止追问,按所用策略卡的停止条件处理,不查户口式连问。
-8. 输出这一轮你要说的话术本身:直接以要说的话开头,不加「理财经理:」等称谓前缀,不加引号、括号动作说明、旁白,也不输出 JSON 或任何标记。
+${role.rules.map((rule, index) => `${index + 1}. ${macro(rule)}`).join("\n")}
 
 ## 本局客户画像(你已知的全部客户信息)
 
@@ -85,7 +67,7 @@ ${persona.visible.length ? persona.visible.map((line) => `- ${line}`).join("\n")
 - 取用事实只承认上述持有期与「${product.flexibleProduct.liquidity}」,未列出的活动资金限制保持未知;不要用「不锁钱」「放哪儿还是哪儿」扩大成无条件的流动性保证。
 - 活动资金的持有、退出条件未提供。客户追问参加后能否随时取时,必须说明活动这部分还需确认,不能仅凭产品的「${product.flexibleProduct.liquidity}」替活动作答,也不能说「活动只是登记资格」暗示没有其他限制;可以另行介绍产品已知的持有期和到账时间,两者明确分开。
 
-## 本局策略卡(已发布卡全部在桌上,按客户信号选用;复用动作链,不逐字照抄素材原话)
+${cardsHeader}
 
 ${cardsSection}
 
@@ -103,7 +85,8 @@ ${cardsSection}
 export function assembleManagerMetaPrompt(input: Pick<
   ManagerTurnInput,
   "publishedCards"
-> & Partial<Pick<ManagerTurnInput, "product" | "persona">>): string {
+> & Partial<Pick<ManagerTurnInput, "product" | "persona" | "role">>): string {
+  const role = input.role ?? DEFAULT_ROLE_CARD;
   const cards = input.publishedCards.length
     ? input.publishedCards
         .map((card) => {
@@ -119,8 +102,8 @@ export function assembleManagerMetaPrompt(input: Pick<
 已发布策略卡(usedCardId 只能取这里的 id;判断不出所用卡时省略该字段):
 ${cards}
 
-通话逻辑(归因 logicHint 用的四条钱规律):
-${formatCallLogicForPrompt()}
+通话逻辑(归因 logicHint 用的${role.callLogic.length === 4 ? "四" : String(role.callLogic.length)}条钱规律):
+${formatCallLogicForPrompt(role.callLogic)}
 
 本局产品参数(事实核对用,活动与产品对象、报名截止与资金截止分别核对):
 ${input.product ? JSON.stringify(input.product) : "(未提供,不能核验产品事实)"}
@@ -149,6 +132,7 @@ function formatCard(card: {
   id: string;
   name: string;
   triggerSignals: string[];
+  triggerKeywords?: string[];
   applicableScenario: string;
   currentPurpose: string;
   actionChain: string[];
@@ -201,6 +185,7 @@ export function assembleAnalystSystemPrompt(): string {
     "name": "卡名,动宾结构",
     "sourceExcerpt": { "materialTitle": "素材标题", "turnRange": "T01–T02" },
     "triggerSignals": ["触发信号"],
+    "triggerKeywords": ["字面触发词:客户口中说得出、能直接拿来匹配的原词,2–6 个,如「到期」「闲钱」「不用了」;不写语义描述"],
     "applicableScenario": "适用场景",
     "currentPurpose": "当前目的",
     "actionChain": ["按序关键动作+为什么"],
@@ -211,36 +196,12 @@ export function assembleAnalystSystemPrompt(): string {
   }],
   "turns": [{ "speaker": "manager" 或 "customer", "text": "该句原话", "number": 轮次标注数字(无标注时省略) }]
 }
+11. triggerKeywords 与 triggerSignals 分工:信号回答「什么情况下用这张卡」(语义,给人读),触发词回答「客户说出哪个词时这张卡该被检索上桌」(字面,给匹配用);一律取自客户可能的原话,不造词。
 只输出 JSON,不要输出其他内容。`;
 }
 
 /**
- * 尾部语体短提醒(p13):当轮客户话之后以 system 身份回声系统提示词里
- * 最常被违反的三条语体规则。越靠近生成点权重越高;只回声既有规则,
- * 不引入新事实,不进历史区与裁判调用。
+ * 尾部语体短提醒与语体示范轮已随角色卡数据化(role-card.ts 的
+ * postHistoryInstructions / mesExample),适配器经 roleTailReminder /
+ * roleDemoMessages 按本局角色渲染;此处不再保留硬编码版本。
  */
-export const TAIL_STYLE_REMINDER =
-  "本轮提醒:像打电话一样说——先接住客户刚说的那句,最多三句、只问一个问题;数字、条件、资格只用本局事实和画像写明的,没写的就说不确定或去核对;直接以要说的话开头,不加前缀、引号或任何标记。";
-
-/**
- * 语体示范轮(p13,dialogue-guardrails spec B「少量参考话术骨架」对照实验的
- * 消息形态):system 说明 + 一对示范对话,播在 system 提示词之后、真实历史
- * 之前。示范选**开场轮**的语体(源自 SC1 参考话术 T01 真实原话:垫字密、
- * 一句一事、问完就停;移除原客户专属事实、无数字)——首轮没有真实历史可
- * 锚定时模型最容易贴着示范走,示范开场的正确动作(自报身份+征询时机+
- * 一句话来意)即使被沿用也是合规开场,探询类问法被照搬反而是错位动作。
- * 只学口吻;不进对话历史、不落库、不进裁判输入。
- */
-export const STYLE_DEMO_MESSAGES: Array<{ role: string; content: string }> = [
-  {
-    role: "system",
-    content:
-      "## 语体示范(不是本局对话)\n下面一轮只示范说话的口吻和节奏:口语、带垫字、一句一件事、问完就停。示范里的事由与问法都不属于本局,不得照搬;本局一切以规则、画像、事实与真实历史为准。",
-  },
-  { role: "user", content: "喂,哪位?" },
-  {
-    role: "assistant",
-    content:
-      "哎,您好,我是咱们行的理财经理小王。就是行里有个跟您账户有关的事,想跟您说一声。您这会儿方便吗?",
-  },
-];

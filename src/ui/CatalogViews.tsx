@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Conversation, Material, Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
+import type { RoleCard } from "../domain/role-card";
 import { MaterialStep } from "./MaterialStep";
 
 export function MaterialsView({
@@ -84,6 +85,101 @@ export function CardsView({ cards }: { cards: StrategyCard[] }) {
               </p>
             </article>
           ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+/**
+ * 经理角色卡列表:一整套打法(人设、钱规律、通话规则、示范话术、尾部提醒)
+ * 随卡携带,行内创建、更换、流通——导出 JSON 发给同事,导入即用。
+ */
+export function RolesView({
+  api,
+  roles,
+  onRolesChange,
+}: {
+  api: ProductCore;
+  roles: RoleCard[];
+  onRolesChange: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const canImport = typeof api.saveRole === "function";
+
+  function exportRole(role: RoleCard) {
+    const blob = new Blob([JSON.stringify(role, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `经理角色-${role.name}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importRole(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      await api.saveRole(parsed);
+      onRolesChange();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="act" aria-labelledby="roles-title">
+      <span className="act-kicker">可更换的打法体系</span>
+      <h2 id="roles-title">经理角色</h2>
+      <p className="hint">布置幕选谁上桌,谁的人设、规律、规则与示范话术就随局生效;开局后按当时的卡快照复盘。</p>
+      {error && <p role="alert">{error}</p>}
+      <div className="cards">
+        {roles.map((role) => (
+          <article key={role.id} className="card">
+            <header>
+              <strong>{role.name}</strong>
+              <span className="badge">{role.tags.join("·") || "自定义"}</span>
+            </header>
+            <p className="hint">
+              {role.callLogic.length} 条钱规律 · {role.rules.length} 条通话规则 · v{role.characterVersion}
+            </p>
+            {role.personality && <p className="hint">{role.personality}</p>}
+            <details>
+              <summary>看这套打法</summary>
+              <p className="hint">{role.callLogicIntro}</p>
+              <ul>
+                {role.callLogic.map((law) => (
+                  <li key={law.key}>{law.name} — {law.law}</li>
+                ))}
+              </ul>
+              <p className="hint">示范开场:{role.firstMes}</p>
+            </details>
+            <div className="actions">
+              <button type="button" className="ghost" onClick={() => exportRole(role)}>导出 JSON</button>
+            </div>
+          </article>
+        ))}
+      </div>
+      {canImport && (
+        <div className="actions">
+          <label className="ghost import-role">
+            导入角色卡 JSON
+            <input
+              type="file"
+              accept="application/json,.json"
+              disabled={busy}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void importRole(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
         </div>
       )}
     </section>

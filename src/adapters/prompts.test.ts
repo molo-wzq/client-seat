@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { assembleAnalystSystemPrompt, assembleManagerMetaPrompt, assembleManagerSystemPrompt } from "./prompts";
 import { MAX_MANAGER_TURNS } from "../domain/product-core";
+import { CALL_LOGIC_LAWS } from "../domain/call-logic";
+import { DEFAULT_ROLE_CARD, STEADY_ROLE_CARD } from "../domain/role-card";
 import {
   SEED_CARDS,
   SEED_PERSONA,
@@ -23,6 +25,69 @@ function promptFor(visible: string[]): string {
     product: SEED_PRODUCT_CARD,
   });
 }
+
+describe("角色卡渲染(p16)", () => {
+  const baseInput = {
+    persona: { id: "p-test", name: "测试画像", visible: SEED_PERSONA_P03.visible },
+    publishedCards: SEED_CARDS,
+    product: SEED_PRODUCT_CARD,
+  };
+
+  it("默认卡与缺省渲染逐字等价:不传 role 即按默认小王卡出同样的提示词", () => {
+    expect(assembleManagerSystemPrompt({ ...baseInput, role: DEFAULT_ROLE_CARD }))
+      .toBe(assembleManagerSystemPrompt(baseInput));
+  });
+
+  it("默认卡渲染与 p15 口径一致:宏替换后小王与第12轮落在正文", () => {
+    const prompt = assembleManagerSystemPrompt(baseInput);
+    expect(prompt).toContain("你是理财经理小王,正在给一位本行存量客户打电话");
+    expect(prompt).toContain(`通话到第${MAX_MANAGER_TURNS}轮仍未取得下一步`);
+    // 规则编号连续 1–8,来自卡内 rules 数组的顺序渲染。
+    for (let i = 1; i <= DEFAULT_ROLE_CARD.rules.length; i += 1) {
+      expect(prompt).toContain(`\n${i}. `);
+    }
+    expect(prompt.match(/电话里:/g)).toHaveLength(CALL_LOGIC_LAWS.length);
+  });
+
+  it("换卡整套打法跟着换:老陈的名字、语体契约与个性段进入提示词", () => {
+    const prompt = assembleManagerSystemPrompt({ ...baseInput, role: STEADY_ROLE_CARD });
+    expect(prompt).toContain("理财经理老陈");
+    expect(prompt).not.toContain("小王");
+    expect(prompt).toContain(STEADY_ROLE_CARD.personality!);
+    expect(prompt).toContain(STEADY_ROLE_CARD.rules[0]!.slice(0, 20));
+    // 共用规律不变。
+    expect(prompt.match(/电话里:/g)).toHaveLength(CALL_LOGIC_LAWS.length);
+  });
+
+  it("检索注入开启时策略段头如实说明口径,默认口径不变", () => {
+    const retrieved = assembleManagerSystemPrompt({ ...baseInput, cardRetrieval: true });
+    expect(retrieved).toContain("按客户信号关键词检索上桌");
+    expect(retrieved).toContain("不得声称使用未上桌的卡");
+    expect(assembleManagerSystemPrompt(baseInput)).toContain("已发布卡全部在桌上");
+  });
+
+  it("裁判归因读角色卡的规律:默认四条,自定义卡按其条数", () => {
+    const prompt = assembleManagerMetaPrompt({ publishedCards: SEED_CARDS });
+    expect(prompt).toContain("四条钱规律");
+    const customRole = {
+      ...DEFAULT_ROLE_CARD,
+      callLogic: DEFAULT_ROLE_CARD.callLogic.slice(0, 2),
+    };
+    const customPrompt = assembleManagerMetaPrompt({ publishedCards: SEED_CARDS, role: customRole });
+    expect(customPrompt).toContain("2条钱规律");
+    expect(customPrompt).not.toContain("钱要台阶");
+  });
+});
+
+describe("分析提示词:触发关键词通路", () => {
+  it("卡 schema 带 triggerKeywords,并写明与触发信号的分工", () => {
+    const prompt = assembleAnalystSystemPrompt();
+    expect(prompt).toContain('"triggerKeywords"');
+    expect(prompt).toContain("字面触发词");
+    expect(prompt).toContain("不写语义描述");
+    expect(prompt).toContain("信号回答「什么情况下用这张卡」");
+  });
+});
 
 describe("经理系统提示词:规则 6(原 9)客户属性防护", () => {
   it("不把报名时间扩写为流动性保证,客户授权只覆盖其确认的动作", () => {
