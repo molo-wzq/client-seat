@@ -118,6 +118,15 @@ html body { min-width: 0; }
 .history-title .history-preview { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 70ch; }
 .history-list .badge { flex: 0 0 auto; font-size: 12px; }
 @media (min-width: 1280px) {
+  .app-main .setup-board {
+    grid-template-columns: minmax(210px, .85fr) minmax(280px, 1.35fr) minmax(260px, 1fr);
+    align-items: start;
+    gap: 20px;
+    padding: 20px;
+  }
+  .app-main .setup-board > .setup-research-dock { grid-column: 3; grid-row: 1; }
+  .setup-research-dock .research-desk-header { flex-direction: column; }
+  .setup-research-dock .research-download-btn { width: 100%; justify-content: center; }
   /* 画像栏给足宽度,客户名与画像要点不再一行两三字地折行;解释栏收起时只是一段提示,让出空间。 */
   .app-main .table-board { grid-template-columns: minmax(240px, .8fr) minmax(360px, 1.6fr) minmax(220px, .7fr); }
   .table-board > .tavern-rail { grid-column: auto; }
@@ -128,6 +137,14 @@ html body { min-width: 0; }
   .app-main .setup-board { grid-template-columns: minmax(190px, .75fr) minmax(0, 1.3fr); gap: 16px; padding: 16px; }
   .app-main .table-board { grid-template-columns: minmax(170px, .65fr) minmax(0, 1.35fr); gap: 16px; }
   .app-main .play-guide { grid-template-columns: 1fr; gap: 0; }
+}
+@media (min-width: 821px) and (max-width: 1279px) {
+  .app-main .setup-board { grid-template-columns: minmax(0, 1fr) minmax(260px, .65fr); }
+  .app-main .setup-board > div:nth-child(1),
+  .app-main .setup-board > div:nth-child(2) { grid-column: 1; }
+  .app-main .setup-board > .setup-research-dock { grid-column: 2; grid-row: 1 / 3; }
+  .setup-research-dock .research-desk-header { flex-direction: column; }
+  .setup-research-dock .research-download-btn { width: 100%; justify-content: center; }
 }
 @media (max-width: 820px) {
   .left-rail { gap: 8px; padding: 12px; border-bottom-width: 3px; }

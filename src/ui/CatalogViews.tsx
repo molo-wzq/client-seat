@@ -259,3 +259,48 @@ export function HistoryView({
     </section>
   );
 }
+
+/**
+ * 完整投研周报浏览视图:
+ * 在线浏览 14 章专业研报，支持一键下载完整 HTML/PDF 文件。
+ */
+export function ResearchReportView() {
+  function downloadFullReport() {
+    window.open("/api/research/download", "_blank");
+  }
+
+  return (
+    <section className="act" aria-labelledby="research-title">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <span className="act-kicker">分行投研周报</span>
+          <h2 id="research-title">周度投研分析报告 (2026年第42周)</h2>
+          <p className="hint">覆盖宏观仪表盘、A股全景、行业轮动、机构估值、精选公募池与下周展望。</p>
+        </div>
+        <button
+          type="button"
+          onClick={downloadFullReport}
+          style={{
+            background: "#d4af37",
+            color: "#1c261e",
+            fontWeight: "bold",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          📥 下载完整周报 (HTML)
+        </button>
+      </div>
+
+      <div style={{ marginTop: "16px", border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden", background: "#fff", height: "780px" }}>
+        <iframe
+          src="/reports/weekly-report.html"
+          title="周度投研分析报告全文"
+          style={{ width: "100%", height: "100%", border: "none" }}
+        />
+      </div>
+    </section>
+  );
+}

@@ -3,7 +3,7 @@ import type { Conversation, ConversationResult, ConversationStartOptions, Materi
 import type { ProductCore } from "./domain/product-core";
 import type { RoleCard } from "./domain/role-card";
 import { BusyHint } from "./ui/BusyHint";
-import { CardsView, HistoryView, MaterialsView, RolesView } from "./ui/CatalogViews";
+import { CardsView, HistoryView, MaterialsView, ResearchReportView, RolesView } from "./ui/CatalogViews";
 import { LeftRail, type AppView } from "./ui/LeftRail";
 import { ResultStep } from "./ui/ResultStep";
 import { SetupAct } from "./ui/SetupAct";
@@ -222,6 +222,7 @@ export function App({ api }: { api: ProductCore }) {
                 roles={roles}
                 onConnect={(personaId, roleId) => void connect(personaId, roleId ? { roleId } : undefined)}
                 onCatalogChange={() => void refreshCatalog()}
+                onOpenFullReport={() => setView("research")}
                 connectBusy={entryBusy}
               />
             )}
@@ -264,6 +265,7 @@ export function App({ api }: { api: ProductCore }) {
             {view === "roles" && (
               <RolesView api={api} roles={roles} onRolesChange={() => void refreshCatalog()} />
             )}
+            {view === "research" && <ResearchReportView />}
             {view === "history" && (
               <HistoryView conversations={conversations} personas={personas} onOpen={(item) => void openHistory(item)} />
             )}

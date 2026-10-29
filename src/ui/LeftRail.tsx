@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { UiIcon } from "./UiIcon";
 import { setSfxEnabled, sfxEnabled } from "./game-feel";
 
-export type AppView = "setup" | "table" | "postgame" | "materials" | "cards" | "roles" | "history";
+export type AppView = "setup" | "table" | "postgame" | "materials" | "cards" | "roles" | "research" | "history";
 
 export function LeftRail({
   view,
@@ -78,7 +78,7 @@ export function LeftRail({
         </button>
       </nav>
       <details className="rail-tools" open={toolsOpen} onToggle={(event) => setToolsOpen(event.currentTarget.open)}>
-        <summary>资料与记录{["materials", "cards", "roles", "history"].includes(view) ? " · 正在查看" : ""}</summary>
+        <summary>资料与记录{["materials", "cards", "roles", "research", "history"].includes(view) ? " · 正在查看" : ""}</summary>
         <nav className="rail-nav" aria-label="资料与记录">
         <button
           aria-current={view === "materials" ? "page" : undefined}
@@ -106,6 +106,15 @@ export function LeftRail({
         >
           <UiIcon name="play" />
           <span>经理角色</span><span className="rail-count">{roleCount}</span>
+        </button>
+        <button
+          aria-current={view === "research" ? "page" : undefined}
+          aria-label="投研周报"
+          className={view === "research" ? "rail-item current" : "rail-item"}
+          onClick={() => onNavigate("research")}
+        >
+          <UiIcon name="cards" />
+          <span>投研周报</span><span className="rail-count">最新</span>
         </button>
         <button
           aria-current={view === "history" ? "page" : undefined}

@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>周度投研分析报告 2026-10-19至10-23</title>
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    font-family: "Noto Sans SC", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 9pt;
+    color: #333;
+    line-height: 1.55;
+    string-set: doctitle "";
+  }
+  @page {
+    size: A4;
+    margin: 1.6cm 1.5cm 1.8cm 1.5cm;
+    @bottom-center { content: counter(page); font-size: 8pt; color: #999; }
+  }
+  @page :first { @bottom-center { content: none; } }
+
+  .banner {
+    background: #12294b;
+    color: #fff;
+    text-align: center;
+    padding: 22px 16px 16px;
+    margin-bottom: 14px;
+  }
+  .banner .en { font-size: 10pt; letter-spacing: 4px; color: #9db3d0; margin-bottom: 8px; }
+  .banner h1 { font-size: 20pt; margin: 0 0 6px; letter-spacing: 2px; }
+  .banner .sub { font-size: 10pt; color: #c8d4e6; margin-bottom: 12px; }
+  .banner .meta { font-size: 9pt; color: #e8edf5; border-top: 1px solid rgba(255,255,255,.25); padding-top: 10px; }
+  .oneline {
+    background: #1a3a66;
+    color: #fff;
+    text-align: center;
+    padding: 12px 16px;
+    margin-bottom: 18px;
+  }
+  .oneline .tag { font-size: 9pt; color: #9db3d0; margin-bottom: 6px; }
+  .oneline .txt { font-size: 11pt; font-weight: 700; line-height: 1.5; }
+
+  h2.sec {
+    font-size: 14pt;
+    color: #12294b;
+    border-bottom: 2px solid #12294b;
+    padding-bottom: 4px;
+    margin: 22px 0 12px;
+    page-break-after: avoid;
+  }
+  h3.sub {
+    font-size: 11pt;
+    color: #12294b;
+    margin: 16px 0 8px;
+    page-break-after: avoid;
+  }
+  p { margin: 6px 0; }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 8px 0 12px;
+    max-width: 100%;
+    box-sizing: border-box;
+  }
+  thead { display: table-header-group; }
+  th {
+    background: #12294b;
+    color: #fff;
+    font-weight: 600;
+    padding: 6px 8px;
+    font-size: 9pt;
+    border: 1px solid #d5dce6;
+    text-align: center;
+  }
+  td {
+    padding: 5px 8px;
+    border: 1px solid #d5dce6;
+    font-size: 9pt;
+    vertical-align: middle;
+  }
+  tbody tr:nth-child(even) td { background: #f2f5f9; }
+  tr { page-break-inside: avoid; }
+  h3.sub + p { page-break-before: avoid; }
+  h3.sub + div { page-break-before: avoid; }
+  td.c { text-align: center; }
+  td.up { text-align: center; color: #c0392b; font-weight: 600; }
+  td.dn { text-align: center; color: #2c6e2c; font-weight: 600; }
+
+  .note {
+    background: #eef3f9;
+    border: 1px solid #c9d6e8;
+    padding: 8px 12px;
+    margin: 10px 0 14px;
+    font-size: 8.5pt;
+    line-height: 1.6;
+  }
+  .note b { color: #12294b; }
+  .warn {
+    background: #fdf6ec;
+    border: 1px solid #e8d9b8;
+    padding: 8px 12px;
+    margin: 10px 0 14px;
+    font-size: 8.5pt;
+    line-height: 1.6;
+  }
+  .warn b { color: #8a5a00; }
+  .green {
+    background: #f0f7f0;
+    border: 1px solid #c4dcc4;
+    padding: 8px 12px;
+    margin: 10px 0 14px;
+    font-size: 8.5pt;
+    line-height: 1.6;
+  }
+  .green b { color: #2c6e2c; }
+
+  .chain { display: flex; align-items: stretch; gap: 8px; margin: 8px 0; page-break-inside: avoid; }
+  .chain .node {
+    flex: 1;
+    border: 1px solid #c9d6e8;
+    background: #f6f9fc;
+    padding: 8px 10px;
+    font-size: 8.5pt;
+    line-height: 1.5;
+  }
+  .chain .node .t { font-weight: 700; color: #12294b; }
+  .chain .arrow { display: flex; align-items: center; color: #b8860b; font-size: 14pt; font-weight: 700; }
+
+  .alloc { display: flex; margin: 8px 0 12px; page-break-inside: avoid; }
+  .alloc .blk { flex: 1; color: #fff; text-align: center; padding: 12px 8px; }
+  .alloc .blk .p { font-size: 11pt; font-weight: 700; margin: 4px 0; }
+  .alloc .blk .d { font-size: 8.5pt; }
+  .alloc .r { background: #c0392b; }
+  .alloc .y { background: #b8860b; }
+  .alloc .g { background: #2c6e2c; }
+
+  table.heat td { text-align: center; font-size: 8.5pt; padding: 8px 6px; }
+  .h1 { background: #2e6da4 !important; }
+  .h2 { background: #5b9bd5 !important; }
+  .h3 { background: #808080 !important; }
+  .h4 { background: #d2691e !important; }
+  .h5 { background: #a52a2a !important; }
+  .hc1 { background: #dbe9f6 !important; }
+  .hc2 { background: #eaf3fb !important; }
+  .hc3 { background: #f0f0f0 !important; }
+  .hc4 { background: #fdeeda !important; }
+  .hc5 { background: #fbe4e4 !important; }
+
+  .src { font-size: 8pt; color: #666; margin: -6px 0 12px; }
+  ul.tight { margin: 6px 0 10px; padding-left: 18px; }
+  ul.tight li { margin: 4px 0; }
+  .disclaimer { font-size: 7.5pt; color: #777; line-height: 1.45; margin-top: 10px; border-top: 1px solid #ddd; padding-top: 6px; page-break-inside: avoid; }
+  .new-tag { color:#c0392b; font-weight:700; }
+</style>
+</head>
+<body>
+
+<!-- ================= 封面横幅 ================= -->
+<div class="banner">
+  <div class="en">WEEKLY RESEARCH</div>
+  <h1>周度投研分析报告</h1>
+  <div class="sub">宏观 · 市场 · 行业 · 配置 · 营销</div>
+  <div class="meta">2026年10月19日 — 23日交易周 | 数据截止：10月23日收盘 | 内部投研参考</div>
+</div>
+
+<div class="oneline">
+  <div class="tag">&gt;&gt; 一句话研判</div>
+  <div class="txt">GDP超预期回升+LPR按兵不动，周四宁德时代业绩杀带崩创业板、周五上证3574点深V大反攻成交重回1.96万亿，物理AI+机器人接棒成为新主线，底部区域渐明但行业轮动剧烈</div>
+</div>
+
+<!-- ================= 报告速览 ================= -->
+<h2 class="sec">报告速览</h2>
+<div class="note" style="border-left:4px solid #12294b;">
+<b>三个核心判断：</b><br>
+1. 本周是"先抑后扬"的深V反转周——周一至周三缩量横盘（成交1.44-1.46万亿创年内新低区），周四宁德时代三季报"增收不增利"暴跌12%引发白马出清，周五上证盘中击穿3600点至3574后放量反攻，单日成交1.96万亿（放量4276亿）、超4500只个股上涨，阶段性底部信号明确；<br>
+2. 行业剧烈轮动：申万一级31个行业仅7涨24跌，计算机（+5.21%）、机械设备（+3.01%）、汽车（+1.51%）领涨，综合、煤炭、房地产、通信、电力设备领跌——物理AI/人形机器人（概念周涨超26%）成为唯一贯穿全周的主线，红利防御板块周五逆势下跌，资金"弃防御、追景气"切换明显；<br>
+3. 配置从"纯防守"转向"防守反击"：防御层45%（固收+为核心底仓）+均衡35%（红利+宽基）+进攻20%（机器人/AI景气方向+回调后的黄金），东吴证券等多家机构判断"A股已进入底部区间"。
+</div>
+<div class="green">
+<b>三句开场话术（对客直接用）：</b><br>
+1. "三季度GDP同比4.5%超预期回升，经济动能边际改善，这是股市最扎实的底部支撑——这周市场已经用脚投票，周五3600点失而复得、成交放回近2万亿。"<br>
+2. "这周的深V反弹不是散户行情：周五宽基ETF集体放量，创业板ETF单日成交195亿创一年新高，机构资金在3600点下方大举承接，类似信号历史上往往对应阶段底部。"<br>
+3. "波动市里最怕追涨杀跌，我们的做法是底仓放在控回撤能力强的固收+上——下周一新首发的华夏智鑫债券就是这类：二级债基、AI量化选股、代表作近三年最大回撤只有1.33%——再小仓位跟着产业趋势走，攻守两端都不踏空、不受伤。"
+</div>
+<table>
+  <thead><tr><th>层级</th><th>主推产品（分行10月重点产品池）</th><th>一句话卖点</th></tr></thead>
+  <tbody>
+    <tr><td class="c"><b>防御45%</b></td><td class="c"><span class="new-tag">【首发 10/26起】</span>华夏智鑫债券（A类029479/C类029480）<br>安信平稳双利3个月持有（A类009766）</td><td class="c">二级债基：固收打底+AI量化增强，<br>聚焦高股息低波红利，代表作近3年最大回撤仅-1.33%</td></tr>
+    <tr><td class="c"><b>均衡35%</b></td><td class="c">招商红利量化选股（A类023806）<br>国金中证A500指数增强（A类022485）</td><td class="c">红利高股息压舱石，<br>宽基指增分享底部修复</td></tr>
+    <tr><td class="c"><b>进攻20%</b></td><td class="c">易方达科技先锋（A类025918）<br>永赢科技智选（A类022364）<br>博时黄金ETF联接（A类002610）</td><td class="c">卡位AI+机器人景气主线，<br>黄金周跌4%后配置价值重现</td></tr>
+  </tbody>
+</table>
+
+<!-- ================= 一、本周核心观点 ================= -->
+<h2 class="sec">一、本周核心观点</h2>
+<table>
+  <tbody>
+    <tr>
+      <td style="width:14%"><b>1.1 宏观主线</b></td>
+      <td>三季度GDP同比+4.5%（预期4.4%，前值4.3%），环比+1.2%动能回升；名义增速6.0%为2022年Q2以来最高，前三季度+4.6%稳居全年目标区间。9月工业增加值+5.5%、社零+1.1%均超预期。10月LPR连续17个月按兵不动（1Y 3.0%/5Y 3.5%），央行行长潘功胜在金融街论坛提出贷款利率定价基准改革（DR基准多元化）。海外：美联储10月FOMC（27-28日）维持利率不变概率90.6%，但路透调查100位经济学家全部预期12月加息；10Y美债收益率单周下行至4.96%（9月16日以来新低），中东冲突推WTI油价盘中触及100美元。 →<br><b>行动建议：</b>国内"经济回升+货币稳定"组合对权益偏友好；下周FOMC决议（北京时间29日凌晨）是最大外部变量，会前控制追涨节奏。</td>
+    </tr>
+    <tr>
+      <td><b>1.2 A股格局</b></td>
+      <td>沪指周跌0.69%收3690.48，深成指周跌1.09%，创业板指周跌3.18%（周四单日-4.37%）。节奏：周一至周三缩量横盘（成交1.44-1.46万亿为年内新低区）→周四宁德时代三季报后暴跌12%（历史最大单日跌幅）拖累指数破位→周五上证击穿3600点至3574.27后深V反攻，收涨0.89%、创业板指大涨4.16%，成交1.96万亿放量4276亿，超4500只个股上涨、84只涨停。中小盘相对占优：中证500周涨0.62%，北证50周涨超3%。 →<br><b>行动建议：</b>3600点下方恐慌盘已集中出清，ETF放量承接+周五反攻确认短期底部区域，但周五涨幅已部分透支反弹空间，下周初不宜追高，回落中分批布局。</td>
+    </tr>
+    <tr>
+      <td><b>1.3 行业焦点</b></td>
+      <td>物理AI/人形机器人成为贯穿全周的绝对主线：概念指数周涨超26%，宇树科技周五20cm涨停（上市以来首个、周涨46%，机构净买入2.41亿居首），凡拓数创周涨89%，海天瑞声、利亚德、索辰科技、奥比中光周涨超50%。催化：2026世界物理AI大会暨宇树生态大会（王兴兴称"GPT-6发布后物理AI已看到被击穿的苗头，可能1-2年内"）+马斯克称明年末Optimus有望对外交付+商务部数据前三季度具身智能机器人销售额+22.6%。对立面：宁德时代"增收不增利"（Q3毛利率20.69%创2022Q4以来新低）引发电池链杀估值，电力设备行业周跌3.54%居前。 →<br><b>行动建议：</b>机器人/物理AI为产业趋势级主线但短期涨幅巨大，追高性价比低，逢回调通过池内科技类基金分批参与；电池链等待毛利率拐点信号。</td>
+    </tr>
+    <tr>
+      <td><b>1.4 配置建议</b></td>
+      <td>底部信号增强（东吴证券：上证与沪深300市盈率处于过去一年约41.5%分位，市场已进入底部区间）+行业轮动加快，仓位从"纯防守"微调至"防守反击"：进攻20%（↑5%）/均衡35%/防御45%（↓5%）。防御层以低波固收+承接居民"稳健理财"刚需；进攻层卡位机器人/AI景气主线（池内对应易方达科技先锋、永赢科技智选）；黄金本周重挫约4%（COMEX收4039.8美元），回调后对冲价值重现。 →<br><b>行动建议：</b>防御层仍是压舱石（45%），进攻层小幅提升至20%，以"红利底仓+景气成长"哑铃结构应对轮动。</td>
+    </tr>
+  </tbody>
+</table>
+
+<!-- ================= 二、宏观仪表盘 ================= -->
+<h2 class="sec">二、宏观仪表盘</h2>
+<h3 class="sub">2.1 国内关键指标</h3>
+<table>
+  <thead><tr><th>指标</th><th>数值</th><th>变动</th><th>解读</th></tr></thead>
+  <tbody>
+    <tr><td>三季度GDP同比</td><td class="c">4.5%</td><td class="c">↑ 超预期（预期4.4%）</td><td class="c">环比+1.2%，动能边际改善；名义增速6.0%为2022Q2以来最高</td></tr>
+    <tr><td>前三季度GDP</td><td class="c">107.1万亿，+4.6%</td><td class="c">稳居目标区间</td><td class="c">瑞银、野村上调全年预测至4.6%/4.7%</td></tr>
+    <tr><td>9月工业增加值</td><td class="c">+5.5%</td><td class="c">↑ 符合预期上沿</td><td class="c">制造业+6.0%，生产端稳健</td></tr>
+    <tr><td>9月社零同比</td><td class="c">+1.1%</td><td class="c">↑ 超预期（预期+0.7%）</td><td class="c">消费低位回暖但仍偏弱</td></tr>
+    <tr><td>10月LPR（10/20）</td><td class="c">1Y 3.00% / 5Y 3.50%</td><td class="c">连续17个月不变</td><td class="c">定价锚（7天逆回购利率）稳定+GDP回升，降息必要性下降</td></tr>
+    <tr><td>10Y国债收益率</td><td class="c">1.64%</td><td class="c">↓ 低位小幅下行</td><td class="c">债市平稳，未受股市深V扰动</td></tr>
+    <tr><td>隔夜Shibor</td><td class="c">1.271%</td><td class="c">低位运行</td><td class="c">资金面充裕，下周税期（26-28日）是扰动点</td></tr>
+    <tr><td>房地产增加值（Q3）</td><td class="c">-0.4%</td><td class="c">仍负增</td><td class="c">地产链继续拖累，信息技术服务业+9.8%领跑</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>逻辑总结：</b>本周宏观最大的变化是"增长预期上修"——三季度GDP 4.5%超预期、9月工业与社零双双改善，且GDP平减指数连续两季为正，困扰三年的价格低迷局面正在缓解。政策面"稳"字当头：LPR连续17个月不动，潘功胜在金融街论坛释放的是"贷款利率定价基准改革（DR基准）"这类机制性改革信号而非短期降息。配置含义：经济基本面对股市的支撑从"政策预期"切换到"数据验证"，这是底部判断的重要加分项；利率低位平稳对固收+产品的债券底仓依然友好。</div>
+
+<h3 class="sub">2.2 海外关键指标</h3>
+<table>
+  <thead><tr><th>指标</th><th>数值</th><th>变动</th><th>解读</th></tr></thead>
+  <tbody>
+    <tr><td>美联储利率</td><td class="c">3.75-4.00%</td><td class="c">9月加息25bp后</td><td class="c">10月FOMC（27-28日）维持不变概率90.6%，12月加息为市场基准预期</td></tr>
+    <tr><td>美10Y国债</td><td class="c">4.96%</td><td class="c">↓ 单周-17bp</td><td class="c">避险资金涌入美债，创9月16日以来新低</td></tr>
+    <tr><td>美元指数</td><td class="c">101.62</td><td class="c">区间震荡</td><td class="c">高位滞涨，人民币压力边际缓和</td></tr>
+    <tr><td>WTI原油</td><td class="c">98.67$</td><td class="c">↑ 盘中触及100$</td><td class="c">沙特遇袭+霍尔木兹商船事件，布伦特109$创五个月新高</td></tr>
+    <tr><td>COMEX黄金</td><td class="c">4039.8$</td><td class="c">↓ 周跌约4%</td><td class="c">获利盘回吐+加息预期博弈，白银周跌超6%至54.6$</td></tr>
+    <tr><td>美股（周度）</td><td class="c">道指52214 / 标普7624</td><td class="c">道指+0.4%/标普-0.5%/纳指-0.7%</td><td class="c">周五道指跌654点，财报季分化，AI资本开支担忧仍在</td></tr>
+  </tbody>
+</table>
+
+<h3 class="sub">2.3 核心事件传导链</h3>
+<div class="chain">
+  <div class="node"><span class="t">事件</span> 宁德时代三季报"增收不增利"<br>Q3毛利率20.69%创4年新低</div>
+  <div class="arrow">→</div>
+  <div class="node"><span class="t">传导</span> 10/21暴跌12%（历史最大单日跌幅）<br>电池链+白马股集体出清</div>
+  <div class="arrow">→</div>
+  <div class="node"><span class="t">影响</span> 创业板周四-4.37%<br>恐慌盘集中释放<br>周五深V反转</div>
+</div>
+<div class="chain">
+  <div class="node"><span class="t">事件</span><br>世界物理AI大会+宇树生态大会（10/22-23杭州）<br>王兴兴：物理AI已看到被击穿的苗头</div>
+  <div class="arrow">→</div>
+  <div class="node"><span class="t">传导</span><br>宇树科技周涨46%立起"估值锚"<br>马斯克：明年末Optimus有望对外交付</div>
+  <div class="arrow">→</div>
+  <div class="node"><span class="t">影响</span> 物理AI概念周涨超26%<br>机器人链批量涨停<br>接棒成为市场新主线</div>
+</div>
+
+<h3 class="sub">2.4 海外股指周度表现</h3>
+<table>
+  <thead><tr><th>指数</th><th>10/23收盘</th><th>周度涨跌</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>道琼斯</td><td class="c">52,214.03</td><td class="c">约+0.4%</td><td class="c">周五大跌654点（-1.24%）回吐周内涨幅</td></tr>
+    <tr><td>标普500</td><td class="c">7,623.67</td><td class="c">约-0.5%</td><td class="c">财报季分化，高位震荡</td></tr>
+    <tr><td>纳斯达克</td><td class="c">25,955.34</td><td class="c">约-0.7%</td><td class="c">AI资本开支担忧压制科技股</td></tr>
+    <tr><td>恒生指数</td><td class="c">23,093.37</td><td class="c">约-4.5%</td><td class="c">宁德时代H股拖累，周五恒指+0.69%、恒生科技+2.05%反弹</td></tr>
+  </tbody>
+</table>
+<p class="src">注：美股周度涨跌幅按10/16与10/23收盘价估算。美联储主席沃什此前"鸽派"发言后，市场对10月27-28日FOMC按兵不动的预期升温（CME FedWatch：维持不变概率90.6%）；但路透社调查显示100位受访经济学家全部预期12月加息。高盛警示美股行情高度集中于少数龙头股，追高风险上升。</p>
+<div class="note"><b>解读：</b>海外处于"FOMC前的平静期"：美债收益率因避险买盘大幅下行17bp，缓解了全球风险资产的利率压制，这是A股周五敢于深V反攻的外部条件之一。真正的变量在下周——FOMC决议（北京时间10/29日凌晨）与美联储主席沃什的发布会表态，若对12月加息路径释放鹰派信号，全球成长股将再度承压。</div>
+
+<!-- ================= 三、A股全景 ================= -->
+<h2 class="sec">三、A股全景</h2>
+<h3 class="sub">3.1 主要指数周度表现（截至10/23）</h3>
+<table>
+  <thead><tr><th>指数</th><th>10/23收盘</th><th>周涨跌</th><th>特征描述</th></tr></thead>
+  <tbody>
+    <tr><td>上证指数</td><td class="c">3,690.48</td><td class="c">-0.69%</td><td class="c">周五盘中击穿3600至3574.27后深V收复，长下影线</td></tr>
+    <tr><td>深证成指</td><td class="c">11,673.83</td><td class="c">-1.09%</td><td class="c">周四-2.96%→周五+2.79%，巨震修复</td></tr>
+    <tr><td>创业板指</td><td class="c">2,684.10</td><td class="c">-3.18%</td><td class="c">宁德时代拖累最深，周四-4.37%、周五+4.16%深V</td></tr>
+    <tr><td>科创50</td><td class="c">1,345.51</td><td class="c">-0.97%</td><td class="c">周五+3.04%反弹，年内唯一正收益宽基</td></tr>
+    <tr><td>沪深300</td><td class="c">4,105.33</td><td class="c">-1.57%</td><td class="c">大盘蓝筹弱于中小盘，周五+1.71%</td></tr>
+    <tr><td>中证500</td><td class="c">6,814.44</td><td class="c">+0.62%</td><td class="c">中小盘占优，周内唯一收红的主要宽基</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>解读：</b>本周走势是教科书级的"缩量筑底→恐慌出清→放量反转"：前三天成交萎缩至1.44-1.46万亿（年内新低区），周四宁德时代引爆白马股集中杀跌（创业板指单日-4.37%），周五早盘最后一跌击穿3600点后，宽基ETF放量承接+券商午后拉升+机器人主线引爆，走出深V。风格上"小盘强于大盘、主题强于权重"——中证500收红而沪深300跌1.57%，北证50周涨超3%。</div>
+
+<h3 class="sub">3.2 量能变化</h3>
+<table>
+  <thead><tr><th>交易日</th><th>成交额(万亿)</th><th>较前日变化</th><th>特征</th></tr></thead>
+  <tbody>
+    <tr><td>周一(10/19)</td><td class="c">1.44</td><td class="c">缩量约1200亿</td><td class="c">年内新低区，指数收红但3129家下跌，"价升量减"</td></tr>
+    <tr><td>周二(10/20)</td><td class="c">1.46</td><td class="c">微幅放量186亿</td><td class="c">指数平收，3777家上涨，低位补涨扩散</td></tr>
+    <tr><td>周三(10/21)</td><td class="c">1.44</td><td class="c">再度缩量</td><td class="c">冲高回落，宁德时代盘中跌超12%带崩电池链</td></tr>
+    <tr><td>周四(10/22)</td><td class="c">1.53</td><td class="c">放量约900亿</td><td class="c">恐慌放量杀跌，创业板-4.37%，白马集中出清</td></tr>
+    <tr><td>周五(10/23)</td><td class="c">1.96</td><td class="c">大幅放量4276亿</td><td class="c">深V反转，4526家上涨、84只涨停，量能重回强势区</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>解读：</b>全周日均成交约1.57万亿。量价结构的积极之处：①周四的放量下跌是"恐慌盘出清"而非"增量做空"——白马股集中杀跌 historically 多出现在调整尾声（机构赎回压力下优先卖出流动性好的大盘股）；②周五1.96万亿的放量反攻验证承接资金真实入场。隐忧：周五量能集中在反弹后半场，下周一若量能不能维持在1.7万亿上方，反弹节奏会反复。</div>
+
+<h3 class="sub">3.3 市场情绪指标</h3>
+<table>
+  <thead><tr><th>指标</th><th>数值</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>上涨/下跌家数(10/22)</td><td class="c">913家上涨/超4200家下跌</td><td class="c">周四冰点，亏钱效应极致</td></tr>
+    <tr><td>上涨/下跌家数(10/23)</td><td class="c">4526家上涨/909家下跌</td><td class="c">周五强修复，涨停84只/跌停7只</td></tr>
+    <tr><td>两融余额</td><td class="c">约2.46万亿(10/22)</td><td class="c">延续去杠杆，杠杆资金情绪仍谨慎</td></tr>
+    <tr><td>连板高度(10/23)</td><td class="c">6连板（海洋王、大业股份）</td><td class="c">短线接力情绪回暖，连板晋级率33%</td></tr>
+    <tr><td>公司回购(10月以来)</td><td class="c">291家、合计169.48亿</td><td class="c">产业资本密集回购，底部信号之一</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>解读：</b>情绪走出"周四冰点→周五强修复"的完整循环。周四宁德时代等白马暴跌引发全市场超4200家下跌，但周五4526家上涨、84只涨停、两只6连板高标，显示短线情绪快速扭转。两融余额仍在2.46万亿低位徘徊，说明本轮反弹由ETF与产业资本（10月291家公司回购169亿）主导，杠杆资金尚未回流——这是反弹成色待验证的一点，也是后续增量空间的来源。</div>
+
+<!-- ================= 四、技术面观察 ================= -->
+<h2 class="sec">四、技术面观察</h2>
+<h3 class="sub">4.1 主要指数关键位标注</h3>
+<table>
+  <thead><tr><th>指数</th><th>支撑位</th><th>阻力位</th><th>多空分界</th><th>当前状态</th></tr></thead>
+  <tbody>
+    <tr><td>上证指数</td><td class="c">3574(10/23盘中低点)<br>3600(失而复得的心理关口)</td><td class="c">3735(10/20收盘/周初平台)<br>3744(10/21高点)</td><td class="c">3700整数关口</td><td class="c">收3690.48 长下影深V 站上5日线</td></tr>
+    <tr><td>深证成指</td><td class="c">11043(10/23盘中低点)<br>11350(10/22低点)</td><td class="c">11800(周初平台)<br>11938(周内高点)</td><td class="c">11600</td><td class="c">收11673.83 周五+2.79%收复10日线</td></tr>
+    <tr><td>创业板指</td><td class="c">2494(10/23盘中低点)<br>2500(心理关口)</td><td class="c">2746(10/19收盘)<br>2790(周内高点)</td><td class="c">2650</td><td class="c">收2684.10 周五+4.16%大阳线反包</td></tr>
+  </tbody>
+</table>
+
+<h3 class="sub">4.2 量价关系研判</h3>
+<div class="note"><b>深V反转的技术含义：</b>周五上证指数盘中最低3574.27、收盘3690.48，单日振幅3.3%，留下超长下影线，配合1.96万亿成交（较前日放量4276亿），构成经典的"恐慌探底+放量收复"组合——沪市成交量周五较前一日放大约26%。与上周四（10/15）的"放量杀跌"不同，这次放量发生在上涨方向，且3574低点未跌破9月平台下沿，中期上升趋势线保持完好。<b>关键观察：</b>①下周初能否守住3660（周五阳线中位）——守住则底部确认；②成交能否维持在1.7万亿以上——缩量则反弹一波三折；③3735-3744缺口区是反弹第一压力带，需要量能配合才能突破。</div>
+
+<h3 class="sub">4.3 技术指标信号汇总</h3>
+<table>
+  <thead><tr><th>指标</th><th>上证指数</th><th>创业板指</th><th>信号</th></tr></thead>
+  <tbody>
+    <tr><td>MACD</td><td class="c">绿柱开始缩短，DIF走平</td><td class="c">绿柱仍长但周五明显收敛</td><td class="c">空头动能衰减</td></tr>
+    <tr><td>RSI(14)</td><td class="c">自超卖区回升至45附近</td><td class="c">自深度超卖回升至40附近</td><td class="c">超卖修复进行中</td></tr>
+    <tr><td>K线形态</td><td class="c">长下影锤头线（周五）</td><td class="c">大阳吞没（周五反包周四阴线实体）</td><td class="c">反转信号</td></tr>
+    <tr><td>均线系统</td><td class="c">收复5日线，10日线仍压制</td><td class="c">收复5/10日线，20日线压制</td><td class="c">短期转强，中期待修复</td></tr>
+    <tr><td>布林带</td><td class="c">下轨3570附近获支撑回升</td><td class="c">击穿下轨后强势回到轨内</td><td class="c">极端偏离修复</td></tr>
+  </tbody>
+</table>
+
+<h3 class="sub">4.4 市场宽度（Breadth）分析</h3>
+<table>
+  <thead><tr><th>指标</th><th>数值</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>红盘率(10/22)</td><td class="c">约18%</td><td class="c">冰点，超4200家下跌</td></tr>
+    <tr><td>红盘率(10/23)</td><td class="c">约83%（4526/5435）</td><td class="c">强修复，宽度全面改善</td></tr>
+    <tr><td>涨停/跌停(10/23)</td><td class="c">84 / 7</td><td class="c">赚钱效应显著回升</td></tr>
+    <tr><td>年内正收益宽基</td><td class="c">仅科创50</td><td class="c">东吴证券：指数层面普遍深度回调</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>技术面综合结论：</b>周五的深V反转在技术层面具备较高可信度——长下影线+放量+宽度从18%到83%的极致修复+创业板大阳吞没，四个信号共振。东吴证券判断"短期A股已进入底部区间，有望逐步企稳"。但需要清醒：均线中期空头排列未改，3735-3744缺口压力带就在眼前，且周五午后涨幅有"抢反弹"成分，下周初大概率回踩确认（3660-3680区域）。技术操作上：回踩不破周五阳线中位则可视为右侧确认点；若直接放量突破3735，则V型反转成立。</div>
+
+<!-- ================= 五、资金微观结构 ================= -->
+<h2 class="sec">五、资金微观结构</h2>
+<h3 class="sub">5.1 ETF资金流向（护盘资金温度计）</h3>
+<table>
+  <thead><tr><th>ETF名称</th><th>10/23表现</th><th>信号含义</th></tr></thead>
+  <tbody>
+    <tr><td>创业板ETF易方达</td><td class="c">成交突破195亿，较前日再放超40%</td><td class="c">创2024年10月9日以来新高，低位承接力度空前</td></tr>
+    <tr><td>沪深300ETF易方达</td><td class="c">成交额激增超4倍</td><td class="c">宽基护盘主力，与上周300ETF天量信号一脉相承</td></tr>
+    <tr><td>科创50ETF华夏/中证500ETF南方/中证1000ETF华夏</td><td class="c">集体放量</td><td class="c">护盘范围从大盘扩散至中小创，托底意图明确</td></tr>
+    <tr><td>首批18只主动ETF</td><td class="c">10/19获批注册、10/23起集中发行</td><td class="c">监管层主动为市场引入增量资金（吴清金融街论坛表态）</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>解读：</b>本周护盘资金的动作比上周更进一步：上周是"尾盘偷袭式"天量（单日信号），本周五则是盘中持续放量、多只宽基同步，且配合首批18只主动ETF集中获批发行的制度性安排——"真金白银+制度供给"双管齐下。历史经验看，这种组合出现后，市场即使再有回踩，空间也相对有限。</div>
+
+<h3 class="sub">5.2 两融与主力资金</h3>
+<table>
+  <thead><tr><th>指标</th><th>数值</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>两融余额</td><td class="c">约2.46万亿（10/22）</td><td class="c">较10/20的2.48万亿续降，杠杆资金仍在收缩</td></tr>
+    <tr><td>本周主力净流入居前</td><td class="c">兆易创新、百亚股份（超20亿）</td><td class="c">存储芯片+消费，资金"弃高就低+抱业绩"</td></tr>
+    <tr><td>本周主力净流出居前</td><td class="c">宁德时代、新易盛、紫金矿业（超20亿）</td><td class="c">前期抱团主线遭兑现，光模块龙头延续流出</td></tr>
+    <tr><td>龙虎榜机构动向(10/23)</td><td class="c">宇树科技机构净买入2.41亿居首</td><td class="c">机构主动进攻机器人主线，非纯游资炒作</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>解读：</b>资金结构呈现"杠杆资金收缩、机构资金调仓、护盘资金托底"的三层格局。特别值得注意的是周五宇树科技涨停由机构席位净买入2.41亿主导——机器人主线的上涨有机构资金背书，持续性好于纯题材炒作。两融迟迟未回流意味着反弹初期散户与杠杆资金踏空，这既是隐患（持续性待验）也是潜力（一旦回流将提供增量）。</div>
+
+<h3 class="sub">5.3 产业资本与回购</h3>
+<table>
+  <thead><tr><th>指标</th><th>数值</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>10月以来回购公司数</td><td class="c">291家</td><td class="c">合计回购金额169.48亿元</td></tr>
+    <tr><td>算力链龙头集体表态(10/23午间)</td><td class="c">中际旭创/新易盛/天孚通信</td><td class="c">齐发公告"订单饱满、产能充足"，稳住算力链军心</td></tr>
+    <tr><td>港股公司回购</td><td class="c">极兔/汇量科技等连续多日回购</td><td class="c">港股产业资本同步行动</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>资金微观结构综合判断：</b>本周资金面最大的边际变化是"托底力量从单一护盘升级为组合拳"——宽基ETF放量+主动ETF集中获批+291家公司回购+龙头公司集体发布经营公告。底部区域的资金特征已经齐备。但增量资金的"最后一公里"（两融与散户）尚未启动，对应行情节奏大概率是"底部区域反复夯实"而非"V型一路向上"，配置上不追单日大涨、逢回踩分批是更优解。</div>
+
+<!-- ================= 六、估值观察 ================= -->
+<h2 class="sec">六、估值观察</h2>
+<h3 class="sub">6.1 主要宽基估值水位（截至10/23）</h3>
+<table>
+  <thead><tr><th>指数</th><th>估值状态</th><th>分位/水位</th><th>估值判断</th></tr></thead>
+  <tbody>
+    <tr><td>上证指数</td><td class="c">PE处过去一年约41.5%分位</td><td class="c">中性偏低</td><td class="c">回调后回到合理区间下沿（东吴证券）</td></tr>
+    <tr><td>沪深300</td><td class="c">PE处过去一年约41.5%分位</td><td class="c">中性偏低</td><td class="c">底部区间判断的核心依据之一</td></tr>
+    <tr><td>全A（东财口径）</td><td class="c">平均市盈率30.40倍</td><td class="c">总市值103.7万亿</td><td class="c">较10/22的29.13倍随反弹回升</td></tr>
+    <tr><td>科创50</td><td class="c">年内唯一正收益宽基</td><td class="c">相对强势</td><td class="c">半导体/算力景气支撑，估值压力已部分消化</td></tr>
+    <tr><td>创业板指</td><td class="c">周跌3.18%后</td><td class="c">年内跌幅较深</td><td class="c">宁德时代权重扰动大，真实估值好于指数表象</td></tr>
+  </tbody>
+</table>
+<p class="src">数据来源：东吴证券（截至2026/10/23）、东方财富数据中心。东吴证券芦哲团队判断：主要宽基指数年内仅科创50取得正收益，上证与沪深300市盈率均处过去一年约41.5%分位，短期市场已进入底部区间，有望逐步企稳。</p>
+
+<h3 class="sub">6.2 股债性价比（ERP）</h3>
+<table>
+  <thead><tr><th>指标</th><th>数值</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>10Y国债收益率</td><td class="c">1.64%</td><td class="c">低位平稳，无风险利率持续处于历史低位</td></tr>
+    <tr><td>股债性价比状态</td><td class="c">权益占优</td><td class="c">股指回调+利率低位，股票相对债券的性价比维持在历史高位区域</td></tr>
+    <tr><td>配置含义</td><td class="c">底部区间+ERP高位</td><td class="c">估值分位回落与股债性价比高位共振，中长期布局窗口未关闭</td></tr>
+  </tbody>
+</table>
+
+<h3 class="sub">6.3 行业估值热力图</h3>
+<table class="heat">
+  <thead><tr><th class="h1">低估（冷）</th><th class="h2">偏低（凉）</th><th class="h3">适中</th><th class="h4">偏高（暖）</th><th class="h5">高估（热）</th></tr></thead>
+  <tbody>
+    <tr>
+      <td class="hc1">电力设备<br>宁德时代PE 12.8倍</td>
+      <td class="hc2">银行<br>周五大跌后回归</td>
+      <td class="hc3">沪深300 分位41.5%</td>
+      <td class="hc4">计算机 周涨5.21%后</td>
+      <td class="hc5">人形机器人<br>宇树PE 460倍</td>
+    </tr>
+    <tr>
+      <td class="hc1">煤炭 周跌4.12%</td>
+      <td class="hc2">家用电器 估值合理</td>
+      <td class="hc3">医药生物 周涨0.75%</td>
+      <td class="hc4">机械设备 资金流入</td>
+      <td class="hc5">物理AI概念<br>周涨26%+</td>
+    </tr>
+  </tbody>
+</table>
+<div class="note"><b>估值综合判断：</b>本周估值结构的核心变化是"高低切换的极致化"：一端是宁德时代PE跌至12.8倍、煤炭/地产深度回调后的低估值区，另一端是宇树科技460倍PE、物理AI概念周涨26%的强主题区。东吴证券"底部区间"判断的分位依据（41.5%）说明整体估值不贵，但结构分化极端。配置含义：宽基与红利估值安全垫充足（均衡层的底气）；主题方向（机器人/物理AI）是"产业趋势+高估值"组合，只能用进攻层小仓位参与并严格止盈纪律。</div>
+
+<!-- ================= 七、行业全景与轮动分析 ================= -->
+<h2 class="sec">七、行业全景与轮动分析（周度）</h2>
+<div class="note"><b>本节定位：</b>每周跟踪申万一级行业涨跌、资金流向与风格切换，回答三个问题：钱在往哪里流？轮动有没有持续性？对应到产品池该用什么承接？本周核心结论：<b>31个行业仅7涨24跌，"科技制造领涨、周期防御领跌"——资金从防御板块撤出、回流景气主线，轮动方向与三季度"避险红利占优"相比发生明显切换。</b></div>
+
+<h3 class="sub">7.1 申万一级行业周度涨跌榜（10/19-10/23）</h3>
+<table>
+  <thead><tr><th>领涨行业</th><th>周涨幅</th><th>驱动逻辑</th><th>领跌行业</th><th>周跌幅</th><th>拖累因素</th></tr></thead>
+  <tbody>
+    <tr><td><b>计算机</b></td><td class="up">+5.21%</td><td class="c">物理AI+数据要素，周五单日+4.67%</td><td><b>综合</b></td><td class="dn">-4.12%</td><td class="c">缺乏主线承接</td></tr>
+    <tr><td><b>机械设备</b></td><td class="up">+3.01%</td><td class="c">机器人产业链（减速器/执行器）</td><td><b>煤炭</b></td><td class="dn">-4.12%</td><td class="c">防御板块遭弃，资金流出</td></tr>
+    <tr><td><b>汽车</b></td><td class="up">+1.51%</td><td class="c">机器人零部件外溢+智能化</td><td><b>房地产</b></td><td class="dn">-3.61%</td><td class="c">Q3地产增加值-0.4%仍拖累</td></tr>
+    <tr><td>医药生物</td><td class="up">+0.75%</td><td class="c">超跌修复+避险资金回补</td><td><b>通信</b></td><td class="dn">-3.60%</td><td class="c">光模块前期抱团继续出清</td></tr>
+    <tr><td>家用电器</td><td class="up">+0.44%</td><td class="c">低估值+以旧换新</td><td><b>电力设备</b></td><td class="dn">-3.54%</td><td class="c">宁德时代业绩杀拖累全链</td></tr>
+  </tbody>
+</table>
+<p class="src">数据来源：Wind、源达证券策略周报（2026/10/23）。31个申万一级行业中7涨24跌。</p>
+<div class="note"><b>读数一：涨跌结构。</b>涨幅榜前三名（计算机/机械/汽车）全部指向同一个产业——机器人与物理AI；跌幅榜则集中在两类：前期避险抱团的周期红利（煤炭、公用事业走弱）和景气受挫的成长旧主线（通信/光模块、电力设备/电池）。<b>这不是普通的板块轮动，而是"避险→进攻"的风险偏好切换</b>，与周五银行（中国银行单日-4%）、电力逆势下跌互为印证。</div>
+
+<h3 class="sub">7.2 "价·量·钱"三维验证：谁在真涨，谁在虚涨</h3>
+<table>
+  <thead><tr><th>行业</th><th>周涨幅</th><th>周度资金流向</th><th>价量关系判读</th><th>持续性评级</th></tr></thead>
+  <tbody>
+    <tr><td>计算机</td><td class="up">+5.21%</td><td class="c">净流出23.78亿</td><td class="c">价涨钱出：周五单日脉冲贡献大，资金逢高出逃</td><td class="c">★★☆ 情绪驱动，波动大</td></tr>
+    <tr><td>机械设备</td><td class="up">+3.01%</td><td class="c">净流入5.92亿</td><td class="c">价涨钱进：全周稳步推升，资金真实建仓</td><td class="c">★★★ 主线成色最高</td></tr>
+    <tr><td>汽车</td><td class="up">+1.51%</td><td class="c">小幅净流入</td><td class="c">机器人零部件外溢逻辑，跟涨性质</td><td class="c">★★☆ 依赖主线带动</td></tr>
+    <tr><td>电力设备</td><td class="dn">-3.54%</td><td class="c">宁德单周主力净流出超20亿</td><td class="c">价跌钱出后周五修复，机构分歧大</td><td class="c">★☆☆ 等待毛利率拐点</td></tr>
+    <tr><td>银行</td><td class="c">周内走弱</td><td class="c">周五大跌（中行-4%）</td><td class="c">防御资金撤退，红利风格短期失宠</td><td class="c">★★☆ 回调后配置价值回升</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>读数二：资金流验证。</b>同样上涨，成色截然不同——计算机涨5.21%但资金净流出23.78亿（典型的情绪脉冲，集中在周五单日），机械设备涨3.01%且净流入5.92亿（全周持续建仓）。<b>"价涨钱进"的机械设备（机器人产业链）是本周唯一通过三维验证的真主线</b>；计算机需要下周初的资金回流确认，否则容易冲高回落。这条验证逻辑可直接用于理财经理筛选推荐方向：讲给客户听的应该是"有资金持续流入的机械/机器人"，而非单日涨幅最大的计算机。</div>
+
+<h3 class="sub">7.3 风格与概念轮动</h3>
+<table>
+  <thead><tr><th>维度</th><th>本周表现</th><th>切换信号</th></tr></thead>
+  <tbody>
+    <tr><td>大小盘</td><td class="c">中证500 +0.62% vs 沪深300 -1.57%，北证50 +3%</td><td class="c">小盘显著强于大盘，反弹市典型特征</td></tr>
+    <tr><td>成长/价值</td><td class="c">科创50周五+3.04%，银行/煤炭/电力周度领跌</td><td class="c">成长重新占优，防御风格阶段退潮</td></tr>
+    <tr><td>概念主线</td><td class="c">物理AI概念周涨26.53%，减速器/人形机器人周五+5.9%/+5.4%</td><td class="c">凡拓数创+89%、宇树+46%，主题强度年内罕见</td></tr>
+    <tr><td>旧主线</td><td class="c">通信（光模块）-3.60%、电力设备（电池）-3.54%</td><td class="c">算力/电池让位，但中际旭创等周五公告稳军心</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>读数三：风格切换。</b>本周完成了三季度以来"红利防御占优→景气成长占优"的一次明确切换。对比三周前（国庆前）：当时领涨的是房地产+2.28%、煤炭+2.10%等防御方向，领跌的是有色、通信；本周恰好镜像反转。风格切换初期往往伴随剧烈波动（周四周五的巨震即为体现），确认信号是下周防御板块能否止跌、机器人链能否扛住分歧。</div>
+
+<h3 class="sub">7.4 轮动结论与产品池映射</h3>
+<table>
+  <thead><tr><th>轮动结论</th><th>配置动作</th><th>产品池承接</th></tr></thead>
+  <tbody>
+    <tr><td>机器人/物理AI为真主线（价涨钱进）</td><td class="c">进攻层小仓位参与，不追单日大涨</td><td class="c">永赢科技智选（022364）、易方达科技先锋（025918）</td></tr>
+    <tr><td>红利防御短期退潮但估值更便宜</td><td class="c">均衡层维持，回调恰是红利加仓窗口</td><td class="c">招商红利量化选股（023806）、东方红红利低波（012708）</td></tr>
+    <tr><td>宽基底部区间确认中</td><td class="c">定投/分批最佳工具</td><td class="c">国金中证A500指增（022485）、天弘中证500指增（001556，契合小盘强势）</td></tr>
+    <tr><td>电池链等景气拐点，暂不抄底</td><td class="c">回避单一电池主题基金</td><td class="c">—（池内无纯电池主题，天然规避）</td></tr>
+  </tbody>
+</table>
+<div class="warn"><b>轮动风险提示：</b>主题轮动速度极快（物理AI概念周涨26%后，周五已现批量涨停的情绪高潮特征），历史上周涨幅超20%的概念次周分化概率高。对客沟通时避免"推荐客户追机器人主题基金"，正确姿势是"用科技类底仓型产品（科技先锋/科技智选）间接参与，仓位控制在组合的进攻层内"。</div>
+
+<!-- ================= 八、行业深度：物理AI与人形机器人 ================= -->
+<h2 class="sec">八、行业深度：物理AI与人形机器人</h2>
+<h3 class="sub">8.0 本周选定理由</h3>
+<div class="note">物理AI/人形机器人是本周唯一贯穿始终的市场主线：概念指数周涨26.53%，宇树科技周五20cm涨停（上市以来首次，周涨46.14%，机构净买入2.41亿居两市之首），凡拓数创周涨89.05%，海天瑞声、利亚德、索辰科技、奥比中光周涨超50%。背后是"技术拐点+产业数据+政策规划"三重催化共振：王兴兴称GPT-6发布后物理AI已看到被击穿的苗头、马斯克称明年末Optimus有望对外交付、商务部数据前三季度具身智能机器人销售额+22.6%、八部门发布《产业基础能力提升"十五五"规划》。这是AI从"云端算力"向"物理世界"延伸的产业级叙事，值得作为四季度重点跟踪方向。</div>
+
+<h3 class="sub">8.1 本周产业重大事件</h3>
+<table>
+  <thead><tr><th>事件</th><th>时间</th><th>影响分析</th></tr></thead>
+  <tbody>
+    <tr><td>2026世界物理AI大会暨宇树合作伙伴生态大会</td><td class="c">10/22-23</td><td class="c">王兴兴：GPT-6 Astra可零训练直接操控机器人（作画、自主洗笔刷），"物理AI被击穿的苗头已现，可能就在1-2年"；发布世界物理AI大赛（八大赛道、数千万奖金），预研自进化V1.0大模型</td></tr>
+    <tr><td>宇树科技上市首个涨停</td><td class="c">10/23</td><td class="c">20cm涨停收624元，市值2524亿，周涨46.14%；机构净买入2.41亿居首——为产业链立起"估值锚"</td></tr>
+    <tr><td>马斯克表态Optimus</td><td class="c">本周</td><td class="c">称明年年末有望实现Optimus对外交付，全球人形机器人量产预期升温</td></tr>
+    <tr><td>商务部消费数据</td><td class="c">本周</td><td class="c">前三季度重点平台具身智能机器人销售额增长22.6%，需求侧给出硬数字</td></tr>
+    <tr><td>八部门《产业基础能力提升"十五五"规划》</td><td class="c">本周</td><td class="c">工业母机、核心零部件等产业基础领域获政策加持</td></tr>
+    <tr><td>宇树新品展示</td><td class="c">10/22</td><td class="c">五指灵巧手Dex5-S、新款H2-X（站立续航约8小时、可徒手抬起汽车）；G1累计下线1-2万台，为全球最畅销人形机器人</td></tr>
+  </tbody>
+</table>
+
+<h3 class="sub">8.2 产业链全景与本周表现</h3>
+<table>
+  <thead><tr><th>产业链环节</th><th>核心领域</th><th>代表标的（本周表现）</th><th>环节景气度</th></tr></thead>
+  <tbody>
+    <tr><td>上游-核心零部件</td><td class="c">减速器/丝杠/轴承</td><td class="c">大业股份（6连板）、襄阳轴承（2连板）、万向钱潮（涨停）</td><td class="c">★★★ 量价齐升，资金主攻方向</td></tr>
+    <tr><td>上游-感知层</td><td class="c">机器视觉/3D视觉/传感器</td><td class="c">奥比中光（周涨超50%）、奥普特（涨停）、敏芯股份（+16%）</td><td class="c">★★★ 物理AI"眼睛"，弹性最大</td></tr>
+    <tr><td>中游-整机</td><td class="c">人形机器人本体</td><td class="c">宇树科技（周+46%，市值2524亿）</td><td class="c">★★★ 估值锚，机构背书</td></tr>
+    <tr><td>中游-数据与仿真</td><td class="c">物理AI训练数据/数字孪生</td><td class="c">凡拓数创（周+89%）、海天瑞声（周涨超50%）、索辰科技（周涨超50%）</td><td class="c">★★☆ 弹性大但业绩薄，波动剧烈</td></tr>
+    <tr><td>下游-应用集成</td><td class="c">商业服务/工业场景</td><td class="c">天娱数科（涨停）、达实智能（涨停）、大丰实业（涨停）</td><td class="c">★★☆ 王兴兴：商业服务落地将快于家庭/工业</td></tr>
+  </tbody>
+</table>
+
+<h3 class="sub">8.3 行业投资结论</h3>
+<div class="note"><b>周期阶段判断：</b>人形机器人正处于"0→1产业化拐点"的确认期——G1累计下线1-2万台验证规模化交付能力，具身智能销售额+22.6%验证需求真实存在，通用大模型（GPT-6 Astra）开始分担"大脑"研发压力，使硬件能力（减速器/执行器/传感器）重新成为产业瓶颈与价值高地。这是"机器人版ChatGPT时刻"的前夜，王兴兴给出的时间表是1-2年。<br><b>配置优先级：</b>①核心零部件（减速器/丝杠，量价齐升+国产替代确定性最高）＞②感知层（机器视觉/传感器，弹性大）＞③整机（估值锚已立但PE 460倍，波动极大）＞④数据/仿真与应用（主题属性强）。<br><b>对产品池的映射：</b>池内无纯机器人主题基金，通过永赢科技智选（022364，科技成长主动管理）、易方达科技先锋（025918，AI产业链）间接参与是更稳妥的路径；激进客户可用小仓位关注机械设备方向的指数基金。</div>
+<div class="warn"><b>风险提示：</b>①概念周涨26%后短期情绪过热，周五批量涨停是高潮特征，追高回撤风险大（历史上类似强度主题次周分化概率高）；②整机环节估值极高（宇树PE 460倍），对利率与情绪极度敏感；③产业化时间表（1-2年）若不及预期，主题将回归业绩验证；④特斯拉Optimus交付节奏、国产大模型进展是两大外部变量。</div>
+
+<!-- ================= 九、国内流动性 ================= -->
+<h2 class="sec">九、国内流动性</h2>
+<h3 class="sub">9.1 政策利率与央行动向</h3>
+<table>
+  <thead><tr><th>事项</th><th>内容</th><th>解读</th></tr></thead>
+  <tbody>
+    <tr><td>10月LPR（10/20）</td><td class="c">1年期3.00%、5年期以上3.50%，连续17个月不变</td><td class="c">定价锚（7天逆回购利率）稳定+三季度GDP回升，本次按兵不动符合预期；若后续经济再现下行压力，央行仍可能通过下调逆回购利率引导LPR跟进</td></tr>
+    <tr><td>贷款利率定价基准改革</td><td class="c">潘功胜金融街论坛演讲提出</td><td class="c">推动贷款利率定价基准多元化（DR基准方向），属于利率市场化机制改革，短期不直接影响息口，中长期利好债市定价效率</td></tr>
+    <tr><td>公开市场操作（10/23）</td><td class="c">7天逆回购操作量为零</td><td class="c">资金面自发充裕，央行无对冲必要；下周税期（26-28日）或重启投放</td></tr>
+    <tr><td>证监会动向（10/19）</td><td class="c">同意首批18只主动ETF注册，10/23起集中发行</td><td class="c">吴清表态"警惕跨境跨市场跨行业风险传导"+引入增量资金，监管呵护态度明确</td></tr>
+  </tbody>
+</table>
+
+<h3 class="sub">9.2 资金利率走势</h3>
+<table>
+  <thead><tr><th>指标</th><th>数值(10/23)</th><th>变动</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td>隔夜Shibor</td><td class="c">1.2710%</td><td class="c">+0.98bp</td><td class="c">仍处历史低位区</td></tr>
+    <tr><td>1个月Shibor</td><td class="c">1.3820%</td><td class="c">-0.28bp</td><td class="c">跨月资金平稳</td></tr>
+    <tr><td>10Y国债收益率</td><td class="c">1.64%</td><td class="c">周内基本持平</td><td class="c">股市深V未扰动债市，股债跷跷板弱化</td></tr>
+    <tr><td>10Y国债期货收益率</td><td class="c">1.4562%（T2612）</td><td class="c">+0.37bp</td><td class="c">期债窄幅震荡</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>一句话流动性判断：</b>资金面延续"量稳价低"——LPR按兵不动、央行零投放但资金利率仍处低位，说明银行间流动性自发充裕。下周关注点：①税期（10/26-28日）集中缴税或阶段性抽水，看央行对冲节奏；②跨月后11月初的存单到期压力。对固收+产品而言，债券底仓环境依然友好，低波策略的票息基础没有变化。</div>
+
+<!-- ================= 十、配置建议 ================= -->
+<h2 class="sec">十、配置建议：进攻-平衡-防守三层架构</h2>
+<div class="note">基于"GDP超预期+深V反转+底部区间确认中+行业剧烈轮动"的市场特征，本周配置从上周的"纯防守"微调为"防守反击"：防御层小幅下调5个百分点至45%，进攻层上调至20%，卡位机器人/AI景气主线。<b>本节推荐产品全部选自分行重点基金产品池，并标注与前文分析章节的对应逻辑，便于理财经理讲清"为什么配它"。</b>防御层迎来新首发主力：<b>华夏智鑫债券（A类029479/C类029480）10月26日（周一）起发售</b>——二级债基（R2中低风险），固收端主投债券资产打底，权益端不超30%且定位偏防御，通过AI量化辅助选股、聚焦高股息低波红利资产；拟任基金经理郝彬（北大计算机硕士+数学学士，9年证券从业），同类型代表作华夏泰兴混合A近3年最大回撤仅-1.33%。</div>
+
+<h3 class="sub">10.1 仓位分配</h3>
+<div class="alloc">
+  <div class="blk r">进攻仓位<div class="p">20% 较上周↑5%</div><div class="d">底部信号增强，卡位景气主线</div></div>
+  <div class="blk y">均衡仓位<div class="p">35% 持平</div><div class="d">红利回调后+宽基指增</div></div>
+  <div class="blk g">防御仓位<div class="p">45% 较上周↓5%</div><div class="d">固收+仍是压舱石</div></div>
+</div>
+
+<h3 class="sub">10.2 进攻层基金配置（20%仓位）</h3>
+<p style="color:#666; margin:2px 0 4px;">卡位机器人/物理AI产业主线，黄金回调后重现配置价值</p>
+<table>
+  <thead><tr><th>基金代码</th><th>基金名称</th><th>类型</th><th>核心特点</th><th>对应章节逻辑</th><th>本周调整</th></tr></thead>
+  <tbody>
+    <tr><td class="c">A类025918<br>C类025919</td><td class="c">易方达科技先锋</td><td class="c">Smart Beta/成长</td><td class="c">聚焦半导体设备+AI产业链</td><td class="c">八节：物理AI主线中"有业绩兑现"的方向；7.2价量钱验证</td><td class="c">维持</td></tr>
+    <tr><td class="c">A类022364<br>C类022365</td><td class="c"><span class="new-tag">【新增】</span>永赢科技智选</td><td class="c">主动权益/科技</td><td class="c">科技成长主动选股，捕捉机器人/AI主线弹性</td><td class="c">7.1-7.3：机械设备"价涨钱进"真主线+风格切换至景气成长</td><td class="c">新增配置</td></tr>
+    <tr><td class="c">A类002610<br>C类002611</td><td class="c">博时黄金ETF联接</td><td class="c">商品/避险</td><td class="c">黄金对冲尾部风险</td><td class="c">2.2：黄金周跌约4%至4039.8$，回调后配置价值重现；十二节中东油价风险对冲</td><td class="c">回调加仓</td></tr>
+  </tbody>
+</table>
+
+<h3 class="sub">10.3 平衡层基金配置（35%仓位）</h3>
+<p style="color:#666; margin:2px 0 4px;">红利回调后更便宜+宽基指增契合小盘强势</p>
+<table>
+  <thead><tr><th>基金代码</th><th>基金名称</th><th>类型</th><th>核心特点</th><th>对应章节逻辑</th><th>本周调整</th></tr></thead>
+  <tbody>
+    <tr><td class="c">A类023806<br>C类023807</td><td class="c">招商红利量化选股</td><td class="c">主动权益/价值</td><td class="c">量化红利策略，银行/煤炭/石化</td><td class="c">7.3：红利风格短期退潮但估值更便宜，回调恰是加仓窗口</td><td class="c">逢低加仓</td></tr>
+    <tr><td class="c">A类519702<br>C类013430</td><td class="c">交银趋势优先</td><td class="c">主动权益/价值</td><td class="c">深度价值，回撤控制出色</td><td class="c">6.1：价值风格估值安全垫充足，攻守兼备</td><td class="c">维持</td></tr>
+    <tr><td class="c">A类022485<br>C类022486</td><td class="c">国金中证A500指数增强</td><td class="c">指数增强/大盘</td><td class="c">核心资产β+超额收益</td><td class="c">5.1宽基ETF放量护盘+6.1估值处过去一年41.5%分位的底部区间</td><td class="c">维持</td></tr>
+    <tr><td class="c">A类001556<br>C类001557</td><td class="c"><span class="new-tag">【新增】</span>天弘中证500指数增强</td><td class="c">指数增强/中小盘</td><td class="c">中小盘风格，契合本周风格切换</td><td class="c">7.3：中证500周涨0.62%显著强于沪深300，小盘占优</td><td class="c">新增配置</td></tr>
+    <tr><td class="c">A类021971<br>C类021972</td><td class="c">南方港股通央企红利ETF联接</td><td class="c">港股/红利</td><td class="c">港股央企高股息，估值洼地</td><td class="c">2.4：港股周跌4.5%后估值更具吸引力，周五已现反弹</td><td class="c">逢低关注</td></tr>
+  </tbody>
+</table>
+
+<h3 class="sub">10.4 防守层基金配置（45%仓位）</h3>
+<p style="color:#666; margin:2px 0 4px;">利率低位+波动加大，低波固收+承接稳健理财刚需</p>
+<table>
+  <thead><tr><th>基金代码</th><th>基金名称</th><th>类型</th><th>核心特点</th><th>对应章节逻辑</th><th>本周调整</th></tr></thead>
+  <tbody>
+    <tr><td class="c">A类029479<br>C类029480</td><td class="c"><span class="new-tag">【首发 10/26起】</span><br>华夏智鑫债券</td><td class="c">二级债基（R2中低风险）</td><td class="c">固收端70-80%主投债券打底，把握中长端利率债波段；权益端不超30%偏防御，AI量化选股聚焦高股息低波红利+高成长资产；经理郝彬代表作华夏泰兴混合A近3年最大回撤-1.33%</td><td class="c">2.1 LPR按兵不动+9.2资金面充裕→债券底仓环境友好；7.3红利回调后更便宜→契合其权益端红利选股方向</td><td class="c">首发主推</td></tr>
+    <tr><td class="c">A类009766<br>C类009767</td><td class="c">安信平稳双利3个月持有</td><td class="c">极低波固收+</td><td class="c">价值风格，5%权益仓位上限；目标回撤1-1.5%，持有半年正收益概率100%，目标收益2-2.5%</td><td class="c">极低波承接纯债替代需求，适合极度保守客户；与华夏智鑫形成"更低波"互补</td><td class="c">主推</td></tr>
+    <tr><td class="c">A类011109<br>C类011110</td><td class="c">南方晖元6个月持有</td><td class="c">低波固收+</td><td class="c">成长风格固收+，5-10%权益仓位，目标回撤1.5-2%</td><td class="c">9.2资金面充裕+1.4底部区间：小幅权益仓位可参与修复行情而不放大回撤</td><td class="c">主推</td></tr>
+    <tr><td class="c">I类001806<br>E类001807</td><td class="c">易方达瑞智</td><td class="c">稳健固收+</td><td class="c">平衡风格，5-12%权益，回撤极小</td><td class="c">4.4市场宽度修复：固收+底仓参与反弹的稳妥工具</td><td class="c">维持</td></tr>
+    <tr><td class="c">A类010870<br>C类017957</td><td class="c">汇添富稳健鑫添益六个月</td><td class="c">低波固收+</td><td class="c">均衡偏成长，5-10%权益</td><td class="c">十一节基准情景（55%概率震荡上行）下的底仓型配置</td><td class="c">维持</td></tr>
+  </tbody>
+</table>
+
+<h3 class="sub">10.5 对客营销话术</h3>
+<p style="margin:6px 0 2px;"><b>① 底部区间+数据验证</b></p>
+<div class="green">"这周市场走出深V反转——周五上证指数盘中跌破3600点后强势收复，成交放大到近2万亿，超4500只股票上涨。更重要的是基本面在配合：三季度GDP增长4.5%超预期，多家券商判断市场已进入底部区间。调整接近尾声的时候，恰恰是该布局而不是离场的时候。"</div>
+<p style="margin:6px 0 2px;"><b>② 机构资金在买什么</b></p>
+<div class="green">"这轮反弹和散户行情不一样：周五宽基ETF集体放量，创业板ETF单日成交195亿创一年新高；宇树科技涨停是机构席位净买入2.4亿主导的。10月以来还有291家上市公司回购了169亿。机构、产业资本、护盘资金三路资金都在底部区域行动。"</div>
+<p style="margin:6px 0 2px;"><b>③ 产业趋势：机器人不是概念是订单</b></p>
+<div class="green">"人形机器人这周大涨背后有硬数据：宇树的G1已经下线1-2万台，是全球最畅销的人形机器人；商务部统计前三季度具身智能机器人销售额增长22.6%。特斯拉说明年末Optimus有望对外交付。这个方向值得关注，但短期涨幅很大，我们建议通过科技类基金小仓位参与，而不是追单一个股。"</div>
+<p style="margin:6px 0 2px;"><b>④ 哑铃策略攻守兼备</b></p>
+<div class="green">"当前轮动非常快，单押一个方向容易两头挨打。我们推荐「红利底仓+景气成长」的哑铃：一端用招商红利量化选股这类高股息产品做底仓（红利板块这周回调后反而更便宜了），另一端用永赢科技智选、易方达科技先锋小仓位跟产业趋势。45%防御+35%均衡+20%进攻，进可攻退可守。"</div>
+<p style="margin:6px 0 2px;"><b>⑤ 新首发：会"智能控回撤"的二级债（华夏智鑫）</b></p>
+<div class="green">"下周一（10月26日）有一只特别适合当前市场的新基金开始发售——华夏智鑫债券（A类029479/C类029480）。它是一只二级债基：大部分仓位（七到八成）投债券打底，争取稳定的票息和利率债波段收益；不超过三成的权益仓位用AI量化模型辅助选股，专挑高股息、低波动的红利资产，所以叫'智能控回撤'。拟任基金经理郝彬是北大计算机硕士，同类型代表作华夏泰兴混合A近三年最大回撤只有1.33%。R2中低风险，'牛市可进攻、震荡市能守'——想参与底部布局又怕波动的客户，这只正好。"</div>
+
+<!-- ================= 十一、情景推演 ================= -->
+<h2 class="sec">十一、情景推演</h2>
+<h3 class="sub" style="color:#2c6e2c;">[绿] 乐观情景（概率30%）：V型反转延续</h3>
+<div class="note"><b>触发条件：</b>FOMC按兵不动且沃什表态偏鸽+三季报收官业绩整体平稳+成交站稳1.8万亿上方+两融回流<br><b>路径：</b>上证放量突破3735-3744缺口压力带，挑战3800；机器人主线分歧后继续走强，成长风格全面修复<br><b>操作建议：</b>进攻仓位提升至25-30%，加仓机器人/AI景气方向（产品池：永赢科技智选、易方达科技先锋），均衡层的中证500指增受益。</div>
+<h3 class="sub" style="color:#8a5a00;">[黄] 基准情景（概率55%）：底部区域震荡夯实</h3>
+<div class="warn"><b>触发条件：</b>FOMC如期按兵不动但12月加息预期压制风险偏好+三季报分化+税期资金面小幅收紧<br><b>路径：</b>上证在3600-3735区间反复拉锯，回踩确认3660-3680支撑，板块快速轮动，成交1.5-1.8万亿<br><b>操作建议：</b>维持"防守反击"配置不变，回踩不破3660则逢跌分批加仓；红利回调窗口耐心吸筹，机器人方向分歧日低吸而非追高。</div>
+<h3 class="sub" style="color:#a52a2a;">[红] 悲观情景（概率15%）：二次探底</h3>
+<div class="warn" style="background:#fbe4e4; border-color:#e3b8b8;"><b>触发条件：</b>FOMC意外加息或沃什鹰派超预期+中东冲突升级油价站稳100美元上方+三季报收官业绩变脸集中爆发<br><b>路径：</b>上证再试3574低点甚至击穿，主题股高位补跌，防御风格重新占优<br><b>操作建议：</b>进攻仓位降回10-15%，防御层回升至55%（主推华夏智鑫、安信平稳双利），黄金仓位保留作为尾部风险对冲，等待3574得失的明确信号。</div>
+
+<!-- ================= 十二、风险提示 ================= -->
+<h2 class="sec">十二、风险提示（概率×影响矩阵）</h2>
+<table>
+  <thead><tr><th style="width:13%">概率×影响</th><th>风险内容</th><th style="width:30%">客户组合应对</th></tr></thead>
+  <tbody>
+    <tr><td style="color:#a52a2a;" class="c"><b>高概率×高影响</b></td><td><b>FOMC鹰派信号（10/27-28）</b> 10月按兵不动概率90.6%，但路透调查100位经济学家全部预期12月加息。若沃什发布会强化12月加息指引，全球成长股将再度承压。</td><td class="c">会前控制追涨节奏，科技仓位严格≤20%；决议公布前不做大额申购动作</td></tr>
+    <tr><td style="color:#c0392b;" class="c"><b>中概率×高影响</b></td><td><b>中东冲突升级→油价站稳100$</b> 沙特遇袭+霍尔木兹商船事件，WTI盘中已触100$，布伦特109$创五个月新高。油价失控将重燃全球通胀与加息预期。</td><td class="c">黄金仓位继续持有作为尾部对冲；不追涨原油类主题产品</td></tr>
+    <tr><td style="color:#b8860b;" class="c"><b>中概率×中影响</b></td><td><b>主题情绪过热后剧烈分化</b> 物理AI概念周涨26%+周五批量涨停，情绪高潮特征明显；历史上此类强度主题次周分化概率高，追高资金可能短期被套。</td><td class="c">引导客户通过科技类底仓型基金间接参与，严禁推荐追高主题个股；进攻层内部设置止盈纪律</td></tr>
+    <tr><td style="color:#b8860b;" class="c"><b>中概率×中影响</b></td><td><b>三季报收官业绩变脸（10/31截止）</b> 宁德时代式"增收不增利"个案若扩散，白马股仍可能二次出清；电池链毛利率拐点未现。</td><td class="c">回避单一电池/新能源主题集中敞口；权益以宽基+红利为主</td></tr>
+    <tr><td style="color:#2c6e2c;" class="c"><b>低概率×中影响</b></td><td><b>税期资金面收紧（10/26-28）</b> 集中缴税+月末效应可能阶段性推高资金利率，若央行对冲不及时将压制市场情绪。</td><td class="c">固收+产品不受影响，反而凸显防御层价值</td></tr>
+    <tr><td style="color:#2c6e2c;" class="c"><b>低概率×高影响</b></td><td><b>美股财报季龙头股暴雷</b> 高盛警示美股行情高度集中于少数龙头股，若AI资本开支回报遭质疑引发美股科技股大跌，将传导至A股成长板块。</td><td class="c">港股/美股敞口控制在均衡层内，不单独加仓QDII科技产品</td></tr>
+  </tbody>
+</table>
+<div class="warn"><b>风险综合判断：</b>本周核心风险从"外部利率冲击"切换为"内部结构风险"——底部区间判断的置信度在提高，但主题过热分化+三季报收官变脸是两个近在眼前的扰动。最大的外部变量是下周FOMC的12月加息指引。建议理财经理对客户统一口径：底部区域可以布局，但要用"底仓型产品+分批买入"的方式，而不是一次性重仓。</div>
+
+<!-- ================= 十三、跨资产周度表现对比 ================= -->
+<h2 class="sec">十三、跨资产周度表现对比</h2>
+<table>
+  <thead><tr><th>资产类别</th><th>品种</th><th>最新价</th><th>本周涨跌</th><th>核心驱动</th></tr></thead>
+  <tbody>
+    <tr><td>股票</td><td class="c">上证指数</td><td class="c">3,690.48</td><td class="c">↓ -0.69%</td><td class="c">深V反转，3574低点失而复得3600</td></tr>
+    <tr><td>股票</td><td class="c">标普500</td><td class="c">7,623.67</td><td class="c">↓ 约-0.5%</td><td class="c">FOMC前观望，财报季分化</td></tr>
+    <tr><td>股票</td><td class="c">恒生指数</td><td class="c">23,093.37</td><td class="c">↓ 约-4.5%</td><td class="c">宁德时代H股拖累，周五反弹+0.69%</td></tr>
+    <tr><td>债券</td><td class="c">10Y中国国债</td><td class="c">1.64%</td><td class="c">→ 基本持平</td><td class="c">LPR不变+资金面充裕，债市平稳</td></tr>
+    <tr><td>债券</td><td class="c">10Y美债</td><td class="c">4.96%</td><td class="c">↓ 约-17bp</td><td class="c">避险买盘涌入，创9月16日以来新低</td></tr>
+    <tr><td>商品</td><td class="c">WTI原油</td><td class="c">98.67$</td><td class="c">↑ 周涨明显</td><td class="c">中东冲突升级，盘中触及100$关口</td></tr>
+    <tr><td>商品</td><td class="c">COMEX黄金</td><td class="c">4,039.8$</td><td class="c">↓ 约-4%</td><td class="c">获利回吐+加息博弈；白银-6%以上至54.6$</td></tr>
+    <tr><td>汇率</td><td class="c">美元指数</td><td class="c">101.62</td><td class="c">→ 区间震荡</td><td class="c">高位滞涨，人民币压力缓和</td></tr>
+  </tbody>
+</table>
+<div class="note"><b>跨资产信号：</b>本周组合是"美债收益率大幅下行+美元滞涨+油价冲高+黄金回调"——美债下行缓解了全球风险资产的利率压制（利好A股周五反攻），但油价逼近100美元是新的通胀变量，黄金回调则是获利盘回吐与避险需求被美债分流的双重结果。对配置的含义：利率敏感的成长资产迎来喘息窗口，黄金回调后重现"逢低配置"价值，原油链条只看不追。</div>
+
+<!-- ================= 十四、下周关注与风险 ================= -->
+<h2 class="sec">十四、下周关注与风险</h2>
+<h3 class="sub">14.1 关键日历</h3>
+<ul class="tight">
+  <li><b>10月26日（周一）起</b> 华夏智鑫债券首发（A类029479/C类029480）| 关注点：防御层新主力，二级债基+AI量化选股，开门红销量动员；对客统一口径见10.5话术⑤</li>
+  <li><b>10月26-28日</b> 税期高峰 | 关注点：集中缴税对资金面的抽水效应，央行逆回购对冲节奏；跨月资金面波动</li>
+  <li><b>10月27-28日（美东）/北京时间29日凌晨</b> 美联储FOMC议息会议 | 关注点：维持不变概率90.6%，重点在沃什发布会的12月加息指引，鹰派强化将冲击全球成长股</li>
+  <li><b>10月下旬持续</b> 首批18只主动ETF集中发行 | 关注点：增量资金入场规模，监管呵护的制度性安排落地节奏</li>
+  <li><b>10月31日</b> 中国10月官方PMI | A股三季报披露截止 | 关注点：PMI能否延续改善；三季报收官日业绩变脸风险</li>
+  <li><b>全周跟踪</b> 机器人/物理AI主线分歧演化 | 关注点：概念周涨26%后的持续性，宇树等龙头分歧日承接力度；中东局势与油价100美元关口</li>
+</ul>
+<h3 class="sub">14.2 下周策略要点</h3>
+<div class="note"><b>对理财经理的三句话：</b>①底部区间判断不变，但FOMC前（周二、周三）不建议做大额申购引导，等决议落地；②若上证回踩3660-3680不破，是分批加仓的右侧确认点，对应主推宽基指增与红利；③机器人主线只通过池内科技类基金间接参与，任何客户提出追机器人个股/主题ETF的需求，统一引导至"底仓型产品+小仓位"框架。</div>
+
+<div class="disclaimer">
+  <p><b>风险提示及免责声明</b></p>
+  <p>本报告仅供内部投研参考，不构成任何投资建议。基金投资有风险，基金的过往业绩并不预示其未来表现。投资者应根据自身风险承受能力审慎做出投资决策，任何投资收益和本报告观点均不代表对未来表现的承诺或保证。本报告数据来源于公开市场信息，力求准确但不保证其完整性和及时性。未经授权，请勿对外传播。</p>
+  <p>数据来源：Wind、东方财富、同花顺iFinD、国家统计局、财新、财联社、证券时报、中国货币网、中国证券报、源达证券策略周报、东吴证券、CME FedWatch、路透社 | 产品信息来源：分行10月重点基金产品清单 | 报告生成日期：2026年10月25日</p>
+</div>
+
+</body>
+</html>

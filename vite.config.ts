@@ -10,6 +10,8 @@ export default defineConfig({
     host: true,
     proxy: {
       "/api": "http://127.0.0.1:5175",
+      // 周报由后端托管；交给 Vite 的首页回退会在 iframe 中再次加载整个应用。
+      "/reports/": "http://127.0.0.1:5175",
     },
     watch: {
       // output/submission 是本地产物目录、data 是运行时 JSON 存储,应用源码不引用;

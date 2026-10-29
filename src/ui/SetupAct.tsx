@@ -6,7 +6,7 @@ import { DEFAULT_ROLE_CARD } from "../domain/role-card";
 import { PersonaAvatar } from "./PersonaAvatar";
 import { PersonaStep } from "./PersonaStep";
 import { UiIcon } from "./UiIcon";
-import { LogicRail } from "./TavernRail";
+import { ResearchDrawer } from "./ResearchDrawer";
 import "./frontend-lenses.css";
 
 export function SetupAct({
@@ -16,6 +16,7 @@ export function SetupAct({
   roles,
   onConnect,
   onCatalogChange,
+  onOpenFullReport,
   connectBusy,
 }: {
   api: ProductCore;
@@ -25,6 +26,7 @@ export function SetupAct({
   roles?: RoleCard[];
   onConnect: (personaId: string, roleId?: string) => void;
   onCatalogChange: () => void;
+  onOpenFullReport?: () => void;
   connectBusy: boolean;
 }) {
   const [seated, setSeated] = useState<Persona | null>(null);
@@ -211,10 +213,9 @@ export function SetupAct({
           </details>
         </div>
 
-        <details className="setup-reference">
-          <summary>桌边参考 · {selectedRole.name}的通话逻辑与本局参数</summary>
-          <LogicRail laws={selectedRole.callLogic} />
-        </details>
+        <div className="setup-research-dock">
+          <ResearchDrawer api={api} onOpenFullReport={onOpenFullReport} />
+        </div>
       </div>
       {customizing && (
         <PersonaStep

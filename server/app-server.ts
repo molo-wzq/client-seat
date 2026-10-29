@@ -5,6 +5,7 @@ import zlib from "node:zlib";
 import type { ProductCore } from "../src/domain/product-core";
 import { NotFoundError, ValidationError } from "../src/domain/product-core";
 import type { ConversationStartOptions, MaterialDraftPatch, PlayerObservation } from "../src/domain/types";
+import { loadCurrentResearchReport } from "./report-parser";
 
 /** 领域之外的 http 层错误:请求体超过大小上限,映射为 413。 */
 class BodyTooLargeError extends Error {}
@@ -153,6 +154,27 @@ export function createRequestListener(deps: {
       respondJson(res, 200, await core.saveRole(body));
       return;
     }
+    // 周度投研报告:返回最新一期 4 个即查分段结构化 JSON
+    if (req.method === "GET" && pathname === "/api/research/current") {
+      respondJson(res, 200, loadCurrentResearchReport(process.cwd()));
+      return;
+    }
+    // 周度投研报告下载:直接下载当期完整 14 章专业 HTML/PDF 文档
+    if (req.method === "GET" && pathname === "/api/research/download") {
+      const reportFile = path.join(process.cwd(), "data", "reports", "current-report.html");
+      if (!fs.existsSync(reportFile)) {
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("未找到当期周报文件");
+        return;
+      }
+      const filename = "weekly-investment-report-2026-10-23.html";
+      res.writeHead(200, {
+        "Content-Type": "text/html; charset=utf-8",
+        "Content-Disposition": `attachment; filename="${filename}"`,
+      });
+      fs.createReadStream(reportFile).pipe(res);
+      return;
+    }
     if (req.method === "GET" && pathname === "/api/conversations") {
       respondJson(res, 200, await core.listConversations());
       return;
@@ -280,6 +302,20 @@ function respondJson(
 }
 
 function serveStatic(req: http.IncomingMessage, res: http.ServerResponse, pathname: string, distDir: string): void {
+  // 周报静态托管:支持在 iframe 或新标签页直接查看完整报告
+  if (pathname.startsWith("/reports/")) {
+    const reportName = path.basename(pathname);
+    const reportFile = path.join(process.cwd(), "data", "reports", reportName === "weekly-report.html" ? "current-report.html" : reportName);
+    if (fs.existsSync(reportFile)) {
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      fs.createReadStream(reportFile).pipe(res);
+      return;
+    }
+    res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+    res.end("未找到投研周报");
+    return;
+  }
+
   const safePath = path.normalize(pathname).replace(/^([.][.][/\\])+/, "");
   let filePath = path.join(distDir, safePath);
   if (!filePath.startsWith(distDir)) filePath = path.join(distDir, "index.html");

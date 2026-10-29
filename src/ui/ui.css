@@ -3199,3 +3199,460 @@ button:active:not(:disabled) {
   color: var(--muted);
   letter-spacing: 0.04em;
 }
+
+/* ==========================================================================
+   周度投研弹药库与分段抽屉样式 (Research Drawer)
+   ========================================================================== */
+
+.setup-research-dock {
+  width: 100%;
+}
+
+.research-desk-panel {
+  background: var(--card-paper, #fdfbf7);
+  border: 3px double #857763;
+  border-radius: 8px;
+  padding: 12px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  color: var(--ink-black, #231d15);
+}
+
+.research-desk-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+  border-bottom: 1px solid rgba(133, 119, 99, 0.25);
+  padding-bottom: 8px;
+  margin-bottom: 6px;
+}
+
+.research-title-group h3 {
+  margin: 2px 0 0;
+  font-size: 15px;
+  color: var(--ink-black, #1c150f);
+  font-weight: 700;
+}
+
+.research-eyebrow {
+  font-size: 10px;
+  color: var(--felt-deep, #422d1d);
+  letter-spacing: 0.05em;
+  font-weight: 600;
+}
+
+.research-period {
+  font-size: 11px;
+  color: var(--muted, #6a7c6c);
+}
+
+.research-download-btn {
+  background: #3b2c1f;
+  color: #fff2db;
+  border: 1px solid #73573c;
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.research-download-btn:hover {
+  background: #543f2d;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+}
+
+.research-desk-caption {
+  font-size: 11px;
+  color: #73675a;
+  margin: 4px 0 10px;
+  line-height: 1.4;
+}
+
+.research-card-rack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.research-rack-card {
+  background: #ffffff;
+  border: 1px solid #d4c8b8;
+  border-left: 3px solid #8b5b29;
+  border-radius: 6px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  text-align: left;
+  width: 100%;
+}
+
+.research-rack-card:hover {
+  border-color: #8b5b29;
+  background: #faf6ef;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.08);
+}
+
+.research-rack-card.active {
+  border-color: #8b5b29;
+  background: #f5ece0;
+  border-left-width: 4px;
+}
+
+.rack-card-top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.rack-icon {
+  font-size: 14px;
+}
+
+.rack-card-top strong {
+  font-size: 12px;
+  color: #2b1f14;
+}
+
+.rack-badge {
+  margin-left: auto;
+  font-size: 10px;
+  background: #eedfa9;
+  color: #63471c;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+}
+
+.rack-desc {
+  display: block;
+  font-weight: 400;
+  font-size: 11px;
+  color: #615649;
+  line-height: 1.35;
+  margin: 0;
+}
+
+/* 侧拉抽屉遮罩与面板 */
+.drawer-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.45);
+  backdrop-filter: blur(2px);
+  z-index: 1000;
+  display: flex;
+  justify-content: flex-end;
+  animation: research-fade-in 240ms ease-out both;
+  overflow: hidden;
+}
+
+.drawer-panel {
+  width: 440px;
+  max-width: 90vw;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
+  background: #231c15;
+  color: #eedec8;
+  border-left: 3px solid #b87c3a;
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.6);
+  display: flex;
+  flex-direction: column;
+  animation: slideInRight 240ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.drawer-backdrop.closing { animation: research-fade-out 220ms ease-in both; }
+.drawer-backdrop.closing .drawer-panel { animation: research-slide-out 220ms ease-in both; }
+@keyframes research-fade-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes research-fade-out { to { opacity: 0; } }
+@keyframes research-slide-out { to { transform: translateX(100%); } }
+@media (prefers-reduced-motion: reduce) {
+  .drawer-backdrop, .drawer-panel,
+  .drawer-backdrop.closing, .drawer-backdrop.closing .drawer-panel { animation: none; }
+}
+.drawer-panel :is(button, a):focus-visible { outline: 2px solid #ffd88a; outline-offset: 3px; }
+.drawer-panel > :is(.drawer-header, .drawer-footer) { flex-shrink: 0; }
+
+@keyframes slideInRight {
+  from { transform: translateX(100%); }
+  to { transform: translateX(0); }
+}
+
+.drawer-header {
+  padding: 14px 18px;
+  background: #2d231a;
+  border-bottom: 1px solid #4a3a2c;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.drawer-header h4 {
+  margin: 0;
+  font-size: 15px;
+  color: #ffd88a;
+  font-weight: 700;
+}
+
+.close-drawer-btn {
+  background: transparent;
+  border: 1px solid #5a4635;
+  color: #d1bfa9;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+}
+
+.close-drawer-btn:hover {
+  background: #4a392b;
+  color: #ffffff;
+}
+
+.drawer-body {
+  min-height: 0;
+  overscroll-behavior: contain;
+  padding: 16px 18px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.drawer-callout {
+  background: #19130d;
+  border-left: 3px solid #d4af37;
+  padding: 10px 12px;
+  border-radius: 0 6px 6px 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #dfceb7;
+}
+
+.drawer-callout strong {
+  color: #ffd88a;
+}
+
+.drawer-cards-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drawer-script-card {
+  background: #1a140e;
+  border: 1px solid #473627;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.drawer-script-card header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.drawer-script-card strong {
+  color: #ffd88a;
+  font-size: 12px;
+}
+
+.drawer-card-tag {
+  background: #3a2b1c;
+  color: #e8c691;
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+
+.copy-btn {
+  margin-left: auto;
+  background: #4a3420;
+  color: #ffd88a;
+  border: 1px solid #735435;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.copy-btn:hover {
+  background: #61452a;
+}
+
+.copy-btn.mini {
+  padding: 1px 6px;
+  font-size: 10px;
+  margin-bottom: 4px;
+  display: block;
+}
+
+.sector-list, .watch-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.sector-list li {
+  background: #19130d;
+  padding: 6px 10px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sector-name {
+  font-weight: 600;
+  color: #eedec8;
+}
+
+.sector-change {
+  font-size: 11px;
+  font-weight: 700;
+  color: #a8947f;
+}
+
+.sector-change.positive {
+  color: #e06c53;
+}
+
+.sector-reason {
+  color: #9c8a77;
+  font-size: 11px;
+  margin-left: auto;
+}
+
+.pool-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.pool-item {
+  background: #1c150e;
+  border: 1px solid #4a3726;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.pool-item strong {
+  color: #ffd88a;
+  font-size: 12px;
+  display: block;
+}
+
+.pool-type {
+  font-size: 10px;
+  color: #ba9e7d;
+}
+
+.pool-highlight {
+  font-size: 11px;
+  color: #dfceb7;
+  margin: 4px 0 0;
+}
+
+.objections-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.objection-item {
+  background: #1a140e;
+  border: 1px solid #473627;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+.obj-q {
+  color: #ffd88a;
+  font-weight: 600;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.obj-a {
+  color: #e3d2be;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.drawer-footer {
+  padding: 12px 18px;
+  background: #1c150e;
+  border-top: 1px solid #3d2c1d;
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.drawer-action-btn {
+  flex: 1;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.drawer-action-btn.ghost {
+  background: #2b2016;
+  color: #ffd88a;
+  border-color: #5c442e;
+}
+
+.drawer-action-btn.ghost:hover {
+  background: #3d2e20;
+}
+
+.drawer-action-btn.primary {
+  background: #b87c3a;
+  color: #ffffff;
+}
+
+.drawer-action-btn.primary:hover {
+  background: #cf8c43;
+}
+
+.copy-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  background: #231c15;
+  color: #ffd88a;
+  border: 1px solid #b87c3a;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+  z-index: 1100;
+}

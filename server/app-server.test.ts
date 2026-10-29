@@ -32,7 +32,7 @@ async function request(apiPath: string, method = "GET", body?: unknown) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const json = (await response.json().catch(() => null)) as { error?: string } | null;
-  return { status: response.status, json };
+  return { status: response.status, json, headers: response.headers };
 }
 
 describe("http 契约:成功与业务错误码", () => {
@@ -301,5 +301,48 @@ describe("经理角色路由", () => {
       roleId: "role-nobody",
     });
     expect(missing.status).toBe(404);
+  });
+});
+
+describe("周度投研报告路由", () => {
+  it("GET /api/research/current 返回当前 4 个即查分段", async () => {
+    const res = await request("/api/research/current");
+    expect(res.status).toBe(200);
+    const report = res.json as {
+      id: string;
+      sections: {
+        macro: { headline: string };
+        sector: { leadingSectors: unknown[] };
+        product: { allocationAdvice: unknown };
+        risk: { objections: unknown[] };
+      };
+    };
+    expect(report.id).toBeTruthy();
+    expect(report.sections.macro.headline).toContain("底部区间");
+    expect(report.sections.sector.leadingSectors).toBeDefined();
+    expect(report.sections.product.allocationAdvice).toBeDefined();
+    expect(report.sections.risk.objections).toBeDefined();
+  });
+
+  it("GET /api/research/download 响应为周报文件下载", async () => {
+    const res = await request("/api/research/download");
+    expect(res.status).toBe(200);
+    const disposition = res.headers.get("content-disposition") ?? "";
+    expect(disposition).toContain("attachment");
+    expect(disposition).toContain("weekly-investment-report");
+  });
+
+  it("周报预览返回独立报告，不加载应用首页", async () => {
+    const res = await fetch(`${base}/reports/weekly-report.html`);
+    const html = await res.text();
+    expect(res.status).toBe(200);
+    expect(html).toContain("周度投研分析报告");
+    expect(html).not.toMatch(/\/@vite\/client|\/src\/main\.tsx|id="root"/);
+  });
+
+  it("缺失的周报返回 404，不回退到应用首页", async () => {
+    const res = await fetch(`${base}/reports/missing-report.html`);
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("未找到投研周报");
   });
 });
