@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { MAX_MANAGER_TURNS } from "../domain/product-core";
-import type { Conversation, ConversationResult, FeelingStamp, Persona, StrategyCard } from "../domain/types";
-import { FEELING_STAMP_META } from "../domain/types";
+import type { Conversation, ConversationResult, Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { CallStep } from "./CallStep";
 import { UiIcon } from "./UiIcon";
@@ -9,7 +8,6 @@ import { PersonaAvatar } from "./PersonaAvatar";
 import { StrategyRail } from "./TavernRail";
 import { ProductFacts } from "./ProductFacts";
 import { SEED_PRODUCT_CARD } from "../domain/seed";
-import { ObservationNotebook } from './ObservationNotebook';
 
 export function TableAct({
   api,
@@ -34,8 +32,6 @@ export function TableAct({
   const activeCardId = lastManager?.usedCardId;
   const currentGoal = lastManager?.currentGoal;
   const snapshotPersona = conversation?.resources?.persona ?? persona;
-  const notebookEnabled = typeof api.saveObservation === 'function';
-  const explanationRevealed = !notebookEnabled || !lastManager || conversation?.observations?.some((note) => note.managerTurnNumber === lastManager.number && note.revealed);
   const remaining = Math.max(0, MAX_MANAGER_TURNS - managerTurnCount);
   const [profileOpen, setProfileOpen] = useState(() => !window.matchMedia?.("(max-width: 820px)").matches);
   useEffect(() => {
@@ -86,31 +82,17 @@ export function TableAct({
               {!conversation?.productFacts && <p className="hint">旧记录未保存当时参数，以下按当前默认参数查看。</p>}
               <ProductFacts product={conversation?.productFacts ?? SEED_PRODUCT_CARD} />
             </details>
-            {lastManager?.factCheckNotes?.length ? <details className="live-fact-notes">
-              <summary>本轮事实核对 · {lastManager.factCheckNotes.length} 条候选</summary>
-              <ul>{lastManager.factCheckNotes.map((note, index) => <li key={index}>{note}</li>)}</ul>
-              <span>请对照参数核实；匹配到卡不表示事实正确。</span>
-            </details> : null}
           </aside>
           <ol className="call-track" aria-label="通话轨道">
-            {Array.from({ length: MAX_MANAGER_TURNS }, (_, i) => {
-              const managerTurn = i < managerTurnCount ? managerTurns[i] : undefined;
-              const feeling: FeelingStamp | undefined = managerTurn
-                ? conversation?.observations?.find((note) => note.managerTurnNumber === managerTurn.number)?.feeling
-                : undefined;
-              const feelingMeta = feeling ? FEELING_STAMP_META[feeling] : undefined;
-              return (
-                <li
-                  key={i}
-                  className={`track-cell${i < managerTurnCount ? " passed" : ""}${feeling ? " has-feeling" : ""}`}
-                  aria-current={i === managerTurnCount - 1 ? "step" : undefined}
-                  title={feelingMeta ? `你盖的体感戳:${feelingMeta.label}` : undefined}
-                >
-                  {i + 1}
-                  {feelingMeta && <span className="track-feeling" data-feeling={feeling} aria-hidden="true">{feelingMeta.seal}</span>}
-                </li>
-              );
-            })}
+            {Array.from({ length: MAX_MANAGER_TURNS }, (_, i) => (
+              <li
+                key={i}
+                className={`track-cell${i < managerTurnCount ? " passed" : ""}`}
+                aria-current={i === managerTurnCount - 1 ? "step" : undefined}
+              >
+                {i + 1}
+              </li>
+            ))}
           </ol>
           <p className={`track-guidance${remaining <= 3 ? " near-end" : ""}`} aria-live="polite">
             {conversation?.status === "ended"
@@ -123,9 +105,7 @@ export function TableAct({
             onFinished={onFinished}
             onConversationChange={onConversationChange}
           />
-          {notebookEnabled && conversation && lastManager && <ObservationNotebook api={api} conversation={conversation} turn={lastManager} onSaved={onConversationChange} />}
         </div>
-        {explanationRevealed ?
         <StrategyRail
           cards={conversation?.resources?.cards ?? publishedCards}
           activeCardId={activeCardId}
@@ -135,7 +115,6 @@ export function TableAct({
           hasManagerTurn={Boolean(lastManager)}
           slam={null}
         />
-        : <aside className="strategy-board tavern-rail"><h3>本轮解释暂时收起</h3><p>先用原话作一次判断，或选择“先查看解释”。回复客户不需要先填写观察。</p></aside>}
       </div>
     </section>
   );
