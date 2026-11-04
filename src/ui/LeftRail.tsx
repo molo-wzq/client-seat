@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import logoMark from "../assets/brand/logo-mark.png";
 import { UiIcon } from "./UiIcon";
 import { setSfxEnabled, sfxEnabled } from "./game-feel";
 
@@ -44,7 +45,10 @@ export function LeftRail({
   return (
     <aside className="left-rail" aria-label="对练导航">
       <div className="app-header">
-        <span className="brand-mark" aria-hidden="true">客户经营 · 情景对练</span>
+        <span className="brand-mark" aria-hidden="true">
+          <img className="brand-logo" src={logoMark} alt="" />
+          客户经营 · 情景对练
+        </span>
         <h1>理财经理<br />电话牌桌</h1>
         <p>用游戏化的方式，让每一次电话都更有价值。</p>
       </div>
