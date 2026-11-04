@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Conversation, Material, Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
+import type { RoleCard } from "../domain/role-card";
 import { MaterialStep } from "./MaterialStep";
 import { CardArt } from "./CardArt";
 
@@ -92,6 +93,101 @@ export function CardsView({ cards }: { cards: StrategyCard[] }) {
   );
 }
 
+/**
+ * 经理角色卡列表:一整套打法(人设、钱规律、通话规则、示范话术、尾部提醒)
+ * 随卡携带,行内创建、更换、流通——导出 JSON 发给同事,导入即用。
+ */
+export function RolesView({
+  api,
+  roles,
+  onRolesChange,
+}: {
+  api: ProductCore;
+  roles: RoleCard[];
+  onRolesChange: () => void;
+}) {
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const canImport = typeof api.saveRole === "function";
+
+  function exportRole(role: RoleCard) {
+    const blob = new Blob([JSON.stringify(role, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `经理角色-${role.name}.json`;
+    anchor.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function importRole(file: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      const parsed: unknown = JSON.parse(await file.text());
+      await api.saveRole(parsed);
+      onRolesChange();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="act" aria-labelledby="roles-title">
+      <span className="act-kicker">可更换的打法体系</span>
+      <h2 id="roles-title">经理角色</h2>
+      <p className="hint">布置幕选谁上桌,谁的人设、规律、规则与示范话术就随局生效;开局后按当时的卡快照复盘。</p>
+      {error && <p role="alert">{error}</p>}
+      <div className="cards">
+        {roles.map((role) => (
+          <article key={role.id} className="card">
+            <header>
+              <strong>{role.name}</strong>
+              <span className="badge">{role.tags.join("·") || "自定义"}</span>
+            </header>
+            <p className="hint">
+              {role.callLogic.length} 条钱规律 · {role.rules.length} 条通话规则 · v{role.characterVersion}
+            </p>
+            {role.personality && <p className="hint">{role.personality}</p>}
+            <details>
+              <summary>看这套打法</summary>
+              <p className="hint">{role.callLogicIntro}</p>
+              <ul>
+                {role.callLogic.map((law) => (
+                  <li key={law.key}>{law.name} — {law.law}</li>
+                ))}
+              </ul>
+              <p className="hint">示范开场:{role.firstMes}</p>
+            </details>
+            <div className="actions">
+              <button type="button" className="ghost" onClick={() => exportRole(role)}>导出 JSON</button>
+            </div>
+          </article>
+        ))}
+      </div>
+      {canImport && (
+        <div className="actions">
+          <label className="ghost import-role">
+            导入角色卡 JSON
+            <input
+              type="file"
+              accept="application/json,.json"
+              disabled={busy}
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void importRole(file);
+                event.target.value = "";
+              }}
+            />
+          </label>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function HistoryView({
   conversations,
   personas,
@@ -162,6 +258,51 @@ export function HistoryView({
           {rows.length > limit && <button type="button" className="ghost" onClick={() => setLimit((current) => current + 12)}>显示更多记录（还有 {rows.length - limit} 通）</button>}
         </>
       )}
+    </section>
+  );
+}
+
+/**
+ * 完整投研周报浏览视图:
+ * 在线浏览 14 章专业研报，支持一键下载完整 HTML/PDF 文件。
+ */
+export function ResearchReportView() {
+  function downloadFullReport() {
+    window.open("/api/research/download", "_blank");
+  }
+
+  return (
+    <section className="act" aria-labelledby="research-title">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <div>
+          <span className="act-kicker">分行投研周报</span>
+          <h2 id="research-title">周度投研分析报告 (2026年第42周)</h2>
+          <p className="hint">覆盖宏观仪表盘、A股全景、行业轮动、机构估值、精选公募池与下周展望。</p>
+        </div>
+        <button
+          type="button"
+          onClick={downloadFullReport}
+          style={{
+            background: "#d4af37",
+            color: "#1c261e",
+            fontWeight: "bold",
+            padding: "8px 16px",
+            borderRadius: "6px",
+            border: "none",
+            cursor: "pointer",
+          }}
+        >
+          📥 下载完整周报 (HTML)
+        </button>
+      </div>
+
+      <div style={{ marginTop: "16px", border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden", background: "#fff", height: "780px" }}>
+        <iframe
+          src="/reports/weekly-report.html"
+          title="周度投研分析报告全文"
+          style={{ width: "100%", height: "100%", border: "none" }}
+        />
+      </div>
     </section>
   );
 }

@@ -57,4 +57,11 @@
 // 默认关——作为 assistant 真实轮次被模型照抄出「听得到吗?」双问句(2/9);
 // 新增 LLM_MANAGER_NO_THINKING=1 实验开关(话术调用 thinking=disabled,8/9,
 // 质量接近、延迟略降),默认关。手册中绕过模型安全的手段(L1–L6)不采用。
-export const PROMPT_VERSION = "p15";
+// p16(2026-10-28,角色卡化):经理整套打法(人设、钱规律、通话规则、示范轮、
+// 尾部提醒)从硬编码搬进角色卡数据,默认卡(小王)渲染输出与 p15 逐字等价;
+// 开局快照所选角色进 resources.role,裁判归因与桌边卡面改读快照;新增经理
+// 角色选择与 JSON 导入导出、种子卡「稳重型老陈」。同时新增检索注入实验
+// LLM_CARD_RETRIEVAL=1:按客户最近发言的字面触发词(triggerKeywords)决定
+// 哪些已发布策略卡上桌,无触发词的卡常驻;开启时经理轮落库 injectedCardIds,
+// 默认关(全量注入不变)。
+export const PROMPT_VERSION = "p16";

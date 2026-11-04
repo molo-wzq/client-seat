@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { App } from '../App';
@@ -9,7 +9,7 @@ import { ObservationNotebook } from './ObservationNotebook';
 import type { ProductCore } from '../domain/product-core';
 
 describe('完整的玩家判断与分支操作', () => {
-  it('观察先于解释、保存到复盘，并能从关键轮打开独立分支', async () => {
+  it('对局不再拦解释，复盘时补盖体感，并能从关键轮打开独立分支', async () => {
     const user = userEvent.setup();
     const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
     render(<App api={api} />);
@@ -17,18 +17,16 @@ describe('完整的玩家判断与分支操作', () => {
     await user.click(await screen.findByRole('button', { name: /^喂$/ }));
     expect((await api.listConversations())[0].turns).toEqual([]);
     await user.click(screen.getByRole('button', { name: /^发送$/ }));
-    await screen.findByRole('heading', { name: /先判断，再看解释/ });
-    expect(screen.queryByRole('heading', { name: '桌面明牌' })).not.toBeInTheDocument();
-    await user.click(screen.getByRole('radio', { name: '信息不足' }));
-    await user.type(screen.getByRole('textbox', { name: '原话中的依据' }), '先问是否方便，还没有了解取用时间');
-    await user.type(screen.getByRole('textbox', { name: '下一次只改变什么？' }), '提前说明近期要用钱');
-    await user.click(screen.getByRole('button', { name: '保存观察，查看解释' }));
+    // 经理一开口，桌面明牌直接亮出，对局中不再要求先填观察
     await screen.findByRole('heading', { name: '桌面明牌' });
+    expect(screen.queryByRole('heading', { name: /先判断，再看解释/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: '这句经理话术给你的感觉' })).not.toBeInTheDocument();
     const original = (await api.listConversations())[0];
-    expect(original.observations?.[0].evidence).toContain('取用时间');
     await user.click(screen.getByRole('button', { name: '结束并查看结果' }));
-    expect(await screen.findByLabelText('我的发现与下一次试探')).toHaveTextContent('提前说明近期要用钱');
-    await user.click(screen.getByText(/经理第 1 轮 · T02/));
+    await user.click(await screen.findByText(/经理第 1 轮 · T02/));
+    await user.click(screen.getByRole('button', { name: /有点意思/ }));
+    await waitFor(async () => expect((await api.getResult(original.id)).observations?.[0].feeling).toBe('intrigued'));
+    expect(screen.getByLabelText('换位体感走势')).not.toHaveTextContent('这局还没有体感记录');
     await user.click(screen.getByRole('button', { name: '只换这句，保留前情' }));
     await user.clear(screen.getByRole('textbox', { name: '只改变的一项条件或表达' }));
     await user.type(screen.getByRole('textbox', { name: '只改变的一项条件或表达' }), '我想了解条件');

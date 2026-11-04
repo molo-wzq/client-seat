@@ -11,6 +11,10 @@ import { PROMPT_VERSION } from "./prompt-version";
 import { detectManagerFarewell } from "./reply-text";
 import { hasOutOfCardNumber, factRelationNotes } from "./product-facts";
 import { customerIntent } from "./customer-intent";
+import { selectCardsForTurn } from "./card-retrieval";
+import { PROMPT_TUNING_ENV, tuningEnabled } from "./prompt-tuning";
+import { DEFAULT_ROLE_CARD, parseRoleCard, SEED_ROLES, type RoleCard } from "./role-card";
+import type { CurrentResearchReport } from "./research-report";
 import type { CopywritingPort, DialoguePort, ProductStorage, ManagerTurnOutput } from "./ports";
 import type {
   Conversation,
@@ -51,6 +55,12 @@ export interface ProductCore {
   /** 从预设或修改后的属性保存一位自定义生客;留空字段保持未知,不自动补全。 */
   savePersona(input: PersonaInput): Promise<Persona>;
   listPersonas(): Promise<Persona[]>;
+  /** 内置角色在前,导入的角色按保存顺序并入;整套打法(人设/规律/规则/示范/尾部提醒)随卡携带。 */
+  listRoles(): Promise<RoleCard[]>;
+  /** 导入一张角色卡(JSON):逐字段校验,未知字段保留;每次导入分配新 id,不覆盖已有角色。 */
+  saveRole(input: unknown): Promise<RoleCard>;
+  /** 获取当前最新一期的周度投研分段数据（宏观/行业/资产/异议四大即查抽屉）。 */
+  getCurrentResearchReport?(): Promise<CurrentResearchReport>;
   startConversation(personaId: string, options?: ConversationStartOptions): Promise<Conversation>;
   /** 快速开始:库中无已发布策略卡时以种子素材(已发布态)兜底,用第一个内置画像直接开一通对话;幂等。 */
   quickStart(): Promise<Conversation>;
@@ -147,16 +157,29 @@ export function createProductCore(deps: {
     return persona;
   }
 
+  async function listAllRoles(): Promise<RoleCard[]> {
+    // 内置角色在前(默认小王、稳重型老陈),导入的角色按保存顺序并入。
+    return [...SEED_ROLES, ...(await storage.listRoles())];
+  }
+
+  async function requireRole(roleId?: string): Promise<RoleCard> {
+    const resolved = roleId ?? DEFAULT_ROLE_CARD.id;
+    const role = (await listAllRoles()).find((r) => r.id === resolved);
+    if (!role) throw new NotFoundError(`经理角色不存在:${resolved}`);
+    return role;
+  }
+
   /** 构造对话生成可读的画像视图:隐藏信息不离开领域层。 */
   function toVisiblePersona(persona: Persona): VisiblePersona {
     return { id: persona.id, name: persona.name, visible: persona.visible };
   }
 
-  async function snapshotResources(personaId: string): Promise<ConversationResources> {
+  async function snapshotResources(personaId: string, role: RoleCard): Promise<ConversationResources> {
     const materials = await storage.listMaterials();
     const cards = materials.flatMap((material) => material.cards.filter((card) => card.status === 'published'));
     return structuredClone({
       persona: await requirePersona(personaId), cards,
+      role,
       evidence: cards.map((card) => ({
         cardId: card.id, cardName: card.name, source: card.sourceExcerpt,
         sourceTurns: resolveTurnRange(card.sourceExcerpt.turnRange, locateSourceMaterial(card.sourceExcerpt, materials)?.turns ?? []),
@@ -211,11 +234,16 @@ export function createProductCore(deps: {
     if (options.replayOfId !== undefined && (typeof options.replayOfId !== "string" || !options.replayOfId.trim())) {
       throw new ValidationError("原局标识不合法");
     }
+    if (options.roleId !== undefined && (typeof options.roleId !== "string" || !options.roleId.trim())) {
+      throw new ValidationError("经理角色标识不合法");
+    }
     const original = options.replayOfId ? await requireConversation(options.replayOfId) : undefined;
     if (original && (original.status !== "ended" || original.personaId !== personaId)) {
       throw new ValidationError("只能重试同一客户已结束的通话");
     }
-    const resources = original?.resources ? structuredClone(original.resources) : await snapshotResources(personaId);
+    // 角色随开局快照:重试沿用原局角色,新局解析本次所选(缺省默认小王)。
+    const role = original?.resources?.role ?? await requireRole(options.roleId);
+    const resources = original?.resources ? structuredClone(original.resources) : await snapshotResources(personaId, role);
     const conversation: Conversation = {
       id: randomId(),
       revision: 0,
@@ -278,9 +306,16 @@ export function createProductCore(deps: {
 
     const persona = toVisiblePersona(conversation.resources?.persona ?? await requirePersona(conversation.personaId));
     const productFacts = conversation.productFacts ?? SEED_PRODUCT_CARD;
+    // 旧局没有角色快照时回退默认卡:渲染与当年一致,不猜当时用的哪套打法。
+    const role = conversation.resources?.role ?? DEFAULT_ROLE_CARD;
     // 用卡与来源从同一份本轮库快照读取,避免生成期间编辑造成证据错位。
     const turnMaterials = conversation.resources ? [] : await storage.listMaterials();
     const publishedCards = conversation.resources?.cards ?? turnMaterials.flatMap((m) => m.cards.filter((c) => c.status === "published"));
+    const history = conversation.turns.slice(0, -1).map(({ strategyEvidence: _privateEvidence, promptVersion: _version, factCheckNotes: _factNotes, managerReasoning: _reasoning, injectedCardIds: _injected, ...turn }) => turn);
+    // 检索注入实验(LLM_CARD_RETRIEVAL=1):按最近客户发言的关键词决定
+    // 哪些已发布卡上桌;无触发词的卡常驻。开关默认关,全量注入不变。
+    const cardRetrieval = tuningEnabled(PROMPT_TUNING_ENV.cardRetrieval);
+    const onTableCards = cardRetrieval ? selectCardsForTurn(publishedCards, history, customerTurn.text) : publishedCards;
     const leaving = customerIntent(customerTurn.text) === 'leave';
     // 明确离场是客户的选择，模型故障或错误归因不能让客户被迫继续。
     const output: ManagerTurnOutput = leaving ? {
@@ -290,9 +325,11 @@ export function createProductCore(deps: {
     } : await dialogue.generateManagerTurn(
       {
         persona,
-        publishedCards: structuredClone(publishedCards),
+        role,
+        publishedCards: structuredClone(onTableCards),
+        ...(cardRetrieval ? { cardRetrieval: true } : {}),
         product: productFacts,
-        history: conversation.turns.slice(0, -1).map(({ strategyEvidence: _privateEvidence, promptVersion: _version, factCheckNotes: _factNotes, managerReasoning: _reasoning, ...turn }) => turn),
+        history,
         customerText: customerTurn.text,
       },
       onReplyDelta,
@@ -318,6 +355,9 @@ export function createProductCore(deps: {
       promptVersion: PROMPT_VERSION,
       text: output.reply,
       usedCardId: retrievable ? output.usedCardId : undefined,
+      // 检索开启时记录本轮实际注入的卡,复盘据此核对模型当时看到了什么;
+      // 不进下一轮输入,与 strategyEvidence 同为私有追溯字段。
+      ...(cardRetrieval ? { injectedCardIds: onTableCards.map((card) => card.id) } : {}),
       ...(retrievable && usedCard ? { strategyEvidence: conversation.resources?.evidence.find((item) => item.cardId === usedCard.id) ?? {
         cardId: usedCard.id,
         cardName: usedCard.name,
@@ -494,6 +534,22 @@ export function createProductCore(deps: {
     async listPersonas() {
       // 预设画像在前,自定义画像按保存顺序并入;新增预设只改种子数据。
       return listAllPersonas();
+    },
+
+    async listRoles() {
+      return listAllRoles();
+    },
+
+    async saveRole(input) {
+      let parsed: Omit<RoleCard, "id">;
+      try {
+        parsed = parseRoleCard(input);
+      } catch (error) {
+        throw new ValidationError(`角色卡不合法:${(error as Error).message}`);
+      }
+      const role: RoleCard = { ...parsed, id: randomId() };
+      await storage.saveRole(role);
+      return role;
     },
 
     async savePersona(input) {
@@ -712,6 +768,83 @@ export function createProductCore(deps: {
               evidenceOrigin: evidence ? "turn-snapshot" as const : "current-library" as const,
             };
           }),
+      };
+    },
+
+    async getCurrentResearchReport() {
+      // 允许动态读取或使用缺省种子分段
+      return {
+        id: "2026-10-23",
+        title: "周度投研分析报告 (2026年第42周)",
+        period: "2026-10-19 ~ 2026-10-23",
+        updatedAt: "2026-10-24T08:00:00.000Z",
+        reportHtmlPath: "/api/research/download?format=html",
+        sections: {
+          macro: {
+            title: "宏观温度计与开场破冰",
+            headline: "A股已进入历史底部区间，宏观增长预期上修，仓位从「纯防守」微调至「防守反击」",
+            temperature: "大盘处于历史估值41.5%分位 · 震荡筑底温和偏多",
+            cards: [
+              {
+                title: "核心研判一句话",
+                tag: "总纲",
+                content: "东吴证券与多家机构判断：上证与沪深300估值处于历史中低水位，三季度GDP 4.5%与工业数据超预期，基本面支撑由预期切换至数据验证，短期维持大盘3200点中枢震荡。",
+              },
+              {
+                title: "破冰开场白：大盘震荡客",
+                tag: "电销开场",
+                content: "“张总您好！我是咱们工行客户经理小王。看这周大盘一直在3200点反复拉锯，很多老客户都在问方向。咱们总行投研最新研判大资金正在从短炒向低估值红利调仓，今天想跟您聊聊怎么把行外的钱避避风头。”",
+                copyableText: "张总您好！我是咱们工行客户经理小王。看这周大盘一直在3200点反复拉锯，很多老客户都在问方向。咱们总行投研最新研判大资金正在从短炒向低估值红利调仓，今天想跟您聊聊怎么把行外的钱避避风头。",
+              },
+            ],
+          },
+          sector: {
+            title: "行业轮动与主线方向",
+            summary: "高低切换明显：自主可控科技与低波红利两头受宠，成长与价值哑铃配置防踏空。",
+            leadingSectors: [
+              { name: "半导体/AI算力", change: "+3.8%", reason: "自主可控催化，资金持续流入头部ETF" },
+              { name: "低波红利/银行", change: "+1.2%", reason: "高股息避险底仓配置，防御属性稳固" },
+            ],
+            defensiveSectors: [
+              { name: "纯债与存单", change: "+0.08%", reason: "资金回流固收，降息周期下确定性最高" },
+            ],
+            cards: [],
+          },
+          product: {
+            title: "资产配置与重点产品推荐",
+            allocationAdvice: {
+              conservative: "防御层45%（低波固收+为主，熨平波动，居民理财刚需）",
+              balanced: "均衡层35%（红利低波 + 核心宽基，稳吃分红票息）",
+              aggressive: "进攻层20%（AI算力/机器人高景气ETF + 回调后的黄金）",
+            },
+            featuredPool: [
+              {
+                name: "华夏智鑫债券（A类029479 / C类029480）",
+                type: "二级债基（新发首发）",
+                highlight: "固收打底+AI量化增强，聚焦高股息红利，代表作近3年最大回撤仅-1.33%",
+              },
+            ],
+            cards: [
+              {
+                title: "实战推荐话术：华夏智鑫债券（首发标的）",
+                tag: "主推话术",
+                content: "“波动市里最怕追涨杀跌，咱们工行的配置做法是底仓必须放在控回撤能力强的固收+上——比如下周一新首发的华夏智鑫债券就是这类：二级债基、AI量化选股，代表作近三年最大回撤只有1.33%——小部分仓位跟着产业趋势走，两头都不踏空。”",
+                copyableText: "波动市里最怕追涨杀跌，咱们工行的配置做法是底仓必须放在控回撤能力强的固收+上——比如下周一新首发的华夏智鑫债券就是这类：二级债基、AI量化选股，代表作近三年最大回撤只有1.33%——小部分仓位跟着产业趋势走，两头都不踏空。",
+              },
+            ],
+          },
+          risk: {
+            title: "客户异议答疑与风险矩阵",
+            summary: "面对客户对波动的顾虑，先共情、再锚定固收属性，不争辩行情。",
+            objections: [
+              {
+                question: "客户说：「现在行情太差了，买理财肯定亏，我不敢买」",
+                reply: "“太理解您的心情了，之前行情震荡确实让人心悬。所以今天跟您推荐的不是股票类，是AAA级央企债券打底的纯债，成立以来走势非常稳健，咱们不博高收益，先把稳稳的票息收益落袋为安。”",
+              },
+            ],
+            nextWeekWatch: ["10月31日：公布10月官方PMI"],
+          },
+        },
       };
     },
   };

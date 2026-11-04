@@ -9,6 +9,7 @@ function renderRail() {
       view="setup"
       materialCount={1}
       cardCount={2}
+      roleCount={2}
       historyCount={3}
       sessionStatus={null}
       onNavigate={() => {}}

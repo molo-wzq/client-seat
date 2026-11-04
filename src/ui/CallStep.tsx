@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { MAX_MANAGER_TURNS } from "../domain/product-core";
 import { cleanReplyText } from "../domain/reply-text";
-import type { Conversation, ConversationResult, FeelingStamp, Persona, PlayerObservation } from "../domain/types";
+import type { Conversation, ConversationResult, Persona } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { BusyHint } from "./BusyHint";
 import { UiIcon } from "./UiIcon";
 import { playSfx } from "./game-feel";
-import { FeelingStampBar } from "./feeling-stamps";
+import { armedObjectionChips } from "./intel-objections";
 
 /**
  * 快捷回复(票 31):客户角色的典型信号一键发送。
@@ -20,8 +20,10 @@ export function quickReplies(conversation: Conversation | null, personas: Person
   const elderly = persona?.visible.some((line) => /年长|退休|阿姨|大爷/.test(line)) ?? false;
   const acquainted = persona?.visible.some((line) => /已相识|已认识|与经理熟悉/.test(line)) ?? false;
   const lastManager = [...turns].reverse().find((t) => t.speaker === "manager");
+  // 快捷语跟着本局经理的名字走;旧局没有角色快照时回落默认名。
+  const managerName = conversation?.resources?.role?.name ?? "小王";
   if (!lastManager) {
-    return elderly && acquainted ? ["喂,是小王啊", "喂,哪位?", "你们谁啊?"] : ["喂", "喂,你好,哪位?", "你谁啊?"];
+    return elderly && acquainted ? [`喂,是${managerName}啊`, "喂,哪位?", "你们谁啊?"] : ["喂", "喂,你好,哪位?", "你谁啊?"];
   }
   if (/立减金|报名|活动.*(?:参加|领取)|(?:参加|领取).*活动/.test(lastManager.text)) {
     return elderly
@@ -72,8 +74,6 @@ export function CallStep({
   const loadedIdRef = useRef<string | null>(null);
   const uncertainRef = useRef<{ text: string; number: number } | null>(null);
   // 体感戳保存中:同一时刻只发一枚,避免两枚乐观更新互相覆盖。
-  const [stampingTurn, setStampingTurn] = useState<number | null>(null);
-  const observationReady = typeof api.saveObservation === "function";
 
   function updateDraft(value: string) {
     draftRef.current = value;
@@ -287,43 +287,6 @@ export function CallStep({
     copyTimer.current = window.setTimeout(() => setCopiedTurn(null), 1600);
   }
 
-  /**
-   * 盖/撤一枚体感戳:与该轮已有观察合并后整条保存,
-   * 不覆盖判断、依据等已写内容;乐观上屏,失败回滚并提示。
-   */
-  async function stampFeeling(turnNumber: number, next: FeelingStamp | undefined) {
-    if (!conversation || stampingTurn !== null) return;
-    const previous = conversation;
-    const saved = previous.observations?.find((note) => note.managerTurnNumber === turnNumber);
-    if (saved?.feeling === next) return;
-    const merged: PlayerObservation = {
-      managerTurnNumber: turnNumber,
-      evidence: saved?.evidence ?? "",
-      nextExperiment: saved?.nextExperiment ?? "",
-      ...(saved?.judgement ? { judgement: saved.judgement } : {}),
-      revealed: saved?.revealed ?? false,
-      marked: saved?.marked ?? false,
-      ...(next ? { feeling: next } : {}),
-    };
-    applyConversation({
-      ...previous,
-      observations: [...(previous.observations ?? []).filter((note) => note.managerTurnNumber !== turnNumber), merged].sort(
-        (a, b) => a.managerTurnNumber - b.managerTurnNumber,
-      ),
-    });
-    setStampingTurn(turnNumber);
-    try {
-      applyConversation(await api.saveObservation(conversationId, merged));
-    } catch (e) {
-      if (activeRef.current) {
-        applyConversation(previous);
-        setError((e as Error).message);
-      }
-    } finally {
-      if (activeRef.current) setStampingTurn(null);
-    }
-  }
-
   async function finish() {
     if (!conversation || busy || loading) return;
     playSfx("end");
@@ -381,13 +344,6 @@ export function CallStep({
               {turn.speaker === "customer" ? "你(生客)" : "理财经理(AI)"}
             </span>
             <p>{turn.text}</p>
-            {turn.speaker === "manager" && observationReady && (
-              <FeelingStampBar
-                value={conversation.observations?.find((note) => note.managerTurnNumber === turn.number)?.feeling}
-                disabled={stampingTurn !== null}
-                onPick={(next) => void stampFeeling(turn.number, next)}
-              />
-            )}
             {turn.speaker === "manager" && (
               <button
                 type="button"
@@ -434,11 +390,15 @@ export function CallStep({
       {!ended && conversation && !loading && (
         <div className="reply-box">
           <div className="quick-chips" role="group" aria-label="快捷回复">
-            {quickReplies(conversation, personas).map((chip) => (
+            {[
+              ...quickReplies(conversation, personas).map((chip) => ({ chip, intel: false })),
+              ...armedObjectionChips(conversation).map((chip) => ({ chip, intel: true })),
+            ].map(({ chip, intel }) => (
               <button
-                key={chip}
+                key={`${intel ? "intel" : "quick"}-${chip}`}
                 type="button"
-                className="chip"
+                className={intel ? "chip intel-chip" : "chip"}
+                title={intel ? "本周情报里的真实客户异议" : undefined}
                 disabled={busy}
                 onClick={() => {
                   updateDraft(draftRef.current.trim() ? `${draftRef.current}\n${chip}` : chip);

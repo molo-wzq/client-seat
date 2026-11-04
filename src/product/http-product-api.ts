@@ -109,6 +109,10 @@ export function createHttpProductCore(baseUrl = ""): ProductCore {
     listPersonas: () => request("/personas"),
     savePersona: (input) =>
       request("/personas", { method: "POST", body: JSON.stringify(input) }),
+    listRoles: () => request("/roles"),
+    saveRole: (input) =>
+      request("/roles", { method: "POST", body: JSON.stringify(input) }),
+    getCurrentResearchReport: () => request("/research/current"),
     startConversation: (personaId, options) =>
       request("/conversations", { method: "POST", body: JSON.stringify({ personaId, ...options }) }),
     quickStart: () => request("/quickstart", { method: "POST" }),

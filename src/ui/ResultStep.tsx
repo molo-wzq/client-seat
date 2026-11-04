@@ -1,14 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import type { ConversationResult } from "../domain/types";
+import type { ConversationResult, FeelingStamp } from "../domain/types";
 import { FEELING_STAMP_META } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { CALL_LOGIC_LAWS } from "../domain/call-logic";
 import { playSfx } from "./game-feel";
-import { FeelingSeal } from "./feeling-stamps";
+import { FeelingSeal, FeelingStampBar } from "./feeling-stamps";
 import { ReplayComparison } from "./ReplayComparison";
 import { ProductFacts } from "./ProductFacts";
 import { SEED_PRODUCT_CARD } from "../domain/seed";
-
 export function ResultStep({
   result,
   api,
@@ -27,6 +26,8 @@ export function ResultStep({
   // 回放原文时在完整对话里闪烁定位目标轮次;同轮连续点击也要能重触发,
   // 所以先清空再在下一帧置回,动画由 CSS 的 li.flash 承担。
   const [flashTurn, setFlashTurn] = useState<number | null>(null);
+  // 复盘标尺随本局经理角色快照;旧记录无快照回落默认规律。
+  const logicLaws = result.resources?.role?.callLogic ?? CALL_LOGIC_LAWS;
   const flashTimer = useRef<number | undefined>(undefined);
   const [branchTurn, setBranchTurn] = useState<number | null>(null);
   const [branchText, setBranchText] = useState('');
@@ -43,6 +44,27 @@ export function ResultStep({
     try {
       const next = await api.saveObservation(result.conversationId, { managerTurnNumber: turnNumber, evidence: '', nextExperiment: '', revealed: true, ...previous, marked: !previous?.marked });
       setObservations(next.observations ?? []);
+    } catch (error) { setNoteError((error as Error).message); }
+    finally { setMarkingTurn(null); }
+  }
+
+  /** 复盘时回看一句经理话术再补盖体感戳(对局中不再打断通话);与该轮已有观察合并保存。 */
+  async function stamp(turnNumber: number, next: FeelingStamp | undefined) {
+    if (!api || typeof api.saveObservation !== 'function' || markingTurn !== null || replayBusy) return;
+    const previous = observations.find((note) => note.managerTurnNumber === turnNumber);
+    if (previous?.feeling === next) return;
+    const base = {
+      managerTurnNumber: turnNumber,
+      evidence: previous?.evidence ?? '',
+      nextExperiment: previous?.nextExperiment ?? '',
+      ...(previous?.judgement ? { judgement: previous.judgement } : {}),
+      revealed: previous?.revealed ?? true,
+      marked: previous?.marked ?? false,
+    };
+    setMarkingTurn(turnNumber); setNoteError(null);
+    try {
+      const saved = await api.saveObservation(result.conversationId, { ...base, ...(next ? { feeling: next } : {}) });
+      setObservations(saved.observations ?? []);
     } catch (error) { setNoteError((error as Error).message); }
     finally { setMarkingTurn(null); }
   }
@@ -137,7 +159,7 @@ export function ResultStep({
           {stampedCount > 0 ? (
             <>
               <p className="hint">
-                印章是你听电话时随手盖下的第一直觉,下方一格是经理同一轮用的策略卡。点一轮下钻对照:哪句话让你抵触,哪句让你想听下去。体感是你自己的记录,不是对经理的评分。
+                印章是你回看每句话时盖下的第一直觉,下方一格是经理同一轮用的策略卡。点一轮下钻对照:哪句话让你抵触,哪句让你想听下去。体感是你自己的记录,不是对经理的评分。
               </p>
               <ol className="empathy-strip">
                 {managerTurns.map((turn) => {
@@ -173,7 +195,7 @@ export function ResultStep({
             </>
           ) : (
             <p className="hint">
-              这局没有体感记录。回到对局时,听完每句经理话术随手盖一枚「太油了 / 听不进 / 有点意思 / 被打动」,复盘就能看到这条走势和他每轮的出牌对在一起。
+              这局还没有体感记录。展开下方任意一轮，回看经理那句话，补盖一枚「太油了 / 听不进 / 有点意思 / 被打动」，这条走势就会和他每轮的出牌对在一起。
             </p>
           )}
         </aside>
@@ -185,6 +207,10 @@ export function ResultStep({
         <div>
           <dt>开局目标</dt>
           <dd>{result.mainGoal}</dd>
+        </div>
+        <div>
+          <dt>本局经理</dt>
+          <dd>{result.resources?.role ? `${result.resources.role.name}（${result.resources.role.tags.join("·") || "自定义"}打法）` : "旧记录未保存,按默认打法回溯"}</dd>
         </div>
         <div><dt>最后动作（候选）</dt><dd>{result.lastAction ?? '旧记录未单独保存'}</dd></div>
         <div>
@@ -260,10 +286,10 @@ export function ResultStep({
         信号、目的、用卡与事实核对提示为话术生成后的候选,以实际话术、参数与素材原文为准。未记录疑点不代表通过事实核验。
       </p>
       <aside className="call-logic-panel" aria-label="通话逻辑复盘标尺">
-        <strong>复盘标尺</strong>
-        {/* 四条规律名做一行锚点,整句进悬停;逐轮归因已在下方链路里。 */}
+        <strong>复盘标尺{result.resources?.role ? ` · ${result.resources.role.name}的规律` : ""}</strong>
+        {/* 规律名做一行锚点,整句进悬停;逐轮归因已在下方链路里。 */}
         <ul>
-          {CALL_LOGIC_LAWS.map((law) => (
+          {logicLaws.map((law) => (
             <li key={law.key} title={law.law}>
               {law.name}
             </li>
@@ -294,6 +320,16 @@ export function ResultStep({
                     </span>
                   )}
                   <small>{entry?.cardName ?? "用卡未确认"}{turn.outOfCardFact || turn.factCheckNotes?.length ? " · 有事实核对提示" : ""}</small></summary>
+                {api && typeof api.saveObservation === 'function' && (
+                  <div className="review-stamp-row">
+                    <span className="hint">回看这句，给个体感：</span>
+                    <FeelingStampBar
+                      value={feelingByTurn.get(turn.number)}
+                      disabled={markingTurn !== null || replayBusy}
+                      onPick={(next) => void stamp(turn.number, next)}
+                    />
+                  </div>
+                )}
                 <p className="hint">本轮生成规则版本：{turn.promptVersion ?? "旧记录未独立保存"}</p>
                 <dl className="replay-chain">
                   <div>

@@ -32,7 +32,7 @@ async function request(apiPath: string, method = "GET", body?: unknown) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const json = (await response.json().catch(() => null)) as { error?: string } | null;
-  return { status: response.status, json };
+  return { status: response.status, json, headers: response.headers };
 }
 
 describe("http 契约:成功与业务错误码", () => {
@@ -258,5 +258,91 @@ describe("重新生成路由(票 31)", () => {
   it("不存在的通话 → 404", async () => {
     const { status } = await request("/api/conversations/not-exists/regenerate", "POST", {});
     expect(status).toBe(404);
+  });
+});
+
+describe("经理角色路由", () => {
+  it("GET /api/roles 返回内置角色;POST 导入合法卡 → 200,非法卡 → 400", async () => {
+    const list = await request("/api/roles");
+    expect(list.status).toBe(200);
+    const roles = list.json as Array<{ id: string; name: string }>;
+    expect(roles.map((role) => role.id)).toContain("role-xiaowang");
+    expect(roles.map((role) => role.id)).toContain("role-laochen");
+
+    const imported = await request("/api/roles", "POST", {
+      name: "老周",
+      description: "你是理财经理{{char}}。",
+      callLogic: [{ key: "a", name: "规律", law: "为何", usage: "怎么用" }],
+      rules: ["只说真话"],
+      mesExample: [{ role: "user", content: "喂" }, { role: "assistant", content: "您好" }],
+      postHistoryInstructions: "慢慢说。",
+    });
+    expect(imported.status).toBe(200);
+    const role = imported.json as { id: string };
+    expect(role.id).toBeTruthy();
+
+    const broken = await request("/api/roles", "POST", { name: "" });
+    expect(broken.status).toBe(400);
+    expect((broken.json as { error?: string }).error).toContain("角色卡不合法");
+  });
+
+  it("POST /api/conversations 带 roleId:角色随开局快照;未知角色 → 404", async () => {
+    const personas = (await request("/api/personas")).json as Array<{ id: string }>;
+    const started = await request("/api/conversations", "POST", {
+      personaId: personas[0]!.id,
+      roleId: "role-laochen",
+    });
+    expect(started.status).toBe(200);
+    const conversation = started.json as { resources?: { role?: { id: string; name: string } } };
+    expect(conversation.resources?.role).toMatchObject({ id: "role-laochen", name: "老陈" });
+
+    const missing = await request("/api/conversations", "POST", {
+      personaId: personas[0]!.id,
+      roleId: "role-nobody",
+    });
+    expect(missing.status).toBe(404);
+  });
+});
+
+describe("周度投研报告路由", () => {
+  it("GET /api/research/current 返回当前 4 个即查分段", async () => {
+    const res = await request("/api/research/current");
+    expect(res.status).toBe(200);
+    const report = res.json as {
+      id: string;
+      sections: {
+        macro: { headline: string };
+        sector: { leadingSectors: unknown[] };
+        product: { allocationAdvice: unknown };
+        risk: { objections: unknown[] };
+      };
+    };
+    expect(report.id).toBeTruthy();
+    expect(report.sections.macro.headline).toContain("底部区间");
+    expect(report.sections.sector.leadingSectors).toBeDefined();
+    expect(report.sections.product.allocationAdvice).toBeDefined();
+    expect(report.sections.risk.objections).toBeDefined();
+  });
+
+  it("GET /api/research/download 响应为周报文件下载", async () => {
+    const res = await request("/api/research/download");
+    expect(res.status).toBe(200);
+    const disposition = res.headers.get("content-disposition") ?? "";
+    expect(disposition).toContain("attachment");
+    expect(disposition).toContain("weekly-investment-report");
+  });
+
+  it("周报预览返回独立报告，不加载应用首页", async () => {
+    const res = await fetch(`${base}/reports/weekly-report.html`);
+    const html = await res.text();
+    expect(res.status).toBe(200);
+    expect(html).toContain("周度投研分析报告");
+    expect(html).not.toMatch(/\/@vite\/client|\/src\/main\.tsx|id="root"/);
+  });
+
+  it("缺失的周报返回 404，不回退到应用首页", async () => {
+    const res = await fetch(`${base}/reports/missing-report.html`);
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("未找到投研周报");
   });
 });

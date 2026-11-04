@@ -4,6 +4,8 @@ import os from "node:os";
 import path from "node:path";
 import type { ProductStorage } from "../src/domain/ports";
 import type { Conversation, Material, Persona } from "../src/domain/types";
+import type { RoleCard } from "../src/domain/role-card";
+import { DEFAULT_ROLE_CARD } from "../src/domain/role-card";
 import { InMemoryStorage } from "../src/product/in-process-product-api";
 import { FileStorage } from "./file-store";
 
@@ -33,6 +35,10 @@ function persona(id: string): Persona {
   return { id, name: `客户${id}`, visible: [], hidden: [] };
 }
 
+function role(id: string): RoleCard {
+  return { ...structuredClone(DEFAULT_ROLE_CARD), id, name: `经理${id}` };
+}
+
 /** 每个用例一个独立临时 db 文件,避免用例间互相污染。 */
 function tempDbFile(): string {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "storage-contract-"));
@@ -54,11 +60,13 @@ for (const [name, create] of factories) {
       await storage.saveMaterial(material("m1"));
       await storage.saveConversation(conversation("c1"));
       await storage.savePersona(persona("p1"));
+      await storage.saveRole(role("r1"));
 
       expect((await storage.getMaterial("m1"))?.title).toBe("素材-m1");
       expect((await storage.listMaterials()).map((m) => m.id)).toEqual(["m1"]);
       expect((await storage.listConversations()).map((c) => c.id)).toEqual(["c1"]);
       expect((await storage.listPersonas()).map((p) => p.id)).toEqual(["p1"]);
+      expect((await storage.listRoles()).map((r) => r.id)).toEqual(["r1"]);
     });
 
     it("不存在返回 null,list 为空数组", async () => {
@@ -66,6 +74,16 @@ for (const [name, create] of factories) {
       expect(await storage.getMaterial("none")).toBeNull();
       expect(await storage.getConversation("none")).toBeNull();
       expect(await storage.listMaterials()).toEqual([]);
+      expect(await storage.listRoles()).toEqual([]);
+    });
+
+    it("角色卡读返回快照:改动返回值不污染仓库", async () => {
+      const storage = fresh();
+      await storage.saveRole(role("r1"));
+      const snapshot = (await storage.listRoles())[0];
+      snapshot.rules.push("多出来的一条");
+      const again = (await storage.listRoles())[0];
+      expect(again.rules).toHaveLength(DEFAULT_ROLE_CARD.rules.length);
     });
 
     it("读返回快照:改动返回值不污染仓库", async () => {
