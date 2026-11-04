@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { PostgameBasis } from "../../server/agent/types";
 import type { ConversationResult, FeelingStamp } from "../domain/types";
 import { FEELING_STAMP_META } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
@@ -17,6 +18,7 @@ export function ResultStep({
   replayBusy = false,
   onBranch,
   hiddenChoices = {},
+  petReview = null,
 }: {
   result: ConversationResult;
   api?: ProductCore;
@@ -26,6 +28,8 @@ export function ResultStep({
   onBranch?: (customerTurnNumber: number, text: string) => Promise<void>;
   /** 本局玩家对举牌的「翻/先藏着」决定(客户侧状态,工单 04 结算揭晓用)。 */
   hiddenChoices?: Readonly<Record<string, HiddenCardChoice>>;
+  /** 桌宠复盘一句话(工单 06):ready Report 送达后由 App 传入;dropped 时为空,不出插槽。 */
+  petReview?: { text: string; basis: PostgameBasis } | null;
 }) {
   // 回放原文时在完整对话里闪烁定位目标轮次;同轮连续点击也要能重触发,
   // 所以先清空再在下一帧置回,动画由 CSS 的 li.flash 承担。
@@ -146,6 +150,22 @@ export function ResultStep({
         </div>
         <span className="result-stamp" aria-hidden="true">本局<br />通话结束</span>
       </div>
+
+      {/* 桌宠复盘插槽(工单 06):一句话只评经理;「展开」看依据(轮次+策略卡)。 */}
+      {petReview && (
+        <aside className="review-focus pet-review" aria-label="桌宠复盘">
+          <h3>桌宠复盘</h3>
+          <p className="pet-review-line">{petReview.text}</p>
+          <details className="pet-review-basis">
+            <summary>展开依据</summary>
+            <p>
+              第 {petReview.basis.turnNumber} 轮 · 策略卡『
+              {result.resources?.cards.find((card) => card.id === petReview.basis.cardId)?.name ?? "用卡未确认"}』
+            </p>
+          </details>
+          <p className="hint">只说经理的打法,不评价你的表现。</p>
+        </aside>
+      )}
 
       <aside className="review-focus" aria-label="本局复盘起点">
         <h3>先看这一处</h3>

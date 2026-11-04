@@ -7,8 +7,8 @@
 /** 触发来源:事件从哪个域进入 Agent(spec:table/materials/research/pet/system)。 */
 export type AgentSource = "table" | "materials" | "research" | "pet" | "system";
 
-/** 触发类型:同一来源下的事件类别,pet 命令条为 "command";后续票按 Source 扩展。 */
-export type AgentTriggerKind = "command";
+/** 触发类型:同一来源下的事件类别——pet 命令条为 "command",对局结束为 "game-ended"(工单 06)。 */
+export type AgentTriggerKind = "command" | "game-ended";
 
 /** 触发:一次可感知的事件或命令,进入链路的唯一输入。 */
 export interface AgentTrigger {
@@ -65,6 +65,21 @@ export interface AgentReport {
   status: ReportStatus;
   /** 一句话结果或进展(给人读)。 */
   text: string;
+  /**
+   * 结构化依据(工单 06):只有需要「展开看依据」的 ready Report 携带,
+   * 目前是复盘一句话;结算页插槽据此渲染轮次与策略卡。
+   */
+  basis?: PostgameBasis;
+}
+
+/** 复盘一句话的依据(spec 故事 7「展开」):第几轮 + 该轮用的策略卡。 */
+export interface PostgameBasis {
+  /** 对局号(Thread 键),结算页据此对上本局。 */
+  gameId: string;
+  /** 经理轮序,从 1 计。 */
+  turnNumber: number;
+  /** 该轮经理所用策略卡 id;未用卡时缺省。 */
+  cardId?: string;
 }
 
 /** 呈现通道:本期只有桌宠气泡(硬上限 40 字);后续票扩展翻牌动画、待办面板等。 */

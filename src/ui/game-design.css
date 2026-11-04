@@ -23,6 +23,10 @@
 .track-guidance.near-end { padding: 8px 10px; border: 1px solid #c2a361; border-radius: 5px; color: #ffe4a3; background: #63461e33; }
 .review-focus h3 { margin: 0; color: #274e36; }
 .review-counts { color: #71624e; }
+/* 桌宠复盘一句话(工单 06):气泡同款口径的一句话,展开看轮次与策略卡。 */
+.pet-review .pet-review-line { font-size: 15px; font-weight: 600; color: #274e36; }
+.pet-review .pet-review-basis summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+.pet-review .pet-review-basis summary:focus-visible { outline: 2px solid #b48a37; outline-offset: 3px; }
 .source-evidence { padding: 8px 12px; margin-top: 12px; border: 1px dashed #b9a584; border-radius: 4px; font-size: 13px; }
 .source-evidence .source-turns { margin: 8px 0; }
 .strategy-path > li { scroll-margin-block: 24px; }

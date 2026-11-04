@@ -207,6 +207,83 @@ describe("Agent 核心:多 Report 与 tickets()(工单 05)", () => {
   });
 });
 
+describe("对局后复盘一句话(工单 06)", () => {
+  /** 一局样例:三轮经理话术,前两轮用了卡,第 2 轮话最实(最长)。 */
+  const ROUNDS = [
+    { managerText: "我是咱们行的理财经理小王。", cardId: "c1" },
+    { managerText: "之前要是接到过推销电话,还请您多担待。", cardId: "c1" },
+    { managerText: "我先跟您说下活动规则。" },
+  ];
+
+  function gameEnded(rounds: Array<Record<string, unknown>>): AgentTriggerInput {
+    return { source: "table", kind: "game-ended", data: { gameId: "conv-1", rounds, hiddenUnrevealedCount: 2 } };
+  }
+
+  it("对局结束:复盘 Worker 起草一句话(只评经理、≤40 字、带依据),气泡同步推送", async () => {
+    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+    const events: AgentEvent[] = [];
+    core.subscribe((event) => events.push(event));
+
+    const outcome = await core.emitTrigger(gameEnded(ROUNDS));
+
+    expect(outcome.admitted).toBe(true);
+    expect(outcome.report?.status).toBe("ready");
+    // 只评经理:点名轮次与「值得学」,不出现对玩家说的话。
+    const text = outcome.report?.text ?? "";
+    expect([...text].length).toBeLessThanOrEqual(40);
+    expect(text).toMatch(/第2轮/);
+    expect(text).toMatch(/值得学/);
+    expect(text).not.toMatch(/你|玩家/);
+    // 依据(展开用):轮次 + 策略卡,对局号对上本局。
+    expect(outcome.report?.basis).toEqual({ gameId: "conv-1", turnNumber: 2, cardId: "c1" });
+
+    // 账本按序追加,Thread 按 spec 的 gameId 键归并本局。
+    const entries = await core.ledger();
+    expect(entries.map((entry) => entry.type)).toEqual(["trigger", "decision", "ticket", "report"]);
+    const ticketEntry = entries[2] as TicketEntry;
+    expect(ticketEntry.ticket.thread).toEqual({ kind: "gameId", key: "conv-1" });
+
+    // 一句话同文进桌宠气泡(既有 Channel 通道)。
+    const channelEvent = events.find((event) => event.type === "channel") as Extract<
+      AgentEvent,
+      { type: "channel" }
+    >;
+    expect(channelEvent.channel.text).toBe(text);
+  });
+
+  it("没有用卡轮(无值得说的内容):Report 落 dropped,不出气泡", async () => {
+    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+    const events: AgentEvent[] = [];
+    core.subscribe((event) => events.push(event));
+
+    const outcome = await core.emitTrigger(gameEnded([{ managerText: "喂,您好。" }]));
+
+    expect(outcome.report).toMatchObject({ status: "dropped" });
+    expect(outcome.report?.basis).toBeUndefined();
+    // 账本如实记 dropped(工单视图显示「已放弃」),但桌宠保持沉默:不推气泡。
+    const entries = await core.ledger();
+    expect(entries.map((entry) => entry.type)).toEqual(["trigger", "decision", "ticket", "report"]);
+    expect(events.filter((event) => event.type === "report")).toHaveLength(1);
+    expect(events.filter((event) => event.type === "channel")).toHaveLength(0);
+  });
+
+  it("事件不完整(缺轮次或缺对局号):Eval 拒绝,链路止于 Decision", async () => {
+    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+
+    const noRounds = await core.emitTrigger({ source: "table", kind: "game-ended", data: { gameId: "conv-1" } });
+    expect(noRounds.admitted).toBe(false);
+    const noGameId = await core.emitTrigger({ source: "table", kind: "game-ended", data: { rounds: ROUNDS } });
+    expect(noGameId.admitted).toBe(false);
+
+    // 各止于 Decision,不产 Ticket/Report,Worker 不空跑。
+    const entries = await core.ledger();
+    expect(entries.map((entry) => entry.type)).toEqual(["trigger", "decision", "trigger", "decision"]);
+    const decisions = entries.filter((entry) => entry.type === "decision") as DecisionEntry[];
+    expect(decisions.map((entry) => entry.decision.admitted)).toEqual([false, false]);
+    expect(decisions.every((entry) => entry.decision.reason.includes("对局结束"))).toBe(true);
+  });
+});
+
 describe("DemoWorker 快捷环命令(工单 03)", () => {
   // 快捷环 3 项即时就绪;「本周投研」自工单 05 起走分步演示(见下个 describe)。
   const expectedReplies: Array<[string, RegExp]> = [

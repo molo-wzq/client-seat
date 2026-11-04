@@ -1,11 +1,13 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { FakeModelAdapter } from "./adapters/fake-model-adapter";
 import type { ProductCore } from "./domain/product-core";
 import { createInProcessProductCore } from "./product/in-process-product-api";
 import { SCORING_PATTERN } from "./test/scoring-pattern";
 import { App } from "./App";
+import type { AgentClient } from "./ui/agent-client";
+import type { AgentReport, AgentTriggerInput } from "../server/agent/types";
 
 /**
  * 最高层端到端产品测试(spec.md 测试决策):只断言用户可观察行为,
@@ -165,6 +167,87 @@ describe("左栏口径与标签", () => {
     await user.click(screen.getByRole("button", { name: "结束并查看结果" }));
     expect(await screen.findByRole("heading", { name: "这通电话是怎样推进的" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "查看结算" })).toBeInTheDocument();
+  });
+});
+
+describe("桌宠复盘一句话(工单 06)", () => {
+  /** 假桌宠 agent:记录 sendTrigger,按本次触发的 data 回一条复盘 Report。 */
+  function petAgentWith(reportFor: (input: AgentTriggerInput) => AgentReport) {
+    const sendTrigger = vi.fn((input: AgentTriggerInput) =>
+      Promise.resolve({ triggerId: "tr-1", admitted: true, ticket: null, report: reportFor(input) }),
+    );
+    const agent = {
+      sendCommand: vi.fn(() => Promise.resolve()),
+      sendTrigger,
+      onEvent: vi.fn(() => () => undefined),
+      tickets: vi.fn(() => Promise.resolve([])),
+    } as unknown as AgentClient;
+    return { agent, sendTrigger };
+  }
+
+  /** 快速开始一通,喂一句就结束并进结算。 */
+  async function finishQuickCall(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(await screen.findByRole("button", { name: "快速开始一通对话" }));
+    const reply = await screen.findByLabelText("客户回复");
+    await user.type(reply, "喂");
+    await user.click(screen.getByRole("button", { name: "发送" }));
+    await screen.findByText(/我是咱们行的理财经理小王/);
+    await user.click(screen.getByRole("button", { name: "结束并查看结果" }));
+    expect(await screen.findByRole("heading", { name: "这通电话是怎样推进的" })).toBeInTheDocument();
+  }
+
+  it("对局一结束自动发 game-ended 触发;插槽显示一句话可展开,桌宠变 cheer", async () => {
+    const user = userEvent.setup();
+    const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
+    const { agent, sendTrigger } = petAgentWith((input) => ({
+      ticketId: "t-1",
+      status: "ready",
+      text: "第1轮先接住话头再往下谈，这招值得学。",
+      basis: {
+        gameId: String(input.data.gameId),
+        turnNumber: 1,
+        cardId: (input.data.rounds as Array<{ cardId?: string }>)[0]?.cardId,
+      },
+    }));
+    render(<App api={api} agent={agent} />);
+
+    await finishQuickCall(user);
+
+    // 自动发送的触发:table 来源、game-ended 类型,带本局各轮经理话术与未翻开隐藏牌数。
+    expect(sendTrigger).toHaveBeenCalledTimes(1);
+    const input = sendTrigger.mock.calls[0][0] as AgentTriggerInput;
+    expect(input.source).toBe("table");
+    expect(input.kind).toBe("game-ended");
+    expect(typeof input.data.gameId).toBe("string");
+    expect(input.data.rounds).toEqual([
+      expect.objectContaining({ managerText: expect.stringContaining("理财经理小王") }),
+    ]);
+    expect(typeof input.data.hiddenUnrevealedCount).toBe("number");
+
+    // 结算页插槽:一句话 + 展开依据(第 1 轮 · 策略卡)。
+    expect(screen.getByRole("heading", { name: "桌宠复盘" })).toBeInTheDocument();
+    expect(screen.getByText("第1轮先接住话头再往下谈，这招值得学。")).toBeInTheDocument();
+    await user.click(screen.getByText("展开依据"));
+    expect(screen.getByText(/^第 1 轮 · 策略卡『/)).toBeInTheDocument();
+
+    // 桌宠对局结束后变欢呼(spec 故事 7)。
+    expect(document.querySelector(".desk-pet")).toHaveAttribute("data-expression", "cheer");
+  });
+
+  it("复盘没有值得说的内容(dropped):照样发触发,但结算页不出插槽", async () => {
+    const user = userEvent.setup();
+    const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
+    const { agent, sendTrigger } = petAgentWith(() => ({
+      ticketId: "t-1",
+      status: "dropped",
+      text: "这局没有单独值得学的招，先不多说。",
+    }));
+    render(<App api={api} agent={agent} />);
+
+    await finishQuickCall(user);
+
+    expect(sendTrigger).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("heading", { name: "桌宠复盘" })).not.toBeInTheDocument();
   });
 });
 

@@ -1,10 +1,11 @@
 /**
  * 桌宠 Agent 的前端客户端(工单 03):UI 通过它与编排层通信,
- * 只用两个动作——sendCommand 发命令(POST /api/agent/triggers)、
+ * 核心动作是 sendTrigger 发触发(POST /api/agent/triggers,sendCommand 是它的 pet 命令快捷方式)、
  * onEvent 订阅事件流(SSE /api/agent/events)。fetch 与 EventSource 可注入,
  * 测试用假实现(见 agent-client.test.ts);生产缺省用浏览器全局实现。
  */
-import type { AgentEvent, AgentTicketView } from "../../server/agent/types";
+import type { EmitOutcome } from "../../server/agent/core";
+import type { AgentEvent, AgentTicketView, AgentTriggerInput } from "../../server/agent/types";
 
 /** 注入缝:测试传假 fetch / 假 EventSource;缺省回落浏览器全局。 */
 export interface AgentClientDeps {
@@ -16,6 +17,8 @@ export interface AgentClientDeps {
 export interface AgentClient {
   /** 把一句命令作为 pet 触发给 Router;失败抛错误消息(UI 层展示)。 */
   sendCommand(text: string): Promise<void>;
+  /** 发任意触发并拿回链路结果(工单 06:结算页自动发 game-ended,读最终 Report);失败抛错误消息。 */
+  sendTrigger(input: AgentTriggerInput): Promise<EmitOutcome>;
   /** 订阅 Report 与 Channel 事件;返回退订函数。 */
   onEvent(listener: (event: AgentEvent) => void): () => void;
   /** 拉取工单视图(账本折叠的最新状态;工单 05);失败抛错误消息。 */
@@ -27,16 +30,21 @@ export function createAgentClient(deps: AgentClientDeps = {}): AgentClient {
 
   return {
     async sendCommand(text) {
+      await this.sendTrigger({ source: "pet", kind: "command", data: { text } });
+    },
+
+    async sendTrigger(input) {
       const doFetch = deps.fetch ?? globalThis.fetch.bind(globalThis);
       const response = await doFetch(`${baseUrl}/api/agent/triggers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ source: "pet", kind: "command", data: { text } }),
+        body: JSON.stringify(input),
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
-        throw new Error(body?.error || `命令发送失败(HTTP ${response.status})`);
+        throw new Error(body?.error || `触发发送失败(HTTP ${response.status})`);
       }
+      return (await response.json()) as EmitOutcome;
     },
 
     async tickets() {

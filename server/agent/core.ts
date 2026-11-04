@@ -6,9 +6,11 @@ import type {
   AgentReport,
   AgentTicket,
   AgentTicketView,
+  AgentThread,
   AgentTrigger,
   AgentTriggerInput,
   LedgerEntry,
+  PostgameBasis,
 } from "./types";
 import type { LedgerStorage } from "./storage";
 import { foldTickets } from "./tickets";
@@ -55,6 +57,7 @@ const DEMO_STEP_MS = 350;
  * 工单 05 起支持分步演示:含「并行」或快捷命令「本周投研」时,
  * 途中追加 progress,最终就绪或停在 waiting 待人决定;「同意/驳回 [工单号]」
  * 把最近(或指定)的等待工单调回 ready/dropped——决议本身也是一张小工单。
+ * 工单 06 起:对局结束事件(game-ended)由复盘脚本起草一句话。
  */
 export class DemoWorker implements AgentWorker {
   private readonly sleep: (ms: number) => Promise<void>;
@@ -66,6 +69,7 @@ export class DemoWorker implements AgentWorker {
   }
 
   async run(ticket: AgentTicket, trigger: AgentTrigger, onReport: ReportSink): Promise<AgentReport> {
+    if (trigger?.kind === "game-ended") return this.runPostgameReview(ticket, trigger);
     const text = typeof trigger?.data?.text === "string" ? trigger.data.text.trim() : "";
     // 待人决定的决议命令:「同意」「驳回」,可带工单号(待办面板按钮就这么发)。
     const decision = /^(同意|驳回)\s*(\S+)?$/.exec(text);
@@ -117,6 +121,57 @@ export class DemoWorker implements AgentWorker {
     });
     return { ticketId: ticket.id, status: "ready", text: agree ? "好，已照办。" : "好，已驳回。" };
   }
+
+  /**
+   * 复盘一句话(demo 确定性脚本,工单 06):「经理哪招值得学」只评经理、不评玩家;
+   * 没有值得单说的招就落 dropped(沉默,不出气泡)。
+   */
+  private async runPostgameReview(ticket: AgentTicket, trigger: AgentTrigger): Promise<AgentReport> {
+    const gameId = typeof trigger.data.gameId === "string" ? trigger.data.gameId : "";
+    const draft = draftPostgameOneLiner(gameId, parsePostgameRounds(trigger.data));
+    if (!draft) {
+      return { ticketId: ticket.id, status: "dropped", text: "这局没有单独值得学的招，先不多说。" };
+    }
+    return { ticketId: ticket.id, status: "ready", text: draft.text, basis: draft.basis };
+  }
+}
+
+/** game-ended 的一轮:经理话术与该轮所用策略卡(工单 06 约定的 data 形状)。 */
+interface PostgameRound {
+  managerText: string;
+  cardId?: string;
+}
+
+/** 从触发 data 里防御性取出轮次:形状不对的条目直接丢弃,不让脚本崩。 */
+function parsePostgameRounds(data: Record<string, unknown>): PostgameRound[] {
+  const rounds = Array.isArray(data.rounds) ? data.rounds : [];
+  return rounds.filter(
+    (round): round is PostgameRound =>
+      typeof round === "object" && round !== null && typeof (round as PostgameRound).managerText === "string",
+  );
+}
+
+/**
+ * 复盘一句话草稿:在用过策略卡的经理轮里挑话术最实(最长)的一轮,
+ * 一句话点名轮次、只评经理这一招;没有任何用卡轮 → null(无值得说的内容)。
+ */
+function draftPostgameOneLiner(
+  gameId: string,
+  rounds: PostgameRound[],
+): { text: string; basis: PostgameBasis } | null {
+  let best: { managerText: string; cardId: string; turnNumber: number } | null = null;
+  for (let index = 0; index < rounds.length; index += 1) {
+    const round = rounds[index];
+    if (!round || round.cardId === undefined) continue;
+    if (best === null || [...round.managerText].length > [...best.managerText].length) {
+      best = { managerText: round.managerText, cardId: round.cardId, turnNumber: index + 1 };
+    }
+  }
+  if (best === null) return null;
+  return {
+    text: `第${best.turnNumber}轮先接住话头再往下谈，这招值得学。`,
+    basis: { gameId, turnNumber: best.turnNumber, cardId: best.cardId },
+  };
 }
 
 /** emitTrigger 的结果:未准入时链路止于 Decision,ticket/report 为空。 */
@@ -147,7 +202,7 @@ export function createAgentCore(deps: { storage: LedgerStorage; worker: AgentWor
       if (!SOURCES.includes(input.source)) {
         throw new ValidationError(`触发来源不合法:${String(input.source)}`);
       }
-      if (input.kind !== "command") {
+      if (!TRIGGER_KINDS.includes(input.kind)) {
         throw new ValidationError(`触发类型不合法:${String(input.kind)}`);
       }
       const trigger: AgentTrigger = { ...input, id: randomId() };
@@ -159,18 +214,26 @@ export function createAgentCore(deps: { storage: LedgerStorage; worker: AgentWor
         return { triggerId: trigger.id, admitted: false, ticket: null, report: null };
       }
 
-      // pet 命令按 spec 的 Thread 键归并:commandId = 本次触发的 id。
+      // Thread 键按 spec 归并:pet 命令按 commandId(本次触发的 id),
+      // 对局结束事件按 gameId(本局的复盘工作都归到同一局)。
+      const thread: AgentThread =
+        trigger.kind === "game-ended"
+          ? { kind: "gameId", key: typeof trigger.data.gameId === "string" ? trigger.data.gameId : "" }
+          : { kind: "commandId", key: trigger.id };
       const ticket: AgentTicket = {
         id: randomId(),
         triggerId: trigger.id,
-        thread: { kind: "commandId", key: trigger.id },
+        thread,
       };
       await storage.appendLedgerEntry({ type: "ticket", ticket });
 
-      // 每条 Report(途中的与最终的)走同一条出口:先落账,再发事件与气泡。
+      // 每条 Report(途中的与最终的)走同一条出口:先落账,再发事件;能说的才配气泡。
       const emitReport = async (report: AgentReport): Promise<void> => {
         await storage.appendLedgerEntry({ type: "report", report });
         publish({ type: "report", report });
+        // dropped 的语义是沉默(spec 故事 7:没什么值得说就保持沉默):
+        // 账本与工单视图照记「已放弃」,但不推气泡。
+        if (report.status === "dropped") return;
         publish({
           type: "channel",
           // 桌宠气泡硬上限 40 字(spec);Report 原文完整留在账本里。
@@ -200,8 +263,16 @@ export function createAgentCore(deps: { storage: LedgerStorage; worker: AgentWor
   }
 }
 
-/** Eval:本期只做准入——pet 命令须带非空文本;研判与放权模式见后续票。 */
+/** Eval:本期只做准入——pet 命令须带非空文本,对局结束事件须带对局号与轮次;研判与放权模式见后续票。 */
 function evaluate(trigger: AgentTrigger): AgentDecision {
+  if (trigger.kind === "game-ended") {
+    const gameId = trigger.data.gameId;
+    const rounds = trigger.data.rounds;
+    const complete = typeof gameId === "string" && gameId !== "" && Array.isArray(rounds) && rounds.length > 0;
+    return complete
+      ? { triggerId: trigger.id, admitted: true, reason: "对局结束,准予复盘立项" }
+      : { triggerId: trigger.id, admitted: false, reason: "对局结束事件不完整(缺对局号或轮次),不立项" };
+  }
   const text = typeof trigger.data.text === "string" ? trigger.data.text.trim() : "";
   if (text === "") return { triggerId: trigger.id, admitted: false, reason: "命令内容为空" };
   return { triggerId: trigger.id, admitted: true, reason: "pet 命令,准予立项" };
@@ -209,3 +280,6 @@ function evaluate(trigger: AgentTrigger): AgentDecision {
 
 /** spec 的五个触发来源;输入校验在进链路之前完成。 */
 const SOURCES: AgentTrigger["source"][] = ["table", "materials", "research", "pet", "system"];
+
+/** 触发类型白名单:pet 命令 + 对局结束事件(工单 06)。 */
+const TRIGGER_KINDS: AgentTrigger["kind"][] = ["command", "game-ended"];

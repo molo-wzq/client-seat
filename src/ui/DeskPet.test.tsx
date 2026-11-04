@@ -10,10 +10,13 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-/** 假 agent 客户端(工单 03 测试缝):只记录 sendCommand/onEvent/tickets 的调用。 */
+/** 假 agent 客户端(工单 03 测试缝):只记录 sendCommand/sendTrigger/onEvent/tickets 的调用。 */
 function fakeAgent(overrides: Partial<AgentClient> = {}): AgentClient {
   return {
     sendCommand: vi.fn(() => Promise.resolve()),
+    sendTrigger: vi.fn(() =>
+      Promise.resolve({ triggerId: "tr-x", admitted: true, ticket: null, report: null }),
+    ),
     onEvent: vi.fn(() => () => undefined),
     tickets: vi.fn(() => Promise.resolve([])),
     ...overrides,

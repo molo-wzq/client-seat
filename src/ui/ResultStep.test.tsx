@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import type { ConversationResult } from "../domain/types";
 import { ResultStep } from "./ResultStep";
@@ -87,5 +88,29 @@ describe("结算揭晓隐藏牌(工单 04)", () => {
     expect(flipped).toHaveAttribute("data-revealed", "true");
     expect(screen.getByText(`翻开 2/${HIDDEN.length}`)).toBeInTheDocument();
     expect(screen.queryByText("经理问到边上,但没追问下去")).not.toBeInTheDocument();
+  });
+});
+
+describe("桌宠复盘插槽(工单 06)", () => {
+  /** ready 复盘的样子:一句话 + 依据(第 2 轮用『开场破冰』)。 */
+  const REVIEW = {
+    text: "第2轮先接住话头再往下谈，这招值得学。",
+    basis: { gameId: "conv-1", turnNumber: 2, cardId: "c1" },
+  };
+
+  it("收到 ready 复盘:插槽显示一句话,展开可见轮次与策略卡", async () => {
+    const user = userEvent.setup();
+    render(<ResultStep result={result()} onRestart={() => {}} hiddenChoices={{}} petReview={REVIEW} />);
+
+    expect(screen.getByRole("heading", { name: "桌宠复盘" })).toBeInTheDocument();
+    expect(screen.getByText(REVIEW.text)).toBeInTheDocument();
+
+    await user.click(screen.getByText("展开依据"));
+    expect(screen.getByText(/^第 2 轮 · 策略卡『开场破冰』/)).toBeInTheDocument();
+  });
+
+  it("没有复盘内容(dropped):不出插槽,结算页保持安静", () => {
+    renderResult();
+    expect(screen.queryByRole("heading", { name: "桌宠复盘" })).not.toBeInTheDocument();
   });
 });

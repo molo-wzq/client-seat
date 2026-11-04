@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createAgentClient } from "./agent-client";
+import type { AgentTriggerInput } from "../../server/agent/types";
 
 /**
  * 前端 agent 客户端(工单 03 测试缝):fetch 与 EventSource 均注入假实现,
@@ -69,6 +70,47 @@ describe("agent 客户端 sendCommand", () => {
     const client = createAgentClient({ fetch: fetch.fn });
 
     await expect(client.sendCommand("  ")).rejects.toThrow("命令内容为空");
+  });
+});
+
+describe("agent 客户端 sendTrigger", () => {
+  it("把任意触发 POST 到 /api/agent/triggers,并返回链路结果(工单 06 结算页自动复盘)", async () => {
+    const outcome = {
+      triggerId: "tr-1",
+      admitted: true,
+      ticket: null,
+      report: { ticketId: "t-1", status: "ready", text: "第2轮先接住话头再往下谈，这招值得学。" },
+    };
+    const fetch = fakeFetch({ ok: true, status: 200, body: outcome });
+    const client = createAgentClient({ fetch: fetch.fn });
+
+    await expect(
+      client.sendTrigger({
+        source: "table",
+        kind: "game-ended",
+        data: { gameId: "conv-1", rounds: [{ managerText: "您好。", cardId: "c1" }], hiddenUnrevealedCount: 1 },
+      }),
+    ).resolves.toEqual(outcome);
+
+    expect(fetch.calls).toHaveLength(1);
+    expect(fetch.calls[0].url).toBe("/api/agent/triggers");
+    expect(fetch.calls[0].init?.method).toBe("POST");
+    expect(fetch.calls[0].init?.body).toBe(
+      JSON.stringify({
+        source: "table",
+        kind: "game-ended",
+        data: { gameId: "conv-1", rounds: [{ managerText: "您好。", cardId: "c1" }], hiddenUnrevealedCount: 1 },
+      }),
+    );
+  });
+
+  it("服务端拒绝时抛出错误消息", async () => {
+    const fetch = fakeFetch({ ok: false, status: 400, body: { error: "触发类型不合法" } });
+    const client = createAgentClient({ fetch: fetch.fn });
+
+    await expect(
+      client.sendTrigger({ source: "table", kind: "magic" as AgentTriggerInput["kind"], data: {} }),
+    ).rejects.toThrow("触发类型不合法");
   });
 });
 
