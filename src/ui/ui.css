@@ -851,8 +851,18 @@ h3 svg,
 }
 
 .brand-mark {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
   color: var(--warm-yellow);
+}
+
+/* 品牌角标:奶油方标,木纹/墨绿两套侧栏底色上都可读。 */
+.brand-logo {
+  display: block;
+  width: 22px;
+  height: 22px;
+  border-radius: 5px;
 }
 
 .left-rail .app-header h1 {
