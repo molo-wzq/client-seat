@@ -422,3 +422,42 @@ describe("通话逻辑(p4)", () => {
     expect(prompt).toContain("归不到具体规律就省略");
   });
 });
+
+describe("隐藏信息隔离(工单 04)", () => {
+  /**
+   * 提示词构造入参是仅含 visible 的画像视图(product-core 的 toVisiblePersona
+   * 剥掉 hidden 后才进适配器)。这里按同一形状构造,钉住边界:
+   * 三个内置画像的全部隐藏牌条目,在经理系统提示词与裁判提示词里一字不出现;
+   * 可见信息仍完整在桌上,保证不是空头通过。揭示判定只存在客户侧。
+   */
+  const ALL_SEED_PERSONAS = [SEED_PERSONA, SEED_PERSONA_P02, SEED_PERSONA_P03];
+
+  it("经理系统提示词不含任何隐藏牌原文,可见信息完整在桌上", () => {
+    for (const persona of ALL_SEED_PERSONAS) {
+      const prompt = assembleManagerSystemPrompt({
+        persona: { id: persona.id, name: persona.name, visible: persona.visible },
+        publishedCards: SEED_CARDS,
+        product: SEED_PRODUCT_CARD,
+      });
+      for (const line of persona.visible) {
+        expect(prompt, `${persona.id} 可见信息缺失:${line}`).toContain(line);
+      }
+      for (const hidden of persona.hidden) {
+        expect(prompt, `${persona.id} 隐藏牌泄漏:${hidden}`).not.toContain(hidden);
+      }
+    }
+  });
+
+  it("裁判提示词不含任何隐藏牌原文", () => {
+    for (const persona of ALL_SEED_PERSONAS) {
+      const prompt = assembleManagerMetaPrompt({
+        publishedCards: SEED_CARDS,
+        persona: { id: persona.id, name: persona.name, visible: persona.visible },
+        product: SEED_PRODUCT_CARD,
+      });
+      for (const hidden of persona.hidden) {
+        expect(prompt, `${persona.id} 隐藏牌泄漏:${hidden}`).not.toContain(hidden);
+      }
+    }
+  });
+});

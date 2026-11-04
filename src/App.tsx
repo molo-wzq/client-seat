@@ -5,6 +5,7 @@ import type { RoleCard } from "./domain/role-card";
 import { BusyHint } from "./ui/BusyHint";
 import { CardsView, HistoryView, MaterialsView, ResearchReportView, RolesView } from "./ui/CatalogViews";
 import { DeskPet } from "./ui/DeskPet";
+import { type HiddenCardChoice } from "./ui/HiddenCards";
 import { LeftRail, type AppView } from "./ui/LeftRail";
 import { ResultStep } from "./ui/ResultStep";
 import { SetupAct } from "./ui/SetupAct";
@@ -23,6 +24,9 @@ export function App({ api }: { api: ProductCore }) {
   const [quickBusy, setQuickBusy] = useState(false);
   const [connectBusy, setConnectBusy] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(false);
+  // 隐藏牌(工单 04):玩家「翻/先藏着」的选择只存客户端,按局归档;结算时用于揭晓。
+  const [hiddenChoicesByCall, setHiddenChoicesByCall] = useState<Record<string, Record<string, HiddenCardChoice>>>({});
+  const [raisePending, setRaisePending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [catalogBusy, setCatalogBusy] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -236,6 +240,14 @@ export function App({ api }: { api: ProductCore }) {
                 conversation={conversation}
                 persona={seatedPersona}
                 publishedCards={publishedCards}
+                hiddenChoices={hiddenChoicesByCall[conversation.id] ?? {}}
+                onHiddenChoice={(item, choice) =>
+                  setHiddenChoicesByCall((current) => ({
+                    ...current,
+                    [conversation.id]: { ...(current[conversation.id] ?? {}), [item]: choice },
+                  }))
+                }
+                onRaisePendingChange={setRaisePending}
                 onConversationChange={(next) => {
                   const accept = (current: Conversation) => next.revision === undefined || current.revision === undefined || next.revision >= current.revision;
                   setConversation((current) => current?.id === next.id && accept(current) ? next : current);
@@ -258,6 +270,7 @@ export function App({ api }: { api: ProductCore }) {
               onReplay={seatedPersona ? () => void connect(seatedPersona.id, { replayOfId: result.conversationId }) : undefined}
               replayBusy={entryBusy}
               onBranch={(turnNumber, text) => branch(turnNumber, text)}
+              hiddenChoices={hiddenChoicesByCall[result.conversationId] ?? {}}
             />}
             {view === "materials" && (
               <MaterialsView api={api} materials={materials} onPublished={() => void refreshCatalog()} />
@@ -274,8 +287,12 @@ export function App({ api }: { api: ProductCore }) {
         )}
       </main>
       {/* 桌宠固定在牌桌右下角,不参与布局,也不遮挡主内容。
-          对局进行中(主幕 + ongoing)命令条置灰(工单 03)。 */}
-      <DeskPet inCall={view === "table" && conversation?.status === "ongoing"} />
+          对局进行中(主幕 + ongoing)命令条置灰(工单 03);
+          有隐藏牌举着待决定时表情变「拿笔想」(工单 04)。 */}
+      <DeskPet
+        inCall={view === "table" && conversation?.status === "ongoing"}
+        expression={raisePending && view === "table" && conversation?.status === "ongoing" ? "think" : "wave"}
+      />
     </div>
   );
 }

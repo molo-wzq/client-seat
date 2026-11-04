@@ -7,6 +7,7 @@ import { playSfx } from "./game-feel";
 import { FeelingSeal, FeelingStampBar } from "./feeling-stamps";
 import { ReplayComparison } from "./ReplayComparison";
 import { ProductFacts } from "./ProductFacts";
+import { attributionNote, hiddenMissNote, settleHiddenCards, type HiddenCardChoice } from "./HiddenCards";
 import { SEED_PRODUCT_CARD } from "../domain/seed";
 export function ResultStep({
   result,
@@ -15,6 +16,7 @@ export function ResultStep({
   onReplay,
   replayBusy = false,
   onBranch,
+  hiddenChoices = {},
 }: {
   result: ConversationResult;
   api?: ProductCore;
@@ -22,12 +24,20 @@ export function ResultStep({
   onReplay?: () => void;
   replayBusy?: boolean;
   onBranch?: (customerTurnNumber: number, text: string) => Promise<void>;
+  /** 本局玩家对举牌的「翻/先藏着」决定(客户侧状态,工单 04 结算揭晓用)。 */
+  hiddenChoices?: Readonly<Record<string, HiddenCardChoice>>;
 }) {
   // 回放原文时在完整对话里闪烁定位目标轮次;同轮连续点击也要能重触发,
   // 所以先清空再在下一帧置回,动画由 CSS 的 li.flash 承担。
   const [flashTurn, setFlashTurn] = useState<number | null>(null);
   // 复盘标尺随本局经理角色快照;旧记录无快照回落默认规律。
   const logicLaws = result.resources?.role?.callLogic ?? CALL_LOGIC_LAWS;
+  // 隐藏牌结算(工单 04):扣着的牌全部翻开,漏掉的信号只说经理,不评价玩家。
+  const hiddenItems = result.resources?.persona?.hidden ?? [];
+  const hiddenSettled = hiddenItems.length
+    ? settleHiddenCards(hiddenItems, result.turns, result.resources?.cards ?? [], hiddenChoices)
+    : [];
+  const hiddenRevealedCount = hiddenSettled.filter((card) => card.revealed).length;
   const flashTimer = useRef<number | undefined>(undefined);
   const [branchTurn, setBranchTurn] = useState<number | null>(null);
   const [branchText, setBranchText] = useState('');
@@ -152,6 +162,24 @@ export function ResultStep({
           <button type="button" className="ghost" onClick={onRestart} disabled={replayBusy}>再来一局</button>
         </div>
       </aside>
+
+      {hiddenSettled.length > 0 && (
+        <aside className="review-focus hidden-settle" aria-label="隐藏牌揭晓">
+          <h3>隐藏牌揭晓</h3>
+          <p className="review-counts">翻开 {hiddenRevealedCount}/{hiddenSettled.length}</p>
+          <ul className="hidden-settle-list">
+            {hiddenSettled.map((card, index) => (
+              <li key={`${index}-${card.item}`} data-revealed={card.revealed || undefined}>
+                <span className="hidden-settle-item">{card.item}</span>
+                <span className="hidden-settle-note">
+                  {card.revealed ? attributionNote(card) : hiddenMissNote(card)}
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="hint">对局结束,扣着的牌全部翻开;漏掉的信号说的是经理,不评价你的表现。</p>
+        </aside>
+      )}
 
       {managerTurns.length > 0 && (
         <aside className="empathy-timeline" aria-label="换位体感走势">

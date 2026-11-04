@@ -1472,6 +1472,149 @@ h3 svg,
   box-shadow: inset 0 0 0 3px #111;
 }
 
+/* 隐藏牌排(工单 04):每条 hidden 一张,翻牌走 3D 翻转;减少动效时直接切换。 */
+.hidden-card-row {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 8px 0;
+  padding: 0;
+}
+
+.hidden-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  width: 158px;
+  perspective: 640px;
+}
+
+.hidden-card-flip {
+  position: relative;
+  display: block;
+  min-height: 96px;
+  transform-style: preserve-3d;
+  transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+.hidden-card[data-state="revealed"] .hidden-card-flip {
+  transform: rotateY(180deg);
+}
+
+.hidden-card-face {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 6px;
+  backface-visibility: hidden;
+}
+
+.hidden-card-back {
+  display: grid;
+  place-items: center;
+  border: 2px solid #45423e;
+  background:
+    repeating-linear-gradient(45deg, rgba(255,255,255,.025) 0 2px, transparent 2px 6px),
+    #1d201e;
+  color: #f5eee4;
+  box-shadow: inset 0 0 0 3px #111;
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.hidden-card-front {
+  transform: rotateY(180deg);
+  border: 2px solid #9b8d78;
+  background: var(--card-paper);
+  color: var(--ink-black);
+  font-size: 12px;
+}
+
+.hidden-card-text {
+  font-weight: 600;
+}
+
+.hidden-card-note {
+  color: #6f6a5e;
+  font-size: 11px;
+}
+
+/* 举牌:牌背抬起一角,黄铜圈提示,行动按钮跟在牌下。 */
+.hidden-card[data-state="raised"] .hidden-card-back {
+  border-color: #b28c52;
+  box-shadow: inset 0 0 0 3px #111, 0 0 0 2px #b28c5288;
+  transform: rotate(-4deg) translateY(-4px);
+}
+
+.hidden-card-raise {
+  display: flex;
+  gap: 6px;
+}
+
+.hidden-card-raise button {
+  flex: 1;
+  padding: 3px 0;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.hidden-card-progress {
+  margin: 2px 0 8px;
+  font-size: 12px;
+  color: #c7bcae;
+}
+
+/* 结算揭晓(工单 04):逐张列出,翻开的带归因,没翻开的说明经理漏掉的信号。 */
+.hidden-settle-list {
+  list-style: none;
+  margin: 8px 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.hidden-settle-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border: 2px solid #9b8d78;
+  border-radius: 6px;
+  background: var(--card-paper);
+  color: var(--ink-black);
+}
+
+.hidden-settle-list li:not([data-revealed]) {
+  border-style: dashed;
+}
+
+.hidden-settle-item {
+  font-weight: 600;
+}
+
+.hidden-settle-note {
+  font-size: 12px;
+  color: #6f6a5e;
+}
+
+.hidden-card-row[data-reduced-motion] .hidden-card-flip {
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hidden-card-flip {
+    transition: none;
+  }
+
+  .hidden-card[data-state="raised"] .hidden-card-back {
+    transform: none;
+  }
+}
+
 .call-board {
   min-width: 0;
 }
