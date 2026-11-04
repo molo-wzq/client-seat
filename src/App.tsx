@@ -273,8 +273,9 @@ export function App({ api }: { api: ProductCore }) {
           </>
         )}
       </main>
-      {/* 桌宠固定在牌桌右下角,不参与布局,也不遮挡主内容。 */}
-      <DeskPet />
+      {/* 桌宠固定在牌桌右下角,不参与布局,也不遮挡主内容。
+          对局进行中(主幕 + ongoing)命令条置灰(工单 03)。 */}
+      <DeskPet inCall={view === "table" && conversation?.status === "ongoing"} />
     </div>
   );
 }

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type {
   AgentEvent,
+  AgentTrigger,
   AgentTriggerInput,
   DecisionEntry,
   ReportEntry,
@@ -126,5 +127,39 @@ describe("Agent 核心(工单 02)", () => {
       core.emitTrigger({ source: "pet", kind: "magic" as unknown as AgentTriggerInput["kind"], data: {} }),
     ).rejects.toThrow("触发类型不合法");
     expect(await core.ledger()).toEqual([]);
+  });
+});
+
+describe("DemoWorker 快捷环命令(工单 03)", () => {
+  // 快捷环 4 项的确定性回复:桌宠以客户侧搭档口吻对玩家说话,不评价玩家,不超过 40 字。
+  const expectedReplies: Array<[string, RegExp]> = [
+    ["换个客户", /名册|新客户/],
+    ["再来一局", /(重摆|再来一局|牌桌)/],
+    ["上局复盘", /(上局|复盘)/],
+    ["本周投研", /(投研|周报|本周)/],
+  ];
+
+  function runDemoWorker(text: string) {
+    const trigger: AgentTrigger = { id: "tr-demo", source: "pet", kind: "command", data: { text } };
+    return new DemoWorker().run(
+      { id: "t-demo", triggerId: trigger.id, thread: { kind: "commandId", key: trigger.id } },
+      trigger,
+    );
+  }
+
+  it("快捷环 4 条命令各有确定性中文回复,且不超过 40 字", async () => {
+    for (const [command, pattern] of expectedReplies) {
+      const report = await runDemoWorker(command);
+      expect(report.status).toBe("ready");
+      expect(report.text).toMatch(pattern);
+      expect([...report.text].length).toBeLessThanOrEqual(40);
+    }
+  });
+
+  it("其余命令统一回「收到，马上办」", async () => {
+    expect(await runDemoWorker("帮我把素材库里最热的卡整理成一句话")).toMatchObject({
+      status: "ready",
+      text: "收到，马上办",
+    });
   });
 });

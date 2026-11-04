@@ -70,3 +70,74 @@
 }
 .desk-pet-restore img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 .desk-pet-restore:focus-visible { outline: 2px solid #bf8636; outline-offset: 3px; }
+
+/* 头顶悬浮栈(工单 03):气泡在上、快捷环居中、命令条贴身,右对齐不遮主内容。 */
+.desk-pet-popovers {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 280px;
+}
+
+/* 气泡:卡纸便签 + 黄铜边,一句话不超过 40 字由数据保证。 */
+.desk-pet-bubble {
+  margin: 0;
+  padding: 7px 12px;
+  border: 1px solid #b28c52;
+  border-radius: 12px 12px 3px 12px;
+  background: radial-gradient(circle at 50% 0%, #f4ecdc, #ebe0ce 80%);
+  color: #4d3624; /* 深木字 */
+  font-size: 12px;
+  line-height: 1.6;
+  box-shadow: 0 3px 8px #0005;
+}
+
+/* 快捷环:竖排 4 项,深木底浅字,与桌宠动作钮同一语言。 */
+.desk-pet-ring { display: flex; flex-direction: column; gap: 4px; }
+.desk-pet-ring-item {
+  padding: 4px 12px;
+  border: 1px solid #b28c52;
+  border-radius: 10px;
+  color: #e6d7ba;
+  background: #4d3624e0;
+  font-size: 12px;
+  line-height: 1.6;
+  cursor: pointer;
+  text-align: right;
+}
+.desk-pet-ring-item:hover { background: #5d4430; }
+.desk-pet-ring-item:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 命令条:卡纸底输入 + 占位的按住说话,对局中整体置灰。 */
+.desk-pet-commandbar { display: flex; gap: 4px; align-items: center; }
+.desk-pet-command-input {
+  width: 210px;
+  padding: 5px 10px;
+  border: 1px solid #b28c52;
+  border-radius: 10px;
+  background: #f4ecdc;
+  color: #4d3624;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.desk-pet-command-input::placeholder { color: #4d362480; }
+.desk-pet-command-input:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+.desk-pet-commandbar[data-incall] .desk-pet-command-input {
+  background: #d8cdb9; /* 灰卡纸:对局中置灰禁用 */
+  color: #8a7a5f;
+  cursor: not-allowed;
+}
+.desk-pet-hold-speak {
+  padding: 5px 9px;
+  border: 1px solid #b28c52;
+  border-radius: 10px;
+  color: #e6d7ba;
+  background: #4d3624e0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.desk-pet-hold-speak:disabled { opacity: 0.55; cursor: not-allowed; }

@@ -1,5 +1,6 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { reducedMotion } from "./game-feel";
+import { createAgentClient, type AgentClient } from "./agent-client";
 import fCheer from "../assets/desk-pet/f-cheer.webp";
 import fPout from "../assets/desk-pet/f-pout.webp";
 import fSleepy from "../assets/desk-pet/f-sleepy.webp";
@@ -22,6 +23,17 @@ type PetPos = { left: number; top: number };
 
 const VARIANT_KEY = "desk-pet-variant";
 const POS_KEY = "desk-pet-pos";
+
+/** 快捷环 4 项(spec 故事 8):文案即命令文本,服务端 DemoWorker 按同一文案回脚本。 */
+const QUICK_RING: readonly string[] = ["换个客户", "再来一局", "上局复盘", "本周投研"];
+
+/** 桌宠气泡硬上限 40 字(spec):服务端已截一道,前端展示再兜底。 */
+function clampBubble(text: string): string {
+  return [...text].slice(0, 40).join("");
+}
+
+/** 缺省 agent 客户端:浏览器全局 fetch/EventSource;测试注入假实现。 */
+const defaultAgent = createAgentClient();
 
 const petImg: Record<PetVariant, Record<PetExpression, string>> = {
   f: { wave: fWave, think: fThink, cheer: fCheer, sleepy: fSleepy, pout: fPout },
@@ -55,23 +67,69 @@ function savePos(pos: PetPos) {
   }
 }
 
-/** 桌宠在牌桌一角陪客户看局,本期只做外壳:不说话、不评价玩家。 */
-export function DeskPet({ expression = "wave" }: { expression?: PetExpression }) {
+/**
+ * 桌宠在牌桌一角陪客户看局(工单 01 外壳 + 工单 03 交互):
+ * 点头像出快捷环,Ctrl+K 唤命令条,agent 事件驱动气泡;不说话评价玩家。
+ * inCall(对局中)只置灰命令条——快捷环里「再来一局」还得能按。
+ */
+export function DeskPet({
+  expression = "wave",
+  inCall = false,
+  agent = defaultAgent,
+}: {
+  expression?: PetExpression;
+  inCall?: boolean;
+  agent?: AgentClient;
+}) {
   const [variant, setVariant] = useState<PetVariant>(
     () => (window.localStorage.getItem(VARIANT_KEY) === "m" ? "m" : "f"),
   );
   const [dnd, setDnd] = useState(false);
   const [pos, setPos] = useState<PetPos | null>(loadPos);
   const [dragging, setDragging] = useState(false);
+  const [ringOpen, setRingOpen] = useState(false);
+  const [barOpen, setBarOpen] = useState(false);
+  const [command, setCommand] = useState("");
+  const [bubble, setBubble] = useState<string | null>(null);
   const rootRef = useRef<HTMLElement>(null);
+  const commandInputRef = useRef<HTMLInputElement>(null);
   // 拖动基线:按下时的指针与桌宠位置,移动按差值换算,jsdom 里 rect 为 0 也能算对差值。
   const dragRef = useRef<{ startX: number; startY: number; baseLeft: number; baseTop: number } | null>(null);
+  // 按下后是否真的拖动过:拖完松手浏览器仍会补发 click,别让它误开快捷环。
+  const draggedRef = useRef(false);
+
+  // Ctrl+K 全局唤出命令条(spec 故事 9)。
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setBarOpen(true);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  // 订阅 agent 事件流:桌宠只认 pet-bubble 通道,超长文案兜底截到 40 字。
+  useEffect(() => {
+    return agent.onEvent((event) => {
+      if (event.type === "channel" && event.channel.target === "pet-bubble") {
+        setBubble(clampBubble(event.channel.text));
+      }
+    });
+  }, [agent]);
+
+  // 命令条打开即聚焦,直接打字。
+  useEffect(() => {
+    if (barOpen) commandInputRef.current?.focus();
+  }, [barOpen]);
 
   useEffect(() => {
     if (!dragging) return;
     function onMove(e: PointerEvent) {
       const base = dragRef.current;
       if (!base) return;
+      draggedRef.current = true;
       const next = { left: base.baseLeft + (e.clientX - base.startX), top: base.baseTop + (e.clientY - base.startY) };
       // 重定基线:onUp 时基线就是最新位置,直接落盘。
       dragRef.current = { startX: e.clientX, startY: e.clientY, baseLeft: next.left, baseTop: next.top };
@@ -97,6 +155,7 @@ export function DeskPet({ expression = "wave" }: { expression?: PetExpression })
     const root = rootRef.current;
     if (!root) return;
     const rect = root.getBoundingClientRect();
+    draggedRef.current = false;
     dragRef.current = {
       startX: e.clientX,
       startY: e.clientY,
@@ -105,6 +164,64 @@ export function DeskPet({ expression = "wave" }: { expression?: PetExpression })
     };
     setDragging(true);
   }
+
+  /** 指令出口:命令条与快捷环共用。发送失败不上气泡,由账本/后续待办兜底。 */
+  function sendCommandNow(text: string) {
+    void agent.sendCommand(text).catch(() => undefined);
+  }
+
+  function submitCommand() {
+    const text = command.trim();
+    if (!text || inCall) return;
+    sendCommandNow(text);
+    setCommand("");
+    setBarOpen(false);
+  }
+
+  function closeCommandBar() {
+    setCommand("");
+    setBarOpen(false);
+  }
+
+  const commandBar = barOpen ? (
+    <DeskPetCommandBar
+      inputRef={commandInputRef}
+      inCall={inCall}
+      value={command}
+      onChange={setCommand}
+      onSubmit={submitCommand}
+      onClose={closeCommandBar}
+    />
+  ) : null;
+
+  // 头顶悬浮栈:气泡在上、快捷环居中、命令条贴身,避免三块浮层互相遮挡。
+  const popovers = (
+    <div className="desk-pet-popovers">
+      {bubble !== null && !dnd && (
+        <p className="desk-pet-bubble" role="status" aria-label="桌宠气泡">
+          {bubble}
+        </p>
+      )}
+      {ringOpen && !dnd && (
+        <div className="desk-pet-ring" aria-label="快捷环">
+          {QUICK_RING.map((label) => (
+            <button
+              key={label}
+              type="button"
+              className="desk-pet-ring-item"
+              onClick={() => {
+                sendCommandNow(label);
+                setRingOpen(false);
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+      {commandBar}
+    </div>
+  );
 
   const anchored = pos ? { left: pos.left, top: pos.top, right: "auto", bottom: "auto" } : undefined;
 
@@ -136,6 +253,7 @@ export function DeskPet({ expression = "wave" }: { expression?: PetExpression })
         >
           <img src={petImg[variant][expression]} alt="" draggable={false} />
         </button>
+        {popovers}
       </aside>
     );
   }
@@ -152,13 +270,23 @@ export function DeskPet({ expression = "wave" }: { expression?: PetExpression })
       style={anchored}
       onPointerDown={onPointerDown}
     >
-      <div className="desk-pet-avatar">
+      <div
+        className="desk-pet-avatar"
+        onClick={() => {
+          if (draggedRef.current) {
+            draggedRef.current = false;
+            return;
+          }
+          setRingOpen((open) => !open);
+        }}
+      >
         <img
           src={petImg[variant][expression]}
           alt={`桌宠·${variantLabel[variant]}·${expressionLabel[expression]}`}
           draggable={false}
         />
       </div>
+      {popovers}
       <div className="desk-pet-actions">
         <button type="button" className="desk-pet-action" onClick={switchVariant}>
           切换{variant === "f" ? "男版" : "女版"}
@@ -168,5 +296,50 @@ export function DeskPet({ expression = "wave" }: { expression?: PetExpression })
         </button>
       </div>
     </aside>
+  );
+}
+
+/** 命令条:打字回车发送、Esc 关闭;对局中置灰禁用(工单 03:对局中命令条置灰)。 */
+function DeskPetCommandBar({
+  inputRef,
+  inCall,
+  value,
+  onChange,
+  onSubmit,
+  onClose,
+}: {
+  inputRef: RefObject<HTMLInputElement | null>;
+  inCall: boolean;
+  value: string;
+  onChange: (next: string) => void;
+  onSubmit: () => void;
+  onClose: () => void;
+}) {
+  return (
+    <form
+      className="desk-pet-commandbar"
+      data-incall={inCall || undefined}
+      onSubmit={(e) => {
+        e.preventDefault();
+        onSubmit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape") onClose();
+      }}
+    >
+      <input
+        ref={inputRef}
+        className="desk-pet-command-input"
+        aria-label="命令条"
+        placeholder={inCall ? "对局进行中,先打完这局…" : "跟桌宠说点什么…(Ctrl+K)"}
+        value={value}
+        disabled={inCall}
+        onChange={(e) => onChange(e.target.value)}
+      />
+      {/* 按住说话(ASR)本工单只留占位:语音识别后续接入,先不实现。 */}
+      <button type="button" className="desk-pet-hold-speak" disabled title="按住说话(语音识别后续接入)">
+        按住说话
+      </button>
+    </form>
   );
 }

@@ -22,10 +22,22 @@ export interface AgentWorker {
   run(ticket: AgentTicket, trigger: AgentTrigger): Promise<AgentReport>;
 }
 
+/**
+ * 快捷环 4 条命令的确定性回复(工单 03):键与前端 DeskPet 快捷环的按钮文案一致,
+ * 两端各自被测试钉住。口吻是客户侧搭档对玩家说话,不评价玩家,不超过 40 字。
+ */
+const QUICK_RING_REPLIES: Record<string, string> = {
+  换个客户: "好，去名册挑位新客户，这就给你换上。",
+  再来一局: "收到，马上重摆牌桌，再来一局。",
+  上局复盘: "这就调出上局复盘，挑值得学的给你看。",
+  本周投研: "本周投研已备好，这就翻开放你手边。",
+};
+
 /** demo Worker:确定性脚本回复,不调模型(无 key 演示路径;真实模型见工单 11)。 */
 export class DemoWorker implements AgentWorker {
-  async run(ticket: AgentTicket): Promise<AgentReport> {
-    return { ticketId: ticket.id, status: "ready", text: "收到，马上办" };
+  async run(ticket: AgentTicket, trigger: AgentTrigger): Promise<AgentReport> {
+    const text = typeof trigger?.data?.text === "string" ? trigger.data.text.trim() : "";
+    return { ticketId: ticket.id, status: "ready", text: QUICK_RING_REPLIES[text] ?? "收到，马上办" };
   }
 }
 
