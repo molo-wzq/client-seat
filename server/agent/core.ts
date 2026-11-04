@@ -238,6 +238,10 @@ export interface AgentCore {
   setAcceptMode(mode: AcceptMode): Promise<AgentPolicy>;
   /** 只读评估记录(工单 08):账本折叠出的「本来会做什么+为什么」清单。 */
   evals(): Promise<AgentEvalRecord[]>;
+  /** 重试一张卡住的工单(工单 09,Watchdog 调):按账本里的原 Trigger 重跑 Worker,不等结果。 */
+  retryTicket(ticketId: string): Promise<boolean>;
+  /** 系统侧汇报(工单 09,Watchdog 调):落账并发 report 事件,不出桌宠气泡。 */
+  appendSystemReport(report: AgentReport): Promise<void>;
 }
 
 export function createAgentCore(deps: {
@@ -355,6 +359,28 @@ export function createAgentCore(deps: {
 
     async evals() {
       return foldEvals(await storage.listLedgerEntries());
+    },
+
+    async retryTicket(ticketId) {
+      const entries = await storage.listLedgerEntries();
+      const ticket = entries.find(
+        (entry): entry is Extract<LedgerEntry, { type: "ticket" }> => entry.type === "ticket" && entry.ticket.id === ticketId,
+      )?.ticket;
+      if (!ticket) return false;
+      const trigger = entries.find(
+        (entry): entry is Extract<LedgerEntry, { type: "trigger" }> =>
+          entry.type === "trigger" && entry.trigger.id === ticket.triggerId,
+      )?.trigger;
+      if (!trigger) return false;
+      // 重启不等结果:卡住的工单本来就可能不返回,新汇报走同一条出口自然落账。
+      void worker.run(ticket, trigger, emitReport).catch(() => undefined);
+      return true;
+    },
+
+    async appendSystemReport(report) {
+      // Watchdog 的汇报只落账与 report 事件,不配气泡(spec 故事 16:不对玩家说话)。
+      await storage.appendLedgerEntry({ type: "report", report });
+      publish({ type: "report", report });
     },
   };
 

@@ -336,22 +336,23 @@ export function DeskPet({
     />
   ) : null;
 
-  // 待人决定的工单(spec 故事 11):角标数量、待办面板都由它驱动。
-  const waitingTickets = tickets.filter((ticket) => ticket.status === "waiting");
+  // 待人决定与受阻的工单(spec 故事 11/16):角标数量、待办面板都由它驱动。
+  // 受阻卡(Watchdog 标的)只说明原因;同意/驳回与批注只属于等待中的待审卡。
+  const todoTickets = tickets.filter((ticket) => ticket.status === "waiting" || ticket.status === "blocked");
 
-  // 头顶角标:waiting 数,点击开关待办面板;勿扰时不打扰。
+  // 头顶角标:待办数(等待+受阻),点击开关待办面板;勿扰时不打扰。
   const badge =
-    waitingTickets.length > 0 && !dnd ? (
+    todoTickets.length > 0 && !dnd ? (
       <button
         type="button"
         className="desk-pet-badge"
-        aria-label={`待办 ${waitingTickets.length}`}
+        aria-label={`待办 ${todoTickets.length}`}
         onClick={(e) => {
           e.stopPropagation(); // 点角标只开关待办面板,不触发头像的快捷环
           setInboxOpen((open) => !open);
         }}
       >
-        {waitingTickets.length}
+        {todoTickets.length}
       </button>
     ) : null;
 
@@ -376,10 +377,20 @@ export function DeskPet({
             ))}
           </div>
         </div>
-        {waitingTickets.length === 0 && <p className="desk-pet-inbox-empty">没有等你拍板的事</p>}
-        {waitingTickets.map((ticket) => (
-          <div className="desk-pet-inbox-item" key={ticket.ticketId}>
-            <p className="desk-pet-inbox-text">{ticket.text || NO_REPORT_TEXT}</p>
+        {todoTickets.length === 0 && <p className="desk-pet-inbox-empty">没有等你拍板的事</p>}
+        {todoTickets.map((ticket) =>
+          ticket.status === "blocked" ? (
+            <div className="desk-pet-inbox-item" key={ticket.ticketId}>
+              <p className="desk-pet-inbox-text">
+                <span className="desk-pet-status" data-status="blocked">
+                  {STATUS_LABEL.blocked}
+                </span>
+                {ticket.text || NO_REPORT_TEXT}
+              </p>
+            </div>
+          ) : (
+            <div className="desk-pet-inbox-item" key={ticket.ticketId}>
+              <p className="desk-pet-inbox-text">{ticket.text || NO_REPORT_TEXT}</p>
             <div className="desk-pet-inbox-actions">
               <button type="button" onClick={() => sendCommandNow(`同意 ${ticket.ticketId}`)}>
                 同意
@@ -405,7 +416,8 @@ export function DeskPet({
               <button type="submit">发批注</button>
             </form>
           </div>
-        ))}
+          ),
+        )}
         <div className="desk-pet-evals" role="region" aria-label="评估记录">
           <p className="desk-pet-evals-title">评估记录</p>
           {evals.length === 0 && <p className="desk-pet-eval">还没有评估记录</p>}
