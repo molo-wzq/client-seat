@@ -38,14 +38,15 @@ export interface AgentWorker {
 }
 
 /**
- * 快捷环即时命令的确定性回复(工单 03):键与前端 DeskPet 快捷环的按钮文案一致,
- * 两端各自被测试钉住。口吻是客户侧搭档对玩家说话,不评价玩家,不超过 40 字。
- * 「本周投研」自工单 05 起走分步演示(推进一步后待人决定),不在此表。
+ * 即时命令的确定性回复:键与前端 DeskPet 快捷环的按钮文案一致(工单 03),
+ * 两端各自被测试钉住;工单 10 另收演示脚本的口令。口吻是客户侧搭档对玩家说话,
+ * 不评价玩家,不超过 40 字。「本周投研」自工单 05 起走分步演示(推进一步后待人决定),不在此表。
  */
-const QUICK_RING_REPLIES: Record<string, string> = {
+const SCRIPTED_REPLIES: Record<string, string> = {
   换个客户: "好，去名册挑位新客户，这就给你换上。",
   再来一局: "收到，马上重摆牌桌，再来一局。",
   上局复盘: "这就调出上局复盘，挑值得学的给你看。",
+  跟观众打个招呼: "大家好，我坐这儿陪你看完这局。",
 };
 
 /** demo Worker 的可注入依赖:分步节奏的 sleep,测试换即时假钟,不真等。 */
@@ -77,12 +78,13 @@ export class DemoWorker implements AgentWorker {
     if (trigger?.kind === "game-ended") return this.runPostgameReview(ticket, trigger);
     if (trigger?.kind === "dropped") return this.runMaterialDraft(ticket, onReport);
     if (trigger?.kind === "annotate") return this.runAnnotate(ticket, trigger, onReport);
+    if (trigger?.kind === "model-error") return this.runModelError(ticket, onReport);
     const text = typeof trigger?.data?.text === "string" ? trigger.data.text.trim() : "";
     // 待人决定的决议命令:「同意」「驳回」,可带工单号(待办面板按钮就这么发)。
     const decision = /^(同意|驳回)\s*(\S+)?$/.exec(text);
     if (decision) return this.runDecision(ticket, decision[1], decision[2], onReport);
     if (text === "本周投研" || text.includes("并行")) return this.runStepwiseDemo(ticket, text, onReport);
-    return { ticketId: ticket.id, status: "ready", text: QUICK_RING_REPLIES[text] ?? "收到，马上办" };
+    return { ticketId: ticket.id, status: "ready", text: SCRIPTED_REPLIES[text] ?? "收到，马上办" };
   }
 
   /** 分步演示:先报进展,「并行」再推一步后就绪,「本周投研」停在等待拍板。 */
@@ -91,19 +93,41 @@ export class DemoWorker implements AgentWorker {
     text: string,
     onReport: ReportSink,
   ): Promise<AgentReport> {
+    // 「并行：xxx」把任务名带进进展文案(工单 10 演示三线并行,各自看得见是谁在跑);
+    // 没有冒号格式的旧命令沿用通用文案。
+    const task = text.split("并行：").at(-1)?.trim();
     await onReport({
       ticketId: ticket.id,
       status: "progress",
-      text: text === "本周投研" ? "先把本周投研通读了一遍。" : "两条线并行开工，先各拆一半。",
+      text: text === "本周投研"
+        ? "先把本周投研通读了一遍。"
+        : task
+          ? `「${task}」这条线开工，先拆一半。`
+          : "两条线并行开工，先各拆一半。",
     });
     await this.sleep(DEMO_STEP_MS);
     if (text === "本周投研") {
       this.waitingTicketIds.push(ticket.id);
       return { ticketId: ticket.id, status: "waiting", text: "本周投研先押 AI 还是消费？等你拍板。" };
     }
-    await onReport({ ticketId: ticket.id, status: "progress", text: "一条线收尾，另一条过半。" });
+    await onReport({
+      ticketId: ticket.id,
+      status: "progress",
+      text: task ? `「${task}」过半了，快收尾。` : "一条线收尾，另一条过半。",
+    });
     await this.sleep(DEMO_STEP_MS);
     return { ticketId: ticket.id, status: "ready", text: "并行的事都办完了，结果放你手边。" };
+  }
+
+  /**
+   * 模型报错处置(demo,工单 10):压缩演示 Watchdog 的完整时序——先报进展(重试中),
+   * 再落 blocked 带原因进待办;文案与 Watchdog 真实汇报同一口径,不出桌宠气泡
+   * (spec 故事 16:不对玩家说话;真实超时路径见 watchdog.ts,阈值可经 env 调短)。
+   */
+  private async runModelError(ticket: AgentTicket, onReport: ReportSink): Promise<AgentReport> {
+    await onReport({ ticketId: ticket.id, status: "progress", text: "记下模型报错，安排重试…" });
+    await this.sleep(DEMO_STEP_MS);
+    return { ticketId: ticket.id, status: "blocked", text: "重试一次仍卡住，先标受阻，等你在待办里处理。" };
   }
 
   /** 决议:唤醒等待工单落 ready/dropped;找不到等待工单就直说,不误落账。 */
@@ -258,9 +282,10 @@ export function createAgentCore(deps: {
   const emitReport = async (report: AgentReport): Promise<void> => {
     await storage.appendLedgerEntry({ type: "report", report });
     publish({ type: "report", report });
-    // dropped 的语义是沉默(spec 故事 7:没什么值得说就保持沉默):
-    // 账本与工单视图照记「已放弃」,但不推气泡。
-    if (report.status === "dropped") return;
+    // dropped 的语义是沉默(spec 故事 7:没什么值得说就保持沉默);
+    // blocked 进待办说明原因即可,同样不打扰玩家(spec 故事 16)。
+    // 两条都照常落账与进工单视图,只是不推气泡。
+    if (report.status === "dropped" || report.status === "blocked") return;
     publish({
       type: "channel",
       // 桌宠气泡硬上限 40 字(spec);Report 原文完整留在账本里。
@@ -414,6 +439,10 @@ function evaluate(trigger: AgentTrigger): AgentDecision {
       ? { triggerId: trigger.id, admitted: true, reason: "待审批注,准予立项" }
       : { triggerId: trigger.id, admitted: false, reason: "批注不完整(缺工单号或批注内容),不立项" };
   }
+  if (trigger.kind === "model-error") {
+    // 报错事件本身不用带任何字段(data.error 仅备查);是否立项由放权模式研判(R5)。
+    return { triggerId: trigger.id, admitted: true, reason: "模型报错,准予处置立项" };
+  }
   const text = typeof trigger.data.text === "string" ? trigger.data.text.trim() : "";
   if (text === "") return { triggerId: trigger.id, admitted: false, reason: "命令内容为空" };
   return { triggerId: trigger.id, admitted: true, reason: "pet 命令,准予立项" };
@@ -422,8 +451,8 @@ function evaluate(trigger: AgentTrigger): AgentDecision {
 /** spec 的五个触发来源;输入校验在进链路之前完成。 */
 const SOURCES: AgentTrigger["source"][] = ["table", "materials", "research", "pet", "system"];
 
-/** 触发类型白名单:pet 命令 + 对局结束事件 + 拖入文件 + 待审批注(工单 07)。 */
-const TRIGGER_KINDS: AgentTrigger["kind"][] = ["command", "game-ended", "dropped", "annotate"];
+/** 触发类型白名单:pet 命令 + 对局结束事件 + 拖入文件 + 待审批注(工单 07)+ 模型报错(工单 10)。 */
+const TRIGGER_KINDS: AgentTrigger["kind"][] = ["command", "game-ended", "dropped", "annotate", "model-error"];
 
 /** 拖入文件的类型白名单(工单 07):录音 / 生客画像 JSON / 角色卡。 */
 const FILE_KINDS: unknown[] = ["audio", "persona", "role"];

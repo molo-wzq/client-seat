@@ -5,7 +5,8 @@ import type { RoleCard } from "./domain/role-card";
 import type { PostgameBasis } from "../server/agent/types";
 import { BusyHint } from "./ui/BusyHint";
 import { CardsView, HistoryView, MaterialsView, ResearchReportView, RolesView } from "./ui/CatalogViews";
-import { DeskPet } from "./ui/DeskPet";
+import { DeskPet, type PetExpression, type QuickRingAction } from "./ui/DeskPet";
+import { PetDemoConsole } from "./ui/PetDemoConsole";
 import { settleHiddenCards, type HiddenCardChoice } from "./ui/HiddenCards";
 import { LeftRail, type AppView } from "./ui/LeftRail";
 import { ResultStep } from "./ui/ResultStep";
@@ -39,6 +40,10 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
   // ref 缓存避免同一局来回进出结算时重复触发。
   const [petReview, setPetReview] = useState<PetReviewView | null>(null);
   const petReviewRef = useRef<PetReviewView | null>(null);
+  // 一键演示(工单 10):控制条开关、演示期间的桌宠表情接管与面板焦点。
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [demoExpression, setDemoExpression] = useState<PetExpression | null>(null);
+  const [petFocus, setPetFocus] = useState<"tickets" | "inbox" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [catalogBusy, setCatalogBusy] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -78,6 +83,11 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
   useEffect(() => {
     void initialLoad();
   }, [api]);
+
+  // 一键演示入口(工单 10):URL 带 ?demo=pet 直接开演;命令条输入「演示」同效。
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("demo") === "pet") setDemoOpen(true);
+  }, []);
 
   const publishedCards = useMemo(
     () => materials.flatMap((material) => material.cards.filter((card) => card.status === "published")),
@@ -159,6 +169,43 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
     setView("setup");
     setConversation(null);
     setResult(null);
+  }
+
+  /**
+   * 快捷环跳转(工单 10,spec 故事 8):回话由 Agent 照回,这里只管真的跳——
+   * 换个客户→布置/名册,再来一局→重开本局(同客重试),上局复盘→结算/记录,
+   * 本周投研→布置幕的情报档案夹(投研弹药库)并滚到它跟前。
+   */
+  function handleQuickAction(action: QuickRingAction) {
+    if (action === "换个客户") {
+      setView("setup");
+      return;
+    }
+    if (action === "再来一局") {
+      if (seatedPersona) {
+        void connect(seatedPersona.id, result ? { replayOfId: result.conversationId } : undefined);
+      } else {
+        void quickStart();
+      }
+      return;
+    }
+    if (action === "上局复盘") {
+      if (result) setView("postgame");
+      else if (conversation?.status === "ended") void openHistory(conversation);
+      else setView("history");
+      return;
+    }
+    setView("setup");
+    window.requestAnimationFrame(() => {
+      document.querySelector(".setup-research-dock")?.scrollIntoView({ block: "center" });
+    });
+  }
+
+  /** 关演示:表情与面板焦点一并还给正常交互。 */
+  function closeDemo() {
+    setDemoOpen(false);
+    setDemoExpression(null);
+    setPetFocus(null);
   }
 
   /**
@@ -339,18 +386,32 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
           </>
         )}
       </main>
+      {/* 一键演示控制条(工单 10):右上角,按脚本驱动 7 幕;桌宠表情与面板焦点由演示接管。 */}
+      {demoOpen && (
+        <PetDemoConsole
+          agent={agent}
+          onPetExpression={setDemoExpression}
+          onFocusPanel={(panel) => setPetFocus(panel === "none" ? null : panel)}
+          onClose={closeDemo}
+        />
+      )}
       {/* 桌宠固定在牌桌右下角,不参与布局,也不遮挡主内容。
           对局进行中(主幕 + ongoing)命令条置灰(工单 03);
           有隐藏牌举着待决定时表情变「拿笔想」(工单 04);
-          进结算后变「欢呼」,陪着看经理的复盘一句话(工单 06)。 */}
+          进结算后变「欢呼」,陪着看经理的复盘一句话(工单 06);
+          演示期间表情由演示脚本接管(工单 10)。 */}
       <DeskPet
         inCall={view === "table" && conversation?.status === "ongoing"}
+        onQuickAction={handleQuickAction}
+        onOpenDemo={() => setDemoOpen(true)}
+        focusPanel={petFocus}
         expression={
-          view === "postgame"
-            ? "cheer"
-            : raisePending && view === "table" && conversation?.status === "ongoing"
-              ? "think"
-              : "wave"
+          demoExpression
+            ?? (view === "postgame"
+              ? "cheer"
+              : raisePending && view === "table" && conversation?.status === "ongoing"
+                ? "think"
+                : "wave")
         }
       />
     </div>

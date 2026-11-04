@@ -304,3 +304,82 @@
 }
 .desk-pet-note button:hover { background: #5d4430; }
 .desk-pet-note button:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* ---- 工单 10:一键演示控制条与舞台 ---- */
+
+/* 右上角演示控制条:卡纸底 + 深绿主按钮,不与右下角桌宠打架。 */
+.pet-demo {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 60;
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid #b28c52; /* 牛皮纸边(取样 #B28C52 系) */
+  border-radius: 14px;
+  background: #f4ecdc; /* 米白卡纸亮部 */
+  box-shadow: 0 10px 24px #0007;
+  color: #4d3624; /* 深木纹:正文 */
+  font-size: 12px;
+  line-height: 1.6;
+}
+.pet-demo-bar { display: flex; align-items: center; gap: 6px; }
+.pet-demo-bar button {
+  padding: 4px 12px;
+  border: 1px solid #b28c52;
+  border-radius: 999px;
+  background: #0f2d1f; /* 深绿:主按钮 */
+  color: #ede0d9;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pet-demo-bar button:hover { background: #1a402c; }
+.pet-demo-bar button:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+.pet-demo-bar button:disabled { background: #6b6b8b; border-color: #6b6b8b; cursor: default; }
+.pet-demo-bar button[aria-label="关闭演示"] {
+  padding: 4px 9px;
+  background: transparent;
+  color: #6b6b8b; /* 中灰:次级 */
+}
+/* 步数计数右对齐,等宽数字不跳动。 */
+.pet-demo-counter { margin: 0 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pet-demo-note { margin: 6px 0 0; }
+
+/* 舞台:控制条下方,虚线分隔,只演当前一幕。 */
+.pet-demo-stage { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #b28c52; }
+.pet-demo-hint { margin: 0; color: #6b6b8b; }
+
+/* 第②幕台账:经理出招一行,桌宠反应是暖黄小签。 */
+.pet-demo-moves { list-style: none; display: grid; gap: 6px; margin: 0; padding: 0; }
+.pet-demo-move {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border: 1px solid #d1c6b2; /* 浅卡其分隔 */
+  border-radius: 10px;
+  background: #ece9e2; /* 客户气泡米白 */
+}
+.pet-demo-reaction {
+  align-self: flex-end;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #f4d06f; /* 暖黄:提示 */
+  color: #4d3624;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+/* 第④幕结算:已翻深绿底、未翻卡纸底,复盘一句话砖红引线。 */
+.pet-demo-settle ul { list-style: none; display: grid; gap: 4px; margin: 0; padding: 0; }
+.pet-demo-settle-card { padding: 4px 8px; border-radius: 8px; background: #ece9e2; }
+.pet-demo-settle-card[data-revealed] { background: #0f2d1f; color: #ede0d9; }
+.pet-demo-review {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-left: 3px solid #cc092b; /* 砖红:强调 */
+  background: #ece9e2;
+  font-weight: 700;
+}

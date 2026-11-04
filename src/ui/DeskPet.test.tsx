@@ -457,3 +457,50 @@ describe("放权模式与评估记录(工单 08)", () => {
     expect(screen.getByRole("region", { name: "待办面板" })).toHaveTextContent("没有等你拍板的事");
   });
 });
+
+describe("快捷环跳转与演示入口(工单 10)", () => {
+  it("快捷环 4 项不只回话:命令照发,跳转回调带动作被调用", async () => {
+    const user = userEvent.setup();
+    const agent = fakeAgent();
+    const onQuickAction = vi.fn();
+    render(<DeskPet agent={agent} onQuickAction={onQuickAction} />);
+
+    for (const label of ["换个客户", "再来一局", "上局复盘", "本周投研"]) {
+      // 点一项快捷环即收起;每次重新点头像展开。
+      fireEvent.click(screen.getByRole("img", { name: /女版/ }));
+      await user.click(screen.getByRole("button", { name: label }));
+      expect(agent.sendCommand).toHaveBeenCalledWith(label);
+      expect(onQuickAction).toHaveBeenCalledWith(label);
+    }
+    // 点完收起快捷环。
+    expect(screen.queryByRole("button", { name: "换个客户" })).not.toBeInTheDocument();
+  });
+
+  it("命令条输入「演示」唤出演示,不发命令;普通命令照发", async () => {
+    const user = userEvent.setup();
+    const agent = fakeAgent();
+    const onOpenDemo = vi.fn();
+    render(<DeskPet agent={agent} onOpenDemo={onOpenDemo} />);
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    await user.type(screen.getByRole("textbox", { name: "命令条" }), "演示{Enter}");
+    expect(onOpenDemo).toHaveBeenCalledTimes(1);
+    expect(agent.sendCommand).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    await user.type(screen.getByRole("textbox", { name: "命令条" }), "换个客户{Enter}");
+    expect(agent.sendCommand).toHaveBeenCalledWith("换个客户");
+  });
+
+  it("focusPanel 让演示直接展开工单列表/待办面板,强开待办同样拉放权数据", async () => {
+    const { unmount } = render(<DeskPet agent={fakeAgent()} focusPanel="tickets" />);
+    expect(screen.getByRole("region", { name: "工单列表" })).toBeInTheDocument();
+    unmount();
+
+    const agent = fakeAgent();
+    render(<DeskPet agent={agent} focusPanel="inbox" />);
+    expect(screen.getByRole("region", { name: "待办面板" })).toBeInTheDocument();
+    await act(async () => {});
+    expect(agent.policy).toHaveBeenCalled();
+  });
+});

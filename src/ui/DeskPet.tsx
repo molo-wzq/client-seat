@@ -35,6 +35,12 @@ const POS_KEY = "desk-pet-pos";
 /** 快捷环 4 项(spec 故事 8):文案即命令文本,服务端 DemoWorker 按同一文案回脚本。 */
 const QUICK_RING: readonly string[] = ["换个客户", "再来一局", "上局复盘", "本周投研"];
 
+/** 快捷环动作(工单 10):回话之外还要跳转,App 按动作决定去哪个视图。 */
+export type QuickRingAction = (typeof QUICK_RING)[number];
+
+/** 命令条输入「演示」(工单 10):唤出一键演示控制条,不进 Agent 链路。 */
+const DEMO_COMMAND = "演示";
+
 /** 桌宠气泡硬上限 40 字(spec):服务端已截一道,前端展示再兜底。 */
 function clampBubble(text: string): string {
   return [...text].slice(0, 40).join("");
@@ -137,10 +143,19 @@ export function DeskPet({
   expression = "wave",
   inCall = false,
   agent = defaultAgent,
+  onQuickAction,
+  onOpenDemo,
+  focusPanel = null,
 }: {
   expression?: PetExpression;
   inCall?: boolean;
   agent?: AgentClient;
+  /** 快捷环跳转(工单 10):回话照发,App 按动作跳到对应视图。 */
+  onQuickAction?: (action: QuickRingAction) => void;
+  /** 命令条输入「演示」时唤出一键演示(工单 10);URL ?demo=pet 同效。 */
+  onOpenDemo?: () => void;
+  /** 演示要看的面板(工单 10):直接展开工单列表/待办面板,演示结束还回去。 */
+  focusPanel?: "tickets" | "inbox" | null;
 }) {
   const [variant, setVariant] = useState<PetVariant>(
     () => (window.localStorage.getItem(VARIANT_KEY) === "m" ? "m" : "f"),
@@ -207,9 +222,10 @@ export function DeskPet({
     });
   }, [agent]);
 
-  // 待办面板打开时拉取放权模式与评估记录(工单 08);失败静默,开关与列表先给空态。
+  // 待办面板打开时拉取放权模式与评估记录(工单 08);演示经 focusPanel 强开时同样要拉
+  // (工单 10 第⑦幕直接展示放权开关与评估记录)。失败静默,开关与列表先给空态。
   useEffect(() => {
-    if (!inboxOpen) return;
+    if (!inboxOpen && focusPanel !== "inbox") return;
     let alive = true;
     agent
       .policy()
@@ -226,7 +242,7 @@ export function DeskPet({
     return () => {
       alive = false;
     };
-  }, [agent, inboxOpen]);
+  }, [agent, inboxOpen, focusPanel]);
 
   // 命令条打开即聚焦,直接打字。
   useEffect(() => {
@@ -315,6 +331,13 @@ export function DeskPet({
   function submitCommand() {
     const text = command.trim();
     if (!text || inCall) return;
+    // 「演示」是给汇报人的入口(工单 10):唤出演示控制条,不作为命令发给 Agent。
+    if (text === DEMO_COMMAND) {
+      onOpenDemo?.();
+      setCommand("");
+      setBarOpen(false);
+      return;
+    }
     sendCommandNow(text);
     setCommand("");
     setBarOpen(false);
@@ -360,7 +383,7 @@ export function DeskPet({
   // 下面列出等待工单,「同意」「驳回」把决定作为 Trigger 发回 Router(spec 故事 11);
   // 待审卡可写批注唤醒原工单(工单 07,spec 故事 13)。
   const inbox =
-    inboxOpen && !dnd ? (
+    (inboxOpen || focusPanel === "inbox") && !dnd ? (
       <div className="desk-pet-inbox" role="region" aria-label="待办面板">
         <div className="desk-pet-policy" role="group" aria-label="放权模式">
           <span className="desk-pet-policy-label">放权模式</span>
@@ -436,7 +459,7 @@ export function DeskPet({
 
   // 工单列表:桌宠旁展开,每张工单带状态徽标(spec 故事 10)。
   const ticketList =
-    listOpen && !dnd ? (
+    (listOpen || focusPanel === "tickets") && !dnd ? (
       <div className="desk-pet-tickets" role="region" aria-label="工单列表">
         {tickets.length === 0 && <p className="desk-pet-ticket">还没有工单</p>}
         {tickets.map((ticket) => (
@@ -470,6 +493,7 @@ export function DeskPet({
               className="desk-pet-ring-item"
               onClick={() => {
                 sendCommandNow(label);
+                onQuickAction?.(label);
                 setRingOpen(false);
               }}
             >
