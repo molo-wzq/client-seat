@@ -4,6 +4,7 @@ import type { ProductCore } from "./domain/product-core";
 import type { RoleCard } from "./domain/role-card";
 import { BusyHint } from "./ui/BusyHint";
 import { CardsView, HistoryView, MaterialsView, ResearchReportView, RolesView } from "./ui/CatalogViews";
+import { DeskPet } from "./ui/DeskPet";
 import { LeftRail, type AppView } from "./ui/LeftRail";
 import { ResultStep } from "./ui/ResultStep";
 import { SetupAct } from "./ui/SetupAct";
@@ -272,6 +273,8 @@ export function App({ api }: { api: ProductCore }) {
           </>
         )}
       </main>
+      {/* 桌宠固定在牌桌右下角,不参与布局,也不遮挡主内容。 */}
+      <DeskPet />
     </div>
   );
 }

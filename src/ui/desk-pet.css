@@ -1,0 +1,72 @@
+/* 桌宠:圆形卡纸底 + 黄铜描边,固定在牌桌右下角。 */
+.desk-pet {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 60;
+}
+
+.desk-pet-avatar {
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 2px solid #b28c52; /* 黄铜 */
+  background: radial-gradient(circle at 50% 30%, #f4ecdc, #ebe0ce 70%); /* 卡纸 */
+  box-shadow: 0 0 0 3px #4d362440, 0 5px 10px #0006; /* 深木衬圈 + 落影 */
+  cursor: grab;
+  touch-action: none; /* 指针拖动优先,不触发页面滚动 */
+}
+.desk-pet[data-dragging] .desk-pet-avatar { cursor: grabbing; }
+.desk-pet[data-dragging] { z-index: 70; }
+
+.desk-pet-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  user-select: none;
+}
+
+/* 待机小动作:轻微呼吸。勿扰或拖动中不打扰。 */
+.desk-pet:not(.desk-pet-collapsed):not([data-dragging]) .desk-pet-avatar {
+  animation: desk-pet-breathe 3.6s ease-in-out infinite;
+}
+@keyframes desk-pet-breathe {
+  50% { transform: translateY(-2px) scale(1.03); }
+}
+.desk-pet[data-reduced-motion] .desk-pet-avatar { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .desk-pet .desk-pet-avatar { animation: none; }
+}
+
+.desk-pet-actions { display: flex; gap: 4px; margin-top: 5px; }
+.desk-pet-action {
+  padding: 2px 7px;
+  border: 1px solid #b28c52;
+  border-radius: 9px;
+  color: #e6d7ba;
+  background: #4d3624e0; /* 深木底 */
+  font-size: 10px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.desk-pet-action:hover { background: #5d4430; }
+.desk-pet-action:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 勿扰:收成一颗小圆钮,只保留头像剪影。 */
+.desk-pet-restore {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #b28c52;
+  background: radial-gradient(circle at 50% 30%, #f4ecdc, #ebe0ce 70%);
+  box-shadow: 0 0 0 3px #4d362440, 0 3px 7px #0006;
+  cursor: pointer;
+}
+.desk-pet-restore img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.desk-pet-restore:focus-visible { outline: 2px solid #bf8636; outline-offset: 3px; }
