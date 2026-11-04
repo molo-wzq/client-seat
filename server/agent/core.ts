@@ -58,6 +58,7 @@ const DEMO_STEP_MS = 350;
  * 途中追加 progress,最终就绪或停在 waiting 待人决定;「同意/驳回 [工单号]」
  * 把最近(或指定)的等待工单调回 ready/dropped——决议本身也是一张小工单。
  * 工单 06 起:对局结束事件(game-ended)由复盘脚本起草一句话。
+ * 工单 07 起:拖文件到桌宠(dropped)走素材草稿脚本,停在 waiting 草稿待审。
  */
 export class DemoWorker implements AgentWorker {
   private readonly sleep: (ms: number) => Promise<void>;
@@ -70,6 +71,8 @@ export class DemoWorker implements AgentWorker {
 
   async run(ticket: AgentTicket, trigger: AgentTrigger, onReport: ReportSink): Promise<AgentReport> {
     if (trigger?.kind === "game-ended") return this.runPostgameReview(ticket, trigger);
+    if (trigger?.kind === "dropped") return this.runMaterialDraft(ticket, onReport);
+    if (trigger?.kind === "annotate") return this.runAnnotate(ticket, trigger, onReport);
     const text = typeof trigger?.data?.text === "string" ? trigger.data.text.trim() : "";
     // 待人决定的决议命令:「同意」「驳回」,可带工单号(待办面板按钮就这么发)。
     const decision = /^(同意|驳回)\s*(\S+)?$/.exec(text);
@@ -120,6 +123,40 @@ export class DemoWorker implements AgentWorker {
       text: agree ? "收到，按你拍板的出结果。" : "收到，这条不做了。",
     });
     return { ticketId: ticket.id, status: "ready", text: agree ? "好，已照办。" : "好，已驳回。" };
+  }
+
+  /**
+   * 素材草稿脚本(demo,工单 07):拖来的文件分步推进 转写中→分析中→起草中,
+   * 落 waiting(草稿待审)复用素材库现有的人审发布流程。demo 只带文件名与类型,
+   * 不读文件内容;Worker 手里没有任何发布接口——草稿不能直接上桌。
+   */
+  private async runMaterialDraft(ticket: AgentTicket, onReport: ReportSink): Promise<AgentReport> {
+    for (const step of ["转写中", "分析中", "起草中"]) {
+      await onReport({ ticketId: ticket.id, status: "progress", text: `${step}…` });
+      await this.sleep(DEMO_STEP_MS);
+    }
+    this.waitingTicketIds.push(ticket.id);
+    return { ticketId: ticket.id, status: "waiting", text: "草稿好了，进待审，等你过目。" };
+  }
+
+  /**
+   * 批注唤醒(demo,工单 07):待审卡上的批注唤醒原工单——对同一 ticketId
+   * 追加 progress→waiting(按批注改过的草稿),工单继续待人决定;
+   * 批注自身像决议一样是一张小工单,转达完就绪。
+   */
+  private async runAnnotate(
+    ticket: AgentTicket,
+    trigger: AgentTrigger,
+    onReport: ReportSink,
+  ): Promise<AgentReport> {
+    const ticketId = typeof trigger.data.ticketId === "string" ? trigger.data.ticketId : "";
+    if (!this.waitingTicketIds.includes(ticketId)) {
+      return { ticketId: ticket.id, status: "ready", text: "没有这张待审工单。" };
+    }
+    await onReport({ ticketId, status: "progress", text: "按批注改草稿，改完再给你。" });
+    await this.sleep(DEMO_STEP_MS);
+    await onReport({ ticketId, status: "waiting", text: "草稿按批注改好了，再等你过目。" });
+    return { ticketId: ticket.id, status: "ready", text: "收到，按批注改。" };
   }
 
   /**
@@ -263,7 +300,7 @@ export function createAgentCore(deps: { storage: LedgerStorage; worker: AgentWor
   }
 }
 
-/** Eval:本期只做准入——pet 命令须带非空文本,对局结束事件须带对局号与轮次;研判与放权模式见后续票。 */
+/** Eval:本期只做准入——pet 命令须带非空文本,对局结束事件须带对局号与轮次,拖入文件须带文件名与合法类型;研判与放权模式见后续票。 */
 function evaluate(trigger: AgentTrigger): AgentDecision {
   if (trigger.kind === "game-ended") {
     const gameId = trigger.data.gameId;
@@ -273,6 +310,21 @@ function evaluate(trigger: AgentTrigger): AgentDecision {
       ? { triggerId: trigger.id, admitted: true, reason: "对局结束,准予复盘立项" }
       : { triggerId: trigger.id, admitted: false, reason: "对局结束事件不完整(缺对局号或轮次),不立项" };
   }
+  if (trigger.kind === "dropped") {
+    const fileName = typeof trigger.data.fileName === "string" ? trigger.data.fileName.trim() : "";
+    const complete = fileName !== "" && FILE_KINDS.includes(trigger.data.fileKind);
+    return complete
+      ? { triggerId: trigger.id, admitted: true, reason: "拖入文件,准予素材起草立项" }
+      : { triggerId: trigger.id, admitted: false, reason: "拖入文件不完整(缺文件名或类型不识别),不立项" };
+  }
+  if (trigger.kind === "annotate") {
+    const ticketId = typeof trigger.data.ticketId === "string" ? trigger.data.ticketId.trim() : "";
+    const note = typeof trigger.data.note === "string" ? trigger.data.note.trim() : "";
+    const complete = ticketId !== "" && note !== "";
+    return complete
+      ? { triggerId: trigger.id, admitted: true, reason: "待审批注,准予立项" }
+      : { triggerId: trigger.id, admitted: false, reason: "批注不完整(缺工单号或批注内容),不立项" };
+  }
   const text = typeof trigger.data.text === "string" ? trigger.data.text.trim() : "";
   if (text === "") return { triggerId: trigger.id, admitted: false, reason: "命令内容为空" };
   return { triggerId: trigger.id, admitted: true, reason: "pet 命令,准予立项" };
@@ -281,5 +333,8 @@ function evaluate(trigger: AgentTrigger): AgentDecision {
 /** spec 的五个触发来源;输入校验在进链路之前完成。 */
 const SOURCES: AgentTrigger["source"][] = ["table", "materials", "research", "pet", "system"];
 
-/** 触发类型白名单:pet 命令 + 对局结束事件(工单 06)。 */
-const TRIGGER_KINDS: AgentTrigger["kind"][] = ["command", "game-ended"];
+/** 触发类型白名单:pet 命令 + 对局结束事件 + 拖入文件 + 待审批注(工单 07)。 */
+const TRIGGER_KINDS: AgentTrigger["kind"][] = ["command", "game-ended", "dropped", "annotate"];
+
+/** 拖入文件的类型白名单(工单 07):录音 / 生客画像 JSON / 角色卡。 */
+const FILE_KINDS: unknown[] = ["audio", "persona", "role"];

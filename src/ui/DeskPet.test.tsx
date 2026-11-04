@@ -314,3 +314,80 @@ describe("角标、待办面板与工单列表(工单 05)", () => {
     expect(list).toHaveTextContent("两条线并行开工");
   });
 });
+
+describe("拖给它:素材入草稿(工单 07)", () => {
+  it("文件拖到桌宠上高亮「交给我」,拖走即消失", () => {
+    render(<DeskPet agent={fakeAgent()} />);
+    const pet = screen.getByRole("complementary", { name: "桌宠" });
+
+    expect(screen.queryByText("交给我")).not.toBeInTheDocument();
+    fireEvent.dragOver(pet, { dataTransfer: { types: ["Files"] } });
+    expect(screen.getByText("交给我")).toBeInTheDocument();
+    expect(pet).toHaveAttribute("data-drop-hover", "true");
+
+    fireEvent.dragLeave(pet);
+    expect(screen.queryByText("交给我")).not.toBeInTheDocument();
+    expect(pet).not.toHaveAttribute("data-drop-hover");
+  });
+
+  it("松手发送 dropped 触发:只传文件名与类型,不上传文件内容(demo)", () => {
+    const agent = fakeAgent();
+    render(<DeskPet agent={agent} />);
+    const pet = screen.getByRole("complementary", { name: "桌宠" });
+    const audio = new File(["(音频内容,不应被读走)"], "王姐通话.mp3", { type: "audio/mpeg" });
+
+    fireEvent.dragOver(pet, { dataTransfer: { files: [audio] } });
+    fireEvent.drop(pet, { dataTransfer: { files: [audio] } });
+
+    expect(agent.sendTrigger).toHaveBeenCalledWith({
+      source: "materials",
+      kind: "dropped",
+      data: { fileName: "王姐通话.mp3", fileKind: "audio" },
+    });
+    // 松手后高亮收起,等待 Worker 的分步汇报从 SSE 进来。
+    expect(screen.queryByText("交给我")).not.toBeInTheDocument();
+  });
+
+  it("画像 JSON 与角色卡按文件名区分 persona / role", () => {
+    const agent = fakeAgent();
+    render(<DeskPet agent={agent} />);
+    const pet = screen.getByRole("complementary", { name: "桌宠" });
+    const cases: Array<[string, "persona" | "role"]> = [
+      ["李姐画像.json", "persona"],
+      ["老陈角色卡.json", "role"],
+    ];
+
+    for (const [name, fileKind] of cases) {
+      fireEvent.drop(pet, { dataTransfer: { files: [new File(["{}"], name, { type: "application/json" })] } });
+      expect(agent.sendTrigger).toHaveBeenLastCalledWith({
+        source: "materials",
+        kind: "dropped",
+        data: { fileName: name, fileKind },
+      });
+    }
+  });
+
+  it("待办面板的待审卡可写批注并发送 annotate;空批注不发送", async () => {
+    const user = userEvent.setup();
+    const agent = fakeAgent({
+      tickets: vi.fn(() =>
+        Promise.resolve([{ ticketId: "t-w", status: "waiting" as const, text: "草稿好了，进待审，等你过目。" }]),
+      ),
+    });
+    render(<DeskPet agent={agent} />);
+
+    await user.click(await screen.findByRole("button", { name: "待办 1" }));
+    await user.type(screen.getByRole("textbox", { name: "批注" }), "第二句改口语一点");
+    await user.click(screen.getByRole("button", { name: "发批注" }));
+
+    expect(agent.sendTrigger).toHaveBeenCalledWith({
+      source: "pet",
+      kind: "annotate",
+      data: { ticketId: "t-w", note: "第二句改口语一点" },
+    });
+
+    // 空批注不发送。
+    await user.click(screen.getByRole("button", { name: "发批注" }));
+    expect(agent.sendTrigger).toHaveBeenCalledTimes(1);
+  });
+});

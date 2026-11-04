@@ -46,6 +46,12 @@ const STATUS_LABEL: Record<ReportStatus, string> = {
 /** 刚领走还没汇报的工单给的占位文案。 */
 const NO_REPORT_TEXT = "刚领走，还没汇报";
 
+/** 拖入文件的类型(demo,工单 07):按 MIME 与文件名推断——音频 / 生客画像 / 角色卡。 */
+function inferFileKind(file: { name: string; type: string }): "audio" | "persona" | "role" {
+  if (file.type.startsWith("audio/")) return "audio";
+  return /角色|role/i.test(file.name) ? "role" : "persona";
+}
+
 /**
  * 一条 Report 落到工单视图上:按工单号原位更新,没有则追加(与 foldTickets 同一规则)。
  * UI 只读账本视图:report 事件到达即刷新,SSE 断流时以 tickets() 拉取为底。
@@ -96,6 +102,8 @@ function savePos(pos: PetPos) {
  * 桌宠在牌桌一角陪客户看局(工单 01 外壳 + 工单 03 交互):
  * 点头像出快捷环,Ctrl+K 唤命令条,agent 事件驱动气泡;不说话评价玩家。
  * inCall(对局中)只置灰命令条——快捷环里「再来一局」还得能按。
+ * 工单 07:文件拖到桌宠上高亮「交给我」,松手交 Worker 起草进待审;
+ * 待审卡可写批注唤醒原工单。demo 只传文件名与类型,不上传内容。
  */
 export function DeskPet({
   expression = "wave",
@@ -117,6 +125,9 @@ export function DeskPet({
   const [command, setCommand] = useState("");
   const [bubble, setBubble] = useState<string | null>(null);
   const [tickets, setTickets] = useState<AgentTicketView[]>([]);
+  /** 待审卡的批注草稿(工单 07):按工单号各存一份,发送即清空。 */
+  const [notes, setNotes] = useState<Record<string, string>>({});
+  const [dropHover, setDropHover] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const rootRef = useRef<HTMLElement>(null);
@@ -214,6 +225,27 @@ export function DeskPet({
     void agent.sendCommand(text).catch(() => undefined);
   }
 
+  /** 拖放出口(工单 07):每个文件一张 dropped 触发,只带文件名与类型,demo 不读内容、不上传。 */
+  function sendDroppedFiles(files: FileList | File[]) {
+    for (const file of Array.from(files)) {
+      void agent
+        .sendTrigger({
+          source: "materials",
+          kind: "dropped",
+          data: { fileName: file.name, fileKind: inferFileKind(file) },
+        })
+        .catch(() => undefined);
+    }
+  }
+
+  /** 批注出口(工单 07):待审卡上的批注唤醒原工单按批注改草稿;空批注不发。 */
+  function submitNote(ticketId: string) {
+    const note = (notes[ticketId] ?? "").trim();
+    if (!note) return;
+    void agent.sendTrigger({ source: "pet", kind: "annotate", data: { ticketId, note } }).catch(() => undefined);
+    setNotes((prev) => ({ ...prev, [ticketId]: "" }));
+  }
+
   function submitCommand() {
     const text = command.trim();
     if (!text || inCall) return;
@@ -257,7 +289,8 @@ export function DeskPet({
       </button>
     ) : null;
 
-  // 待办面板:列出等待工单,「同意」「驳回」把决定作为 Trigger 发回 Router(spec 故事 11)。
+  // 待办面板:列出等待工单,「同意」「驳回」把决定作为 Trigger 发回 Router(spec 故事 11);
+  // 待审卡可写批注唤醒原工单(工单 07,spec 故事 13)。
   const inbox =
     inboxOpen && !dnd ? (
       <div className="desk-pet-inbox" role="region" aria-label="待办面板">
@@ -272,6 +305,22 @@ export function DeskPet({
                 驳回
               </button>
             </div>
+            <form
+              className="desk-pet-note"
+              onSubmit={(e) => {
+                e.preventDefault();
+                submitNote(ticket.ticketId);
+              }}
+            >
+              <input
+                className="desk-pet-note-input"
+                aria-label="批注"
+                placeholder="写句批注，让草稿再改一版"
+                value={notes[ticket.ticketId] ?? ""}
+                onChange={(e) => setNotes((prev) => ({ ...prev, [ticket.ticketId]: e.target.value }))}
+              />
+              <button type="submit">发批注</button>
+            </form>
           </div>
         ))}
       </div>
@@ -296,6 +345,7 @@ export function DeskPet({
   // 头顶悬浮栈:气泡在上、快捷环居中、命令条贴身,避免浮层互相遮挡。
   const popovers = (
     <div className="desk-pet-popovers">
+      {dropHover && !dnd && <p className="desk-pet-drop-hint">交给我</p>}
       {bubble !== null && !dnd && (
         <p className="desk-pet-bubble" role="status" aria-label="桌宠气泡">
           {bubble}
@@ -367,9 +417,20 @@ export function DeskPet({
       data-variant={variant}
       data-expression={expression}
       data-dragging={dragging || undefined}
+      data-drop-hover={dropHover || undefined}
       data-reduced-motion={reducedMotion() || undefined}
       style={anchored}
       onPointerDown={onPointerDown}
+      onDragOver={(e) => {
+        e.preventDefault(); // 允许松手
+        setDropHover(true);
+      }}
+      onDragLeave={() => setDropHover(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDropHover(false);
+        sendDroppedFiles(e.dataTransfer?.files ?? []);
+      }}
     >
       <div
         className="desk-pet-avatar"

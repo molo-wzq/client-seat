@@ -7,8 +7,11 @@
 /** 触发来源:事件从哪个域进入 Agent(spec:table/materials/research/pet/system)。 */
 export type AgentSource = "table" | "materials" | "research" | "pet" | "system";
 
-/** 触发类型:同一来源下的事件类别——pet 命令条为 "command",对局结束为 "game-ended"(工单 06)。 */
-export type AgentTriggerKind = "command" | "game-ended";
+/**
+ * 触发类型:同一来源下的事件类别——pet 命令条为 "command",对局结束为 "game-ended"(工单 06),
+ * 拖文件到桌宠为 "dropped"(data:{fileName,fileKind}),待审批注为 "annotate"(data:{ticketId,note})(工单 07)。
+ */
+export type AgentTriggerKind = "command" | "game-ended" | "dropped" | "annotate";
 
 /** 触发:一次可感知的事件或命令,进入链路的唯一输入。 */
 export interface AgentTrigger {

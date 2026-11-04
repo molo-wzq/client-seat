@@ -225,3 +225,52 @@
 .desk-pet-status[data-status="ready"] { background: #0f2d1f; color: #ede0d9; }
 .desk-pet-status[data-status="failed"] { border: 1px solid #cc092b; color: #cc092b; }
 .desk-pet-status[data-status="dropped"] { border: 1px solid #6b6b8b; color: #6b6b8b; }
+
+/* ---- 工单 07:拖给它(交给我)与待审批注 ---- */
+
+/* 文件拖到桌宠上:头像外圈换成暖黄接力圈,表示这里能收。 */
+.desk-pet[data-drop-hover] .desk-pet-avatar {
+  border-color: #f4d06f; /* 暖黄(提示) */
+  box-shadow: 0 0 0 4px #f4d06f99, 0 5px 10px #0006;
+}
+/* 「交给我」提示:暖黄小签,压在气泡位上方,松手即逝。 */
+.desk-pet-drop-hint {
+  margin: 0;
+  padding: 4px 12px;
+  border: 1px solid #b28c52;
+  border-radius: 999px;
+  background: #f4d06f;
+  color: #4d3624;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+  box-shadow: 0 3px 8px #0005;
+}
+
+/* 待审批注:卡纸底输入 + 深木底发送钮,与命令条同一语言。 */
+.desk-pet-note { display: flex; gap: 4px; margin-top: 6px; }
+.desk-pet-note-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid #b28c52;
+  border-radius: 9px;
+  background: #f4ecdc;
+  color: #4d3624;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.desk-pet-note-input::placeholder { color: #4d362480; }
+.desk-pet-note-input:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+.desk-pet-note button {
+  padding: 3px 10px;
+  border: 1px solid #b28c52;
+  border-radius: 9px;
+  background: #4d3624e0;
+  color: #e6d7ba;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.desk-pet-note button:hover { background: #5d4430; }
+.desk-pet-note button:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }

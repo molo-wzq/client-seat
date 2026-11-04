@@ -284,6 +284,157 @@ describe("对局后复盘一句话(工单 06)", () => {
   });
 });
 
+describe("拖给它:素材入草稿(工单 07)", () => {
+  /** 即时假钟:素材 Worker 的分步节奏不真等,只记每步毫秒数。 */
+  function instantClock() {
+    const slept: number[] = [];
+    return {
+      slept,
+      sleep: async (ms: number): Promise<void> => {
+        slept.push(ms);
+      },
+    };
+  }
+
+  function dropCore() {
+    const clock = instantClock();
+    return {
+      clock,
+      core: createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker({ sleep: clock.sleep }) }),
+    };
+  }
+
+  function dropped(fileKind: "audio" | "persona" | "role", fileName = "王姐通话.mp3"): AgentTriggerInput {
+    return { source: "materials", kind: "dropped", data: { fileName, fileKind } };
+  }
+
+  it("拖入录音:分步推进(转写中→分析中→起草中)后停在 waiting 草稿待审", async () => {
+    const { clock, core } = dropCore();
+
+    const outcome = await core.emitTrigger(dropped("audio"));
+
+    expect(outcome.admitted).toBe(true);
+    expect(outcome.report?.status).toBe("waiting");
+    // waiting 文案点名草稿待审;每条汇报都不超气泡上限 40 字。
+    expect(outcome.report?.text).toMatch(/草稿/);
+    for (const text of (await core.ledger())
+      .filter((entry) => entry.type === "report")
+      .map((entry) => (entry as ReportEntry).report.text)) {
+      expect([...text].length).toBeLessThanOrEqual(40);
+    }
+
+    // 账本:同一工单依次落 转写中→分析中→起草中→waiting(草稿待审)。
+    const reports = (await core.ledger())
+      .filter((entry) => entry.type === "report")
+      .map((entry) => (entry as ReportEntry).report);
+    expect(reports.map((report) => report.ticketId)).toEqual(Array(4).fill(outcome.ticket?.id));
+    expect(reports.map((report) => report.status)).toEqual(["progress", "progress", "progress", "waiting"]);
+    expect(reports[0]?.text).toMatch(/转写/);
+    expect(reports[1]?.text).toMatch(/分析/);
+    expect(reports[2]?.text).toMatch(/起草/);
+    expect(clock.slept).toHaveLength(3);
+
+    // 工单视图折叠到 waiting,即待办面板里那张待审卡。
+    expect(await core.tickets()).toEqual([
+      { ticketId: outcome.ticket?.id, status: "waiting", text: outcome.report?.text },
+    ]);
+  });
+
+  it("画像 JSON 与角色卡同样准入;缺文件名或类型不识别 → Eval 拒绝,不立项", async () => {
+    const { core } = dropCore();
+
+    for (const fileKind of ["persona", "role"] as const) {
+      const ok = await core.emitTrigger(dropped(fileKind, "李姐.json"));
+      expect(ok.admitted).toBe(true);
+      expect(ok.report?.status).toBe("waiting");
+    }
+
+    const noName = await core.emitTrigger({ source: "materials", kind: "dropped", data: { fileKind: "audio" } });
+    expect(noName.admitted).toBe(false);
+    expect(noName.ticket).toBeNull();
+    const badKind = await core.emitTrigger({
+      source: "materials",
+      kind: "dropped",
+      data: { fileName: "x.mp4", fileKind: "video" },
+    });
+    expect(badKind.admitted).toBe(false);
+    expect(badKind.ticket).toBeNull();
+    // 拒绝的两条止于 Decision,Worker 不空跑。
+    const decisions = (await core.ledger())
+      .filter((entry) => entry.type === "decision")
+      .map((entry) => (entry as DecisionEntry).decision);
+    expect(decisions.map((decision) => decision.admitted)).toEqual([true, true, false, false]);
+  });
+
+  it("待审批注唤醒原工单:同一 ticketId 追加 progress→waiting(按批注改过的草稿)", async () => {
+    const { core } = dropCore();
+    const drop = await core.emitTrigger(dropped("audio"));
+    const ticketId = drop.ticket?.id ?? "";
+
+    const annotate = await core.emitTrigger({
+      source: "pet",
+      kind: "annotate",
+      data: { ticketId, note: "第二句改口语一点" },
+    });
+
+    expect(annotate.admitted).toBe(true);
+    // 原工单被唤醒:同一 ticketId 上依次 3×progress→waiting,再追加 progress→waiting。
+    const reports = (await core.ledger())
+      .filter((entry) => entry.type === "report")
+      .map((entry) => (entry as ReportEntry).report)
+      .filter((report) => report.ticketId === ticketId);
+    expect(reports.map((report) => report.status)).toEqual([
+      "progress",
+      "progress",
+      "progress",
+      "waiting",
+      "progress",
+      "waiting",
+    ]);
+    // 新 waiting 是按批注改过的草稿,仍待人决定(工单视图原位覆盖,不新增工单)。
+    const waiting = reports.at(-1);
+    expect(waiting?.text).toMatch(/批注/);
+    expect([...waiting?.text ?? ""].length).toBeLessThanOrEqual(40);
+    expect((await core.tickets()).filter((view) => view.ticketId === ticketId)).toEqual([
+      { ticketId, status: "waiting", text: waiting?.text },
+    ]);
+    // 批注自身像决议一样是一张小工单,转达完就绪。
+    expect(annotate.report).toMatchObject({ ticketId: annotate.ticket?.id, status: "ready" });
+  });
+
+  it("批注不完整 → Eval 拒绝;批注的工单不在等待中 → 直说现状,不落任何唤醒汇报", async () => {
+    const { core } = dropCore();
+    const drop = await core.emitTrigger(dropped("audio"));
+    const reportsBefore = (await core.ledger()).filter((entry) => entry.type === "report").length;
+
+    const noNote = await core.emitTrigger({
+      source: "pet",
+      kind: "annotate",
+      data: { ticketId: drop.ticket?.id ?? "", note: "  " },
+    });
+    expect(noNote.admitted).toBe(false);
+    const noTicket = await core.emitTrigger({ source: "pet", kind: "annotate", data: { note: "改一下" } });
+    expect(noTicket.admitted).toBe(false);
+
+    // 先「同意」收掉等待,再批注:原工单已不在等待中,只回现状,不追加任何汇报。
+    await core.emitTrigger({ source: "pet", kind: "command", data: { text: `同意 ${drop.ticket?.id}` } });
+    const late = await core.emitTrigger({
+      source: "pet",
+      kind: "annotate",
+      data: { ticketId: drop.ticket?.id ?? "", note: "再改改" },
+    });
+    expect(late.admitted).toBe(true);
+    expect(late.report).toMatchObject({ status: "ready" });
+    expect(late.report?.text).toMatch(/没有/);
+    // 除决议与批注自身的转达汇报外,原工单没有再被唤醒。
+    const reports = (await core.ledger())
+      .filter((entry) => entry.type === "report")
+      .map((entry) => (entry as ReportEntry).report);
+    expect(reports.filter((report) => report.ticketId === drop.ticket?.id && report.status === "waiting")).toHaveLength(1);
+    expect(reports.length - reportsBefore).toBe(3); // 同意落 ready + 批注转达 ready + 批注现状 ready
+  });
+});
+
 describe("DemoWorker 快捷环命令(工单 03)", () => {
   // 快捷环 3 项即时就绪;「本周投研」自工单 05 起走分步演示(见下个 describe)。
   const expectedReplies: Array<[string, RegExp]> = [

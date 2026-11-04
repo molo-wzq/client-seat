@@ -350,6 +350,29 @@ describe("周度投研报告路由", () => {
   });
 });
 
+describe("守护:草稿不能直接上桌(工单 07)", () => {
+  /** http 层行为断言:拖入文件只走到 agent 账本的 waiting(草稿待审),
+   *  Worker 不调用任何素材/发布接口——素材库无新增、无发布,上桌仍走人审。 */
+  it("拖入文件停在 waiting 草稿待审,素材库无任何新增或发布", async () => {
+    const before = await request("/api/materials");
+    const beforeCount = Array.isArray(before.json) ? before.json.length : 0;
+
+    const drop = await request("/api/agent/triggers", "POST", {
+      source: "materials",
+      kind: "dropped",
+      data: { fileName: "王姐通话.mp3", fileKind: "audio" },
+    });
+    expect(drop.status).toBe(200);
+    expect(drop.json).toMatchObject({ admitted: true, report: { status: "waiting" } });
+
+    const after = await request("/api/materials");
+    expect(Array.isArray(after.json) ? after.json.length : 0).toBe(beforeCount);
+
+    const tickets = await request("/api/agent/tickets");
+    expect(tickets.json).toEqual(expect.arrayContaining([expect.objectContaining({ status: "waiting" })]));
+  });
+});
+
 describe("Agent 路由(工单 02)", () => {
   it("POST /api/agent/triggers:pet 命令 → 200,链路驱动到 ready Report", async () => {
     const { status, json } = await request("/api/agent/triggers", "POST", {
