@@ -4,7 +4,7 @@
  * onEvent 订阅事件流(SSE /api/agent/events)。fetch 与 EventSource 可注入,
  * 测试用假实现(见 agent-client.test.ts);生产缺省用浏览器全局实现。
  */
-import type { AgentEvent } from "../../server/agent/types";
+import type { AgentEvent, AgentTicketView } from "../../server/agent/types";
 
 /** 注入缝:测试传假 fetch / 假 EventSource;缺省回落浏览器全局。 */
 export interface AgentClientDeps {
@@ -14,10 +14,12 @@ export interface AgentClientDeps {
 }
 
 export interface AgentClient {
-  /** 把一句命令作为 pet 触发发给 Router;失败抛错误消息(UI 层展示)。 */
+  /** 把一句命令作为 pet 触发给 Router;失败抛错误消息(UI 层展示)。 */
   sendCommand(text: string): Promise<void>;
   /** 订阅 Report 与 Channel 事件;返回退订函数。 */
   onEvent(listener: (event: AgentEvent) => void): () => void;
+  /** 拉取工单视图(账本折叠的最新状态;工单 05);失败抛错误消息。 */
+  tickets(): Promise<AgentTicketView[]>;
 }
 
 export function createAgentClient(deps: AgentClientDeps = {}): AgentClient {
@@ -35,6 +37,16 @@ export function createAgentClient(deps: AgentClientDeps = {}): AgentClient {
         const body = (await response.json().catch(() => null)) as { error?: string } | null;
         throw new Error(body?.error || `命令发送失败(HTTP ${response.status})`);
       }
+    },
+
+    async tickets() {
+      const doFetch = deps.fetch ?? globalThis.fetch.bind(globalThis);
+      const response = await doFetch(`${baseUrl}/api/agent/tickets`);
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || `工单查询失败(HTTP ${response.status})`);
+      }
+      return (await response.json()) as AgentTicketView[];
     },
 
     onEvent(listener) {

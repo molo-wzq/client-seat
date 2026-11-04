@@ -49,6 +49,16 @@ export interface AgentTicket {
 /** 工单汇报状态(spec:progress/waiting/ready/blocked/failed/dropped)。 */
 export type ReportStatus = "progress" | "waiting" | "ready" | "blocked" | "failed" | "dropped";
 
+/**
+ * 工单视图(tickets() 的产物):一张工单折叠到最新一条 Report 后的样子。
+ * 还没有 Report 的工单视为刚领走(进展、空文案),UI 自行给占位。
+ */
+export interface AgentTicketView {
+  ticketId: string;
+  status: ReportStatus;
+  text: string;
+}
+
 /** 汇报:Worker 对一张工单的一次产出;ready 即最终结果。 */
 export interface AgentReport {
   ticketId: string;

@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentEvent } from "../../server/agent/types";
+import type { AgentEvent, AgentTicketView } from "../../server/agent/types";
 import { DeskPet, type PetExpression } from "./DeskPet";
 import type { AgentClient } from "./agent-client";
 
@@ -10,11 +10,12 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-/** 假 agent 客户端(工单 03 测试缝):只记录 sendCommand/onEvent 的调用。 */
+/** 假 agent 客户端(工单 03 测试缝):只记录 sendCommand/onEvent/tickets 的调用。 */
 function fakeAgent(overrides: Partial<AgentClient> = {}): AgentClient {
   return {
     sendCommand: vi.fn(() => Promise.resolve()),
     onEvent: vi.fn(() => () => undefined),
+    tickets: vi.fn(() => Promise.resolve([])),
     ...overrides,
   };
 }
@@ -219,5 +220,94 @@ describe("桌宠快捷环与命令条(工单 03)", () => {
     expect(agent.sendCommand).toHaveBeenCalledTimes(2);
     expect(agent.sendCommand).toHaveBeenNthCalledWith(1, "把上周投研总结成一句话");
     expect(agent.sendCommand).toHaveBeenNthCalledWith(2, "顺便看看上局复盘");
+  });
+});
+
+describe("角标、待办面板与工单列表(工单 05)", () => {
+  /** 工单视图样例工厂。 */
+  function tv(ticketId: string, status: AgentTicketView["status"], text: string): AgentTicketView {
+    return { ticketId, status, text };
+  }
+
+  it("初始拉取工单视图:waiting 数显在头顶角标", async () => {
+    const busy = fakeAgent({
+      tickets: vi.fn(() =>
+        Promise.resolve([tv("t-1", "waiting", "本周投研先押 AI 还是消费？等你拍板。"), tv("t-2", "ready", "办完了")]),
+      ),
+    });
+    render(<DeskPet agent={busy} />);
+    const badge = await screen.findByRole("button", { name: "待办 1" });
+    expect(badge).toHaveTextContent("1");
+    expect(busy.tickets).toHaveBeenCalledTimes(1);
+  });
+
+  it("没有 waiting 工单时不出角标", async () => {
+    const idle = fakeAgent({ tickets: vi.fn(() => Promise.resolve([tv("t-3", "ready", "收到，马上办")])) });
+    render(<DeskPet agent={idle} />);
+    // 等初始拉取的微任务跑完再断言,避免假阴性。
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: /^待办/ })).not.toBeInTheDocument();
+  });
+
+  it("report 事件实时刷新:新工单落 waiting,角标从无到有", async () => {
+    let listener: ((event: AgentEvent) => void) | undefined;
+    const agent = fakeAgent({
+      onEvent: (l) => {
+        listener = l;
+        return () => undefined;
+      },
+    });
+    render(<DeskPet agent={agent} />);
+    await act(async () => {});
+    expect(screen.queryByRole("button", { name: /^待办/ })).not.toBeInTheDocument();
+
+    act(() => {
+      listener?.({ type: "report", report: { ticketId: "t-w", status: "waiting", text: "等你拍板" } });
+    });
+
+    expect(screen.getByRole("button", { name: "待办 1" })).toBeInTheDocument();
+  });
+
+  it("点角标开待办面板:列出等待工单,「同意」「驳回」各发一条 Trigger", async () => {
+    const user = userEvent.setup();
+    const agent = fakeAgent({
+      tickets: vi.fn(() => Promise.resolve([tv("t-w", "waiting", "本周投研先押 AI 还是消费？等你拍板。")])),
+    });
+    render(<DeskPet agent={agent} />);
+
+    await user.click(await screen.findByRole("button", { name: "待办 1" }));
+
+    const inbox = screen.getByRole("region", { name: "待办面板" });
+    expect(inbox).toHaveTextContent("本周投研先押 AI 还是消费？等你拍板。");
+
+    await user.click(screen.getByRole("button", { name: "同意" }));
+    expect(agent.sendCommand).toHaveBeenCalledWith("同意 t-w");
+    await user.click(screen.getByRole("button", { name: "驳回" }));
+    expect(agent.sendCommand).toHaveBeenCalledWith("驳回 t-w");
+  });
+
+  it("桌宠旁可展开工单列表:每张工单带状态徽标", async () => {
+    const user = userEvent.setup();
+    const agent = fakeAgent({
+      tickets: vi.fn(() =>
+        Promise.resolve([
+          tv("t-1", "progress", "两条线并行开工"),
+          tv("t-2", "waiting", "等你拍板"),
+          tv("t-3", "ready", "办完了"),
+          tv("t-4", "blocked", "缺素材,卡住了"),
+          tv("t-5", "failed", "模型报错"),
+          tv("t-6", "dropped", "这条不做了"),
+        ]),
+      ),
+    });
+    render(<DeskPet agent={agent} />);
+
+    await user.click(screen.getByRole("button", { name: "工单" }));
+
+    const list = screen.getByRole("region", { name: "工单列表" });
+    for (const label of ["进展", "等待", "就绪", "受阻", "失败", "已放弃"]) {
+      expect(list).toHaveTextContent(label);
+    }
+    expect(list).toHaveTextContent("两条线并行开工");
   });
 });

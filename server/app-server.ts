@@ -213,6 +213,11 @@ export function createRequestListener(deps: {
       respondJson(res, 200, outcome);
       return;
     }
+    // 桌宠 Agent(工单 05):只读工单视图(账本折叠出的每张工单最新状态)。
+    if (req.method === "GET" && pathname === "/api/agent/tickets") {
+      respondJson(res, 200, await agent.tickets());
+      return;
+    }
     // 桌宠 Agent(工单 02):SSE 订阅 Report 与 Channel 事件。
     if (req.method === "GET" && pathname === "/api/agent/events") {
       respondAgentEvents(req, res);

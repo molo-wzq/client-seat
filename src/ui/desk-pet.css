@@ -7,6 +7,7 @@
 }
 
 .desk-pet-avatar {
+  position: relative; /* 角标锚在头像右上角 */
   display: grid;
   place-items: center;
   width: 76px;
@@ -141,3 +142,86 @@
   line-height: 1.6;
 }
 .desk-pet-hold-speak:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ---- 工单 05:角标、待办面板、工单列表 ---- */
+
+/* 头顶角标:待人决定的数量,砖红印章钉在头像右上角。 */
+.desk-pet-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 2px solid #f4ecdc; /* 卡纸镶边,压在深木衬圈上也看得清 */
+  border-radius: 999px;
+  background: #cc092b; /* 砖红(印章/注意) */
+  color: #ede0d9;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 5px #0006;
+}
+.desk-pet-badge:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 待办面板与工单列表共用:卡纸底 + 黄铜边的便签面板。 */
+.desk-pet-inbox,
+.desk-pet-tickets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 248px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 9px 11px;
+  border: 1px solid #b28c52;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 0%, #f4ecdc, #ebe0ce 80%);
+  box-shadow: 0 3px 8px #0005;
+}
+
+/* 待办条目:一句待人决定 + 同意/驳回。 */
+.desk-pet-inbox-item { margin: 0; }
+.desk-pet-inbox-text { margin: 0 0 5px; color: #4d3624; font-size: 12px; line-height: 1.6; }
+.desk-pet-inbox-actions { display: flex; gap: 6px; }
+.desk-pet-inbox-actions button {
+  padding: 3px 12px;
+  border: 1px solid #b28c52;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+/* 同意=主要(深绿实底),驳回=次级(深木底浅字),与全站按钮语言一致。 */
+.desk-pet-inbox-actions button:first-child { background: #0f2d1f; color: #ede0d9; }
+.desk-pet-inbox-actions button:first-child:hover { background: #1a4230; }
+.desk-pet-inbox-actions button + button { background: #4d3624e0; color: #e6d7ba; }
+.desk-pet-inbox-actions button + button:hover { background: #5d4430; }
+.desk-pet-inbox-actions button:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 工单列表条目:状态徽标 + 一句最新汇报。 */
+.desk-pet-ticket {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  color: #4d3624;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.desk-pet-status {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1.7;
+  font-weight: 700;
+}
+/* 状态取色沿用 asset-library:暖黄=进行/受阻,砖红=等待,深绿=就绪,空心红=失败,中灰=放弃。 */
+.desk-pet-status[data-status="progress"] { background: #f4d06f; color: #4d3624; }
+.desk-pet-status[data-status="blocked"] { background: #b28c52; color: #f4ecdc; }
+.desk-pet-status[data-status="waiting"] { background: #cc092b; color: #fff; }
+.desk-pet-status[data-status="ready"] { background: #0f2d1f; color: #ede0d9; }
+.desk-pet-status[data-status="failed"] { border: 1px solid #cc092b; color: #cc092b; }
+.desk-pet-status[data-status="dropped"] { border: 1px solid #6b6b8b; color: #6b6b8b; }

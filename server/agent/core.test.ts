@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import type {
   AgentEvent,
+  AgentReport,
+  AgentTicket,
   AgentTrigger,
   AgentTriggerInput,
   DecisionEntry,
@@ -8,7 +10,7 @@ import type {
   TicketEntry,
   TriggerEntry,
 } from "./types";
-import { createAgentCore, DemoWorker } from "./core";
+import { createAgentCore, DemoWorker, type ReportSink } from "./core";
 import { InMemoryLedgerStorage } from "./storage";
 
 /**
@@ -20,6 +22,16 @@ import { InMemoryLedgerStorage } from "./storage";
 function petCommand(text = "把上周投研总结成一句话"): AgentTriggerInput {
   return { source: "pet", kind: "command", data: { text } };
 }
+
+/** 演示触发与工单的样例工厂:工单号由调用方定,决议命令按工单号唤醒原工单。 */
+function demoTrigger(text: string): AgentTrigger {
+  return { id: `tr-${Math.random().toString(36).slice(2, 8)}`, source: "pet", kind: "command", data: { text } };
+}
+function demoTicket(trigger: AgentTrigger, id = "t-demo"): AgentTicket {
+  return { id, triggerId: trigger.id, thread: { kind: "commandId", key: trigger.id } };
+}
+/** 静默汇报汇:不关心途中汇报的用例用它。 */
+const noopSink: ReportSink = async () => undefined;
 
 describe("Agent 核心(工单 02)", () => {
   it("pet 命令:账本按序追加 Trigger→Decision→Ticket→Report(ready)", async () => {
@@ -130,24 +142,85 @@ describe("Agent 核心(工单 02)", () => {
   });
 });
 
+describe("Agent 核心:多 Report 与 tickets()(工单 05)", () => {
+  it("同一工单可多次追加 Report:账本按序落两笔,订阅者逐条收到,每条都配气泡", async () => {
+    const core = createAgentCore({
+      storage: new InMemoryLedgerStorage(),
+      worker: {
+        async run(ticket, _trigger, onReport) {
+          await onReport({ ticketId: ticket.id, status: "progress", text: "先拆上周通话" });
+          return { ticketId: ticket.id, status: "waiting", text: "两个方向等你拍板" };
+        },
+      },
+    });
+    const events: AgentEvent[] = [];
+    core.subscribe((event) => events.push(event));
+
+    const outcome = await core.emitTrigger(petCommand("帮我整理上局复盘"));
+
+    expect(outcome.report).toMatchObject({ status: "waiting", text: "两个方向等你拍板" });
+    const entries = await core.ledger();
+    const reportEntries = entries.filter((entry) => entry.type === "report") as ReportEntry[];
+    expect(reportEntries.map((entry) => entry.report.status)).toEqual(["progress", "waiting"]);
+    expect(reportEntries.map((entry) => entry.report.ticketId)).toEqual([
+      outcome.ticket?.id,
+      outcome.ticket?.id,
+    ]);
+    // seq 只进不退:两笔 Report 排在 Ticket 之后。
+    expect(reportEntries.map((entry) => entry.seq)).toEqual([4, 5]);
+
+    const reportEvents = events.filter((event) => event.type === "report");
+    expect(reportEvents.map((event) => event.report.status)).toEqual(["progress", "waiting"]);
+    expect(events.filter((event) => event.type === "channel")).toHaveLength(2);
+  });
+
+  it("tickets() 由账本折叠出每张工单最新状态,且是只读查询", async () => {
+    let waitingTicketId = "";
+    const core = createAgentCore({
+      storage: new InMemoryLedgerStorage(),
+      worker: {
+        async run(ticket, trigger, onReport) {
+          const text = String(trigger.data.text);
+          if (text === "决议") {
+            await onReport({ ticketId: waitingTicketId, status: "ready", text: "拍板后办妥" });
+            return { ticketId: ticket.id, status: "ready", text: "已转达" };
+          }
+          waitingTicketId = ticket.id;
+          await onReport({ ticketId: ticket.id, status: "progress", text: "先收集线索" });
+          return { ticketId: ticket.id, status: "waiting", text: "等你拍板" };
+        },
+      },
+    });
+
+    await core.emitTrigger(petCommand("本周投研"));
+    let tickets = await core.tickets();
+    // 只读:查询本身不追加账本。
+    expect((await core.ledger()).filter((entry) => entry.type === "report")).toHaveLength(2);
+    expect(tickets).toEqual([{ ticketId: waitingTicketId, status: "waiting", text: "等你拍板" }]);
+
+    const decision = await core.emitTrigger(petCommand("决议"));
+    tickets = await core.tickets();
+    expect(tickets).toEqual([
+      { ticketId: waitingTicketId, status: "ready", text: "拍板后办妥" },
+      { ticketId: decision.ticket?.id, status: "ready", text: "已转达" },
+    ]);
+  });
+});
+
 describe("DemoWorker 快捷环命令(工单 03)", () => {
-  // 快捷环 4 项的确定性回复:桌宠以客户侧搭档口吻对玩家说话,不评价玩家,不超过 40 字。
+  // 快捷环 3 项即时就绪;「本周投研」自工单 05 起走分步演示(见下个 describe)。
   const expectedReplies: Array<[string, RegExp]> = [
     ["换个客户", /名册|新客户/],
     ["再来一局", /(重摆|再来一局|牌桌)/],
     ["上局复盘", /(上局|复盘)/],
-    ["本周投研", /(投研|周报|本周)/],
   ];
 
   function runDemoWorker(text: string) {
-    const trigger: AgentTrigger = { id: "tr-demo", source: "pet", kind: "command", data: { text } };
-    return new DemoWorker().run(
-      { id: "t-demo", triggerId: trigger.id, thread: { kind: "commandId", key: trigger.id } },
-      trigger,
-    );
+    const trigger = demoTrigger(text);
+    return new DemoWorker().run(demoTicket(trigger), trigger, noopSink);
   }
 
-  it("快捷环 4 条命令各有确定性中文回复,且不超过 40 字", async () => {
+  it("快捷环即时命令各有确定性中文回复,且不超过 40 字", async () => {
     for (const [command, pattern] of expectedReplies) {
       const report = await runDemoWorker(command);
       expect(report.status).toBe("ready");
@@ -161,5 +234,89 @@ describe("DemoWorker 快捷环命令(工单 03)", () => {
       status: "ready",
       text: "收到，马上办",
     });
+  });
+});
+
+describe("DemoWorker 分步演示(工单 05)", () => {
+  /** 收集途中汇报的假汇:静默成功,只把 Report 记进数组。 */
+  function collectSink(reports: AgentReport[]) {
+    return async (report: AgentReport) => {
+      reports.push(report);
+    };
+  }
+
+  /** 即时假钟:不真等,只记每步毫秒数,钉住「分步推进有节奏地走了几步」。 */
+  function instantClock() {
+    const slept: number[] = [];
+    return {
+      slept,
+      sleep: async (ms: number): Promise<void> => {
+        slept.push(ms);
+      },
+    };
+  }
+
+  it("含「并行」的命令分步推进:两条 progress 后就绪", async () => {
+    const clock = instantClock();
+    const worker = new DemoWorker({ sleep: clock.sleep });
+    const midReports: AgentReport[] = [];
+    const trigger = demoTrigger("并行整理素材和投研");
+
+    const final = await worker.run(demoTicket(trigger, "t-par"), trigger, collectSink(midReports));
+
+    expect(midReports.map((report) => report.status)).toEqual(["progress", "progress"]);
+    expect(midReports.map((report) => report.ticketId)).toEqual(["t-par", "t-par"]);
+    expect(final).toMatchObject({ ticketId: "t-par", status: "ready", text: "并行的事都办完了，结果放你手边。" });
+    expect(clock.slept).toHaveLength(2);
+  });
+
+  it("快捷命令「本周投研」:推进一步后停在 waiting 待人决定", async () => {
+    const worker = new DemoWorker({ sleep: instantClock().sleep });
+    const midReports: AgentReport[] = [];
+    const trigger = demoTrigger("本周投研");
+
+    const final = await worker.run(demoTicket(trigger, "t-week"), trigger, collectSink(midReports));
+
+    expect(midReports.map((report) => report.status)).toEqual(["progress"]);
+    expect(final).toMatchObject({ ticketId: "t-week", status: "waiting" });
+    expect(final.text).toMatch(/拍板/);
+    expect([...final.text].length).toBeLessThanOrEqual(40);
+  });
+
+  it("「同意 <工单号>」唤醒等待工单:原工单落 ready,决议自身就绪", async () => {
+    const worker = new DemoWorker({ sleep: instantClock().sleep });
+    const weekTrigger = demoTrigger("本周投研");
+    await worker.run(demoTicket(weekTrigger, "t-week"), weekTrigger, noopSink);
+
+    const midReports: AgentReport[] = [];
+    const agreeTrigger = demoTrigger("同意 t-week");
+    const final = await worker.run(demoTicket(agreeTrigger, "t-agree"), agreeTrigger, collectSink(midReports));
+
+    expect(midReports).toEqual([{ ticketId: "t-week", status: "ready", text: "收到，按你拍板的出结果。" }]);
+    expect(final).toMatchObject({ ticketId: "t-agree", status: "ready" });
+  });
+
+  it("「驳回」不带工单号:决议最近一张等待工单,落 dropped", async () => {
+    const worker = new DemoWorker({ sleep: instantClock().sleep });
+    const weekTrigger = demoTrigger("本周投研");
+    await worker.run(demoTicket(weekTrigger, "t-week"), weekTrigger, noopSink);
+
+    const midReports: AgentReport[] = [];
+    const rejectTrigger = demoTrigger("驳回");
+    const final = await worker.run(demoTicket(rejectTrigger, "t-reject"), rejectTrigger, collectSink(midReports));
+
+    expect(midReports).toEqual([{ ticketId: "t-week", status: "dropped", text: "收到，这条不做了。" }]);
+    expect(final).toMatchObject({ ticketId: "t-reject", status: "ready", text: "好，已驳回。" });
+  });
+
+  it("没有等待工单时点同意:不落任何决议,直说现状", async () => {
+    const worker = new DemoWorker({ sleep: instantClock().sleep });
+    const midReports: AgentReport[] = [];
+    const trigger = demoTrigger("同意");
+
+    const final = await worker.run(demoTicket(trigger, "t-none"), trigger, collectSink(midReports));
+
+    expect(midReports).toEqual([]);
+    expect(final).toMatchObject({ ticketId: "t-none", status: "ready", text: "现在没有等你拍板的工单。" });
   });
 });

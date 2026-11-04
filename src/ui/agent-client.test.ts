@@ -72,6 +72,29 @@ describe("agent 客户端 sendCommand", () => {
   });
 });
 
+describe("agent 客户端 tickets", () => {
+  it("GET /api/agent/tickets,返回账本折叠出的工单视图", async () => {
+    const tickets = [
+      { ticketId: "t-1", status: "waiting", text: "等你拍板" },
+      { ticketId: "t-2", status: "ready", text: "办完了" },
+    ];
+    const fetch = fakeFetch({ ok: true, status: 200, body: tickets });
+    const client = createAgentClient({ fetch: fetch.fn });
+
+    await expect(client.tickets()).resolves.toEqual(tickets);
+    expect(fetch.calls).toHaveLength(1);
+    expect(fetch.calls[0].url).toBe("/api/agent/tickets");
+    expect(fetch.calls[0].init?.method).toBeUndefined();
+  });
+
+  it("服务端出错时抛出错误消息", async () => {
+    const fetch = fakeFetch({ ok: false, status: 500, body: { error: "账本不可读" } });
+    const client = createAgentClient({ fetch: fetch.fn });
+
+    await expect(client.tickets()).rejects.toThrow("账本不可读");
+  });
+});
+
 describe("agent 客户端 onEvent", () => {
   it("订阅 /api/agent/events,把 report/channel SSE 事件翻译给监听者;退订即关闭连接", () => {
     FakeEventSource.instances = [];
