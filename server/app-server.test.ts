@@ -6,6 +6,8 @@ import { createProductCore } from "../src/domain/product-core";
 import { InMemoryStorage } from "../src/product/in-process-product-api";
 import { createRequestListener } from "./app-server";
 import { createHttpProductCore } from "../src/product/http-product-api";
+import { createAgentCore, DemoWorker } from "./agent/core";
+import { InMemoryLedgerStorage } from "./agent/storage";
 
 /** http 层契约(审计 C5):错误码由领域错误类型驱动,浏览器与进程内看到同一语义。 */
 
@@ -18,7 +20,8 @@ beforeAll(async () => {
     dialogue: new FakeModelAdapter(),
     storage: new InMemoryStorage(),
   });
-  server = http.createServer(createRequestListener({ core, staticRoot: "" }));
+  const agent = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+  server = http.createServer(createRequestListener({ core, staticRoot: "", agent }));
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -346,3 +349,82 @@ describe("周度投研报告路由", () => {
     expect(await res.text()).toBe("未找到投研周报");
   });
 });
+
+describe("Agent 路由(工单 02)", () => {
+  it("POST /api/agent/triggers:pet 命令 → 200,链路驱动到 ready Report", async () => {
+    const { status, json } = await request("/api/agent/triggers", "POST", {
+      source: "pet",
+      kind: "command",
+      data: { text: "把上周投研总结成一句话" },
+    });
+    expect(status).toBe(200);
+    expect(json).toMatchObject({
+      admitted: true,
+      report: { status: "ready", text: "收到，马上办" },
+    });
+    expect((json as { ticket?: { id?: string } }).ticket?.id).toBeTruthy();
+  });
+
+  it("非法 source → 400(领域 ValidationError 驱动),不产工单", async () => {
+    const { status, json } = await request("/api/agent/triggers", "POST", {
+      source: "nope",
+      kind: "command",
+      data: {},
+    });
+    expect(status).toBe(400);
+    expect(json?.error).toContain("触发来源不合法");
+  });
+
+  it("GET /api/agent/events:SSE 依次收到 report 与 channel 事件", async () => {
+    // 拿到响应头即代表订阅已建立,此后再触发命令,事件必达此连接。
+    const controller = new AbortController();
+    const response = await fetch(`${base}/api/agent/events`, { signal: controller.signal });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+
+    const sent = await request("/api/agent/triggers", "POST", {
+      source: "pet",
+      kind: "command",
+      data: { text: "去办" },
+    });
+    expect(sent.status).toBe(200);
+
+    const events = await readSseUntil(response, (event) => event.eventName === "channel");
+    controller.abort();
+    expect(events.map((event) => event.eventName)).toEqual(["report", "channel"]);
+    expect(events[0]?.data).toMatchObject({ report: { status: "ready", text: "收到，马上办" } });
+    expect(events[1]?.data).toMatchObject({
+      channel: { target: "pet-bubble", text: "收到，马上办" },
+    });
+    const ticketId = (sent.json as { ticket?: { id?: string } }).ticket?.id;
+    expect((events[1]?.data as { channel?: { ticketId?: string } }).channel?.ticketId).toBe(ticketId);
+  });
+});
+
+/** 增量解析 SSE 流直到条件满足;事件端点不会自行结束,读完由调用方断开。 */
+async function readSseUntil(
+  response: Response,
+  enough: (event: { eventName?: string; data: Record<string, unknown> | null }) => boolean,
+): Promise<Array<{ eventName?: string; data: Record<string, unknown> | null }>> {
+  const reader = (response.body as ReadableStream<Uint8Array>).getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const events: Array<{ eventName?: string; data: Record<string, unknown> | null }> = [];
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let boundary = buffer.indexOf("\n\n");
+    while (boundary !== -1) {
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      const eventName = block.match(/^event: (.+)$/m)?.[1];
+      const rawData = block.match(/^data: (.+)$/m)?.[1];
+      const event = { eventName, data: rawData ? (JSON.parse(rawData) as Record<string, unknown>) : null };
+      events.push(event);
+      if (enough(event)) return events;
+      boundary = buffer.indexOf("\n\n");
+    }
+  }
+  return events;
+}

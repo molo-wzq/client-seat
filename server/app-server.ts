@@ -5,6 +5,8 @@ import zlib from "node:zlib";
 import type { ProductCore } from "../src/domain/product-core";
 import { NotFoundError, ValidationError } from "../src/domain/product-core";
 import type { ConversationStartOptions, MaterialDraftPatch, PlayerObservation } from "../src/domain/types";
+import type { AgentCore } from "./agent/core";
+import type { AgentTriggerInput } from "./agent/types";
 import { loadCurrentResearchReport } from "./report-parser";
 
 /** 领域之外的 http 层错误:请求体超过大小上限,映射为 413。 */
@@ -18,8 +20,9 @@ class BodyTooLargeError extends Error {}
 export function createRequestListener(deps: {
   core: ProductCore;
   staticRoot: string;
+  agent: AgentCore;
 }): (req: http.IncomingMessage, res: http.ServerResponse) => void {
-  const { core, staticRoot } = deps;
+  const { core, staticRoot, agent } = deps;
 
   return (req, res) => {
     void handle(req, res);
@@ -79,6 +82,27 @@ export function createRequestListener(deps: {
       writeEvent("error", { error: (error as Error).message });
     }
     if (!res.destroyed && !res.writableEnded) res.end();
+  }
+
+  /**
+   * Agent 事件流(工单 02):SSE 两类事件——`report` {report} 与 `channel` {channel}。
+   * 长连接:先刷响应头(客户端拿到头即代表订阅已建立),断开即退订。
+   */
+  function respondAgentEvents(req: http.IncomingMessage, res: http.ServerResponse): void {
+    res.writeHead(200, {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no",
+    });
+    res.flushHeaders();
+    const unsubscribe = agent.subscribe((event) => {
+      // 客户端断开后继续写只会堆积异常;静默放弃,退订由 close 钩子完成。
+      if (res.destroyed || res.writableEnded) return;
+      const payload = event.type === "report" ? { report: event.report } : { channel: event.channel };
+      res.write(`event: ${event.type}\ndata: ${JSON.stringify(payload)}\n\n`);
+    });
+    req.on("close", unsubscribe);
   }
 
   async function handleApi(
@@ -173,6 +197,25 @@ export function createRequestListener(deps: {
         "Content-Disposition": `attachment; filename="${filename}"`,
       });
       fs.createReadStream(reportFile).pipe(res);
+      return;
+    }
+    // 桌宠 Agent(工单 02):命令触发入口;source/kind 合法性由核心校验(ValidationError→400)。
+    if (req.method === "POST" && pathname === "/api/agent/triggers") {
+      const input = body as { source?: unknown; kind?: unknown; data?: unknown };
+      const outcome = await agent.emitTrigger({
+        source: input.source as AgentTriggerInput["source"],
+        kind: (input.kind as AgentTriggerInput["kind"]) || "command",
+        data:
+          typeof input.data === "object" && input.data !== null && !Array.isArray(input.data)
+            ? (input.data as Record<string, unknown>)
+            : {},
+      });
+      respondJson(res, 200, outcome);
+      return;
+    }
+    // 桌宠 Agent(工单 02):SSE 订阅 Report 与 Channel 事件。
+    if (req.method === "GET" && pathname === "/api/agent/events") {
+      respondAgentEvents(req, res);
       return;
     }
     if (req.method === "GET" && pathname === "/api/conversations") {

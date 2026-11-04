@@ -4,6 +4,8 @@ import { numberTurns, parseTranscriptTurns } from "../src/domain/transcript";
 import type { ProductStorage } from "../src/domain/ports";
 import type { Conversation, Material, Persona } from "../src/domain/types";
 import type { RoleCard } from "../src/domain/role-card";
+import type { LedgerEntry, LedgerEntryInput } from "./agent/types";
+import type { LedgerStorage } from "./agent/storage";
 
 /**
  * 本地 JSON 文件存储(spec.md:不引入数据库)。
@@ -11,12 +13,14 @@ import type { RoleCard } from "../src/domain/role-card";
  * - 读返回快照拷贝,调用方改动返回值不会污染仓库;
  * - 写 resolve 时即持久可见;并发写按调用顺序串行落盘;
  * - 临时文件 + 原子改名,失败不留半成品。
+ * 账本与产品数据同文件共存,同样遵守上述契约(见同文件的账本存储契约用例)。
  */
-export class FileStorage implements ProductStorage {
+export class FileStorage implements ProductStorage, LedgerStorage {
   private materials = new Map<string, Material>();
   private conversations = new Map<string, Conversation>();
   private personas = new Map<string, Persona>();
   private roles = new Map<string, RoleCard>();
+  private ledger: LedgerEntry[] = [];
   private flushChain: Promise<void> = Promise.resolve();
   private serial = 0;
 
@@ -28,6 +32,7 @@ export class FileStorage implements ProductStorage {
         conversations?: Conversation[];
         personas?: Persona[];
         roles?: RoleCard[];
+        ledger?: LedgerEntry[];
       };
       for (const material of data.materials ?? []) {
         this.materials.set(material.id, migrateMaterial(material));
@@ -36,6 +41,7 @@ export class FileStorage implements ProductStorage {
         this.conversations.set(conversation.id, conversation);
       for (const persona of data.personas ?? []) this.personas.set(persona.id, persona);
       for (const role of data.roles ?? []) this.roles.set(role.id, role);
+      this.ledger = data.ledger ?? [];
     }
   }
 
@@ -85,6 +91,21 @@ export class FileStorage implements ProductStorage {
     return [...this.roles.values()].map((r) => structuredClone(r));
   }
 
+  /** 账本只追加:seq 按已有条数接续分配,改写路径不存在。 */
+  async appendLedgerEntry(entry: LedgerEntryInput): Promise<LedgerEntry> {
+    const stored = {
+      ...entry,
+      seq: this.ledger.length + 1,
+      at: new Date().toISOString(),
+    } as LedgerEntry;
+    this.ledger.push(structuredClone(stored));
+    await this.flush();
+    return structuredClone(stored);
+  }
+  async listLedgerEntries(): Promise<LedgerEntry[]> {
+    return this.ledger.map((entry) => structuredClone(entry));
+  }
+
   /** 快照在入队时取,写按入队顺序串行执行;前一次失败不阻塞后续写。 */
   private flush(): Promise<void> {
     const data = {
@@ -92,6 +113,7 @@ export class FileStorage implements ProductStorage {
       conversations: [...this.conversations.values()],
       personas: [...this.personas.values()],
       roles: [...this.roles.values()],
+      ledger: this.ledger,
     };
     const content = JSON.stringify(data, null, 2);
     const serial = ++this.serial;

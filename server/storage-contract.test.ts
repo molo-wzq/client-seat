@@ -8,6 +8,8 @@ import type { RoleCard } from "../src/domain/role-card";
 import { DEFAULT_ROLE_CARD } from "../src/domain/role-card";
 import { InMemoryStorage } from "../src/product/in-process-product-api";
 import { FileStorage } from "./file-store";
+import { InMemoryLedgerStorage, type LedgerStorage } from "./agent/storage";
+import type { LedgerEntryInput } from "./agent/types";
 
 function material(id: string, label = "素材"): Material {
   return {
@@ -129,6 +131,60 @@ for (const [name, create] of factories) {
   });
 }
 
+function triggerRecord(id: string): LedgerEntryInput {
+  return { type: "trigger", trigger: { id, source: "pet", kind: "command", data: { text: "去办" } } };
+}
+
+function reportRecord(ticketId: string): LedgerEntryInput {
+  return { type: "report", report: { ticketId, status: "ready", text: "收到，马上办" } };
+}
+
+const ledgerFactories: Array<[string, () => LedgerStorage]> = [
+  ["InMemoryLedgerStorage", () => new InMemoryLedgerStorage()],
+  ["FileStorage", () => new FileStorage(tempDbFile())],
+];
+
+for (const [name, create] of ledgerFactories) {
+  describe(`账本存储契约:${name}`, () => {
+    // 每个用例独立实例,避免用例间状态污染。
+    const fresh = (): LedgerStorage => create();
+
+    it("append 按调用顺序分配递增 seq,list 按序返回", async () => {
+      const storage = fresh();
+      const first = await storage.appendLedgerEntry(triggerRecord("t1"));
+      const second = await storage.appendLedgerEntry(reportRecord("k1"));
+      expect(first.seq).toBe(1);
+      expect(second.seq).toBe(2);
+      expect(first.at).toBeTruthy();
+
+      const entries = await storage.listLedgerEntries();
+      expect(entries.map((entry) => entry.type)).toEqual(["trigger", "report"]);
+      expect(entries.map((entry) => entry.seq)).toEqual([1, 2]);
+    });
+
+    it("list 返回快照:改动返回值不污染仓库", async () => {
+      const storage = fresh();
+      const stored = await storage.appendLedgerEntry(triggerRecord("t1"));
+      const snapshot = await storage.listLedgerEntries();
+      snapshot[0]!.seq = 999;
+      const again = await storage.listLedgerEntries();
+      expect(again[0]).toEqual(stored);
+    });
+
+    it("并发追加全部持久可见,seq 不重复不丢序", async () => {
+      const storage = fresh();
+      await Promise.all([
+        storage.appendLedgerEntry(triggerRecord("t1")),
+        storage.appendLedgerEntry(triggerRecord("t2")),
+        storage.appendLedgerEntry(reportRecord("k1")),
+      ]);
+      const entries = await storage.listLedgerEntries();
+      expect(entries.map((entry) => entry.seq)).toEqual([1, 2, 3]);
+      expect(new Set(entries.map((entry) => entry.seq)).size).toBe(3);
+    });
+  });
+}
+
 describe("FileStorage 磁盘行为", () => {
   it("写后重建实例仍可读回(持久化)", async () => {
     const file = tempDbFile();
@@ -147,6 +203,22 @@ describe("FileStorage 磁盘行为", () => {
 
     const second = new FileStorage(file);
     expect((await second.listConversations()).map((c) => c.id)).toEqual(["c2"]);
+  });
+
+  it("账本写后重建实例仍可读回,seq 接续不重复(只追加持久)", async () => {
+    const file = tempDbFile();
+    const first = new FileStorage(file);
+    await first.saveMaterial(material("m1"));
+    await first.appendLedgerEntry(triggerRecord("t1"));
+
+    const second = new FileStorage(file);
+    const entries = await second.listLedgerEntries();
+    expect(entries.map((entry) => entry.type)).toEqual(["trigger"]);
+    // 账本与产品数据同文件共存,互不覆盖。
+    expect((await second.listMaterials()).map((m) => m.id)).toEqual(["m1"]);
+
+    const next = await second.appendLedgerEntry(reportRecord("k1"));
+    expect(next.seq).toBe(2);
   });
 
   it("旧格式素材(缺 turns)加载时按转写补齐轮次", async () => {
