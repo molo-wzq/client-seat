@@ -184,6 +184,7 @@
 /* 待办条目:一句待人决定 + 同意/驳回。 */
 .desk-pet-inbox-item { margin: 0; }
 .desk-pet-inbox-text { margin: 0 0 5px; color: #4d3624; font-size: 12px; line-height: 1.6; }
+.desk-pet-inbox-empty { margin: 0; color: #7a664f; font-size: 12px; line-height: 1.6; }
 .desk-pet-inbox-actions { display: flex; gap: 6px; }
 .desk-pet-inbox-actions button {
   padding: 3px 12px;
@@ -199,6 +200,35 @@
 .desk-pet-inbox-actions button + button { background: #4d3624e0; color: #e6d7ba; }
 .desk-pet-inbox-actions button + button:hover { background: #5d4430; }
 .desk-pet-inbox-actions button:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 放权模式三段开关(工单 08):当前档深绿实底,未选档透明底细边。 */
+.desk-pet-policy { display: flex; align-items: center; gap: 8px; }
+.desk-pet-policy-label { color: #4d3624; font-size: 12px; }
+.desk-pet-policy-switch { display: flex; gap: 4px; }
+.desk-pet-policy-switch button {
+  padding: 2px 10px;
+  border: 1px solid #b28c52;
+  border-radius: 9px;
+  background: transparent;
+  color: #4d3624;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.desk-pet-policy-switch button[aria-pressed="true"] { background: #0f2d1f; border-color: #0f2d1f; color: #ede0d9; }
+.desk-pet-policy-switch button:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 评估记录(工单 08):一行元信息(时间·规则·处置)+ 一句「本来会做什么——为什么」。 */
+.desk-pet-evals {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed #b28c52;
+}
+.desk-pet-evals-title { margin: 0; color: #7a664f; font-size: 11px; }
+.desk-pet-eval { margin: 0; color: #4d3624; font-size: 12px; line-height: 1.6; }
+.desk-pet-eval-meta { color: #7a664f; font-size: 11px; }
 
 /* 工单列表条目:状态徽标 + 一句最新汇报。 */
 .desk-pet-ticket {

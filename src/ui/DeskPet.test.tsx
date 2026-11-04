@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentEvent, AgentTicketView } from "../../server/agent/types";
+import type { AgentEvalRecord, AgentEvent, AgentPolicy, AgentTicketView } from "../../server/agent/types";
 import { DeskPet, type PetExpression } from "./DeskPet";
 import type { AgentClient } from "./agent-client";
 
@@ -10,7 +10,7 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
-/** 假 agent 客户端(工单 03 测试缝):只记录 sendCommand/sendTrigger/onEvent/tickets 的调用。 */
+/** 假 agent 客户端(工单 03 测试缝):记录各接口调用;放权与评估缺省给空实现。 */
 function fakeAgent(overrides: Partial<AgentClient> = {}): AgentClient {
   return {
     sendCommand: vi.fn(() => Promise.resolve()),
@@ -19,8 +19,16 @@ function fakeAgent(overrides: Partial<AgentClient> = {}): AgentClient {
     ),
     onEvent: vi.fn(() => () => undefined),
     tickets: vi.fn(() => Promise.resolve([])),
+    policy: vi.fn(() => Promise.resolve(emptyPolicy("observe"))),
+    setAcceptMode: vi.fn((mode: AgentPolicy["acceptMode"]) => Promise.resolve(emptyPolicy(mode))),
+    evals: vi.fn(() => Promise.resolve([])),
     ...overrides,
   };
+}
+
+/** 空规则策略样例:UI 只关心版本与当前模式,规则数据由服务端契约钉住。 */
+function emptyPolicy(acceptMode: AgentPolicy["acceptMode"]): AgentPolicy {
+  return { version: 1, acceptMode, rules: [] };
 }
 
 describe("桌宠外壳", () => {
@@ -249,7 +257,7 @@ describe("角标、待办面板与工单列表(工单 05)", () => {
     render(<DeskPet agent={idle} />);
     // 等初始拉取的微任务跑完再断言,避免假阴性。
     await act(async () => {});
-    expect(screen.queryByRole("button", { name: /^待办/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^待办 \d+$/ })).not.toBeInTheDocument();
   });
 
   it("report 事件实时刷新:新工单落 waiting,角标从无到有", async () => {
@@ -262,7 +270,7 @@ describe("角标、待办面板与工单列表(工单 05)", () => {
     });
     render(<DeskPet agent={agent} />);
     await act(async () => {});
-    expect(screen.queryByRole("button", { name: /^待办/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^待办 \d+$/ })).not.toBeInTheDocument();
 
     act(() => {
       listener?.({ type: "report", report: { ticketId: "t-w", status: "waiting", text: "等你拍板" } });
@@ -389,5 +397,63 @@ describe("拖给它:素材入草稿(工单 07)", () => {
     // 空批注不发送。
     await user.click(screen.getByRole("button", { name: "发批注" }));
     expect(agent.sendTrigger).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("放权模式与评估记录(工单 08)", () => {
+  /** 评估记录样例:observe 下 R1 命中的「本来会做什么+为什么」。 */
+  function evalRecord(): AgentEvalRecord {
+    return {
+      at: "2026-11-04T09:05:00.000Z",
+      triggerId: "tr-1",
+      ruleId: "R1",
+      wouldDo: "自动起草本局复盘一句话",
+      why: "对局刚结束，趁热提炼经理哪招值得学",
+      outcome: "observed",
+    };
+  }
+
+  it("待办面板顶部有三段开关:当前模式高亮,点「自动」切换并更新高亮", async () => {
+    const user = userEvent.setup();
+    const agent = fakeAgent();
+    render(<DeskPet agent={agent} />);
+
+    await user.click(screen.getByRole("button", { name: "待办" }));
+
+    const group = screen.getByRole("group", { name: "放权模式" });
+    expect(screen.getByRole("button", { name: "观察" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "关" })).toHaveAttribute("aria-pressed", "false");
+    expect(group).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "自动" }));
+    expect(agent.setAcceptMode).toHaveBeenCalledWith("auto");
+    expect(screen.getByRole("button", { name: "自动" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getByRole("button", { name: "观察" })).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("评估记录列表:时间、规则、本来会做什么、为什么都可见", async () => {
+    const user = userEvent.setup();
+    const agent = fakeAgent({ evals: vi.fn(() => Promise.resolve([evalRecord()])) });
+    render(<DeskPet agent={agent} />);
+
+    await user.click(screen.getByRole("button", { name: "待办" }));
+
+    const list = await screen.findByRole("region", { name: "评估记录" });
+    expect(list).toHaveTextContent("R1");
+    expect(list).toHaveTextContent("自动起草本局复盘一句话");
+    expect(list).toHaveTextContent("对局刚结束，趁热提炼经理哪招值得学");
+    expect(list).toHaveTextContent(/:\d{2}/);
+    expect(list).toHaveTextContent("只记录");
+  });
+
+  it("还没有评估记录时给空态文案;没有待办时面板可打开并显示空态", async () => {
+    const user = userEvent.setup();
+    const agent = fakeAgent();
+    render(<DeskPet agent={agent} />);
+
+    await user.click(screen.getByRole("button", { name: "待办" }));
+
+    expect(screen.getByRole("region", { name: "评估记录" })).toHaveTextContent("还没有评估记录");
+    expect(screen.getByRole("region", { name: "待办面板" })).toHaveTextContent("没有等你拍板的事");
   });
 });

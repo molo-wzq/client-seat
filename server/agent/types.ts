@@ -34,12 +34,57 @@ export interface AgentThread {
   key: string;
 }
 
-/** 评估结论(Eval 的产物):本期只做准入;研判与放权模式见后续票。 */
+/** 评估结论(Eval 的产物):准入 + 研判(工单 08 起受放权模式约束)。 */
 export interface AgentDecision {
   triggerId: string;
   admitted: boolean;
   /** 一句话理由(给人读,进账本)。 */
   reason: string;
+}
+
+/** 放权模式(工单 08):off 规则命中不评估不执行;observe 只记评估;auto 立项执行。 */
+export type AcceptMode = "off" | "observe" | "auto";
+
+/**
+ * 主动规则(spec v9 的 R1–R7,写成数据):Agent 会自己发起的候选工作。
+ * 按 source+kind 匹配触发;R1–R3 对应现有触发类型,R4–R7 的触发类型由后续工单补上。
+ */
+export interface AgentPolicyRule {
+  id: "R1" | "R2" | "R3" | "R4" | "R5" | "R6" | "R7";
+  /** 短名(给人读,进 UI)。 */
+  name: string;
+  source: AgentSource;
+  kind: string;
+  /** 本来会做什么(一句动宾,进评估记录)。 */
+  wouldDo: string;
+  /** 为什么(命中理由,进评估记录)。 */
+  why: string;
+}
+
+/** 放权策略(工单 08):版本号随每次切换递增;规则集本期固定为 R1–R7。 */
+export interface AgentPolicy {
+  version: number;
+  acceptMode: AcceptMode;
+  rules: AgentPolicyRule[];
+}
+
+/**
+ * 研判处置(工单 08):主动规则命中一次记一条,即「评估记录」——
+ * observe 只记录(observed),auto 已立项执行(executed);off 不记。
+ */
+export interface AgentDisposition {
+  triggerId: string;
+  ruleId: AgentPolicyRule["id"];
+  /** 本来会做什么(取自命中规则)。 */
+  wouldDo: string;
+  /** 为什么(命中理由)。 */
+  why: string;
+  outcome: "observed" | "executed";
+}
+
+/** 评估记录(GET /api/agent/evals 的产物):Disposition 补上账本时间。 */
+export interface AgentEvalRecord extends AgentDisposition {
+  at: string;
 }
 
 /** 工单:一次被准予执行的工作,由 Worker 领走。 */
@@ -124,8 +169,13 @@ export interface ReportEntry extends LedgerRecord {
   report: AgentReport;
 }
 
-/** 账本条目:按 spec 记录 Trigger、Decision、Report(本期另记 Ticket;Disposition 见后续票)。 */
-export type LedgerEntry = TriggerEntry | DecisionEntry | TicketEntry | ReportEntry;
+export interface DispositionEntry extends LedgerRecord {
+  type: "disposition";
+  disposition: AgentDisposition;
+}
+
+/** 账本条目:按 spec 记录 Trigger、Decision、Disposition、Report(本期另记 Ticket)。 */
+export type LedgerEntry = TriggerEntry | DecisionEntry | TicketEntry | ReportEntry | DispositionEntry;
 
 /** 追加输入:不含 seq/at,由存储按追加顺序分配。 */
 export type LedgerEntryInput = DistributiveOmit<LedgerEntry, "seq" | "at">;

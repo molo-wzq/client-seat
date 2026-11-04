@@ -1,8 +1,11 @@
 import { randomId } from "../../src/domain/ports";
 import { ValidationError } from "../../src/domain/product-core";
 import type {
+  AcceptMode,
   AgentDecision,
+  AgentEvalRecord,
   AgentEvent,
+  AgentPolicy,
   AgentReport,
   AgentTicket,
   AgentTicketView,
@@ -14,6 +17,7 @@ import type {
 } from "./types";
 import type { LedgerStorage } from "./storage";
 import { foldTickets } from "./tickets";
+import { findPolicyRule, foldEvals, initialPolicy } from "./policy";
 
 /**
  * Agent 编排核心(ADR 0007:可整体替换,只暴露 emitTrigger / subscribe / ledger)。
@@ -228,11 +232,37 @@ export interface AgentCore {
   ledger(): Promise<LedgerEntry[]>;
   /** 只读工单视图(工单 05):账本折叠出每张工单最新状态,不追加任何条目。 */
   tickets(): Promise<AgentTicketView[]>;
+  /** 只读放权策略(工单 08):版本号、当前放权模式与 R1–R7 规则数据。 */
+  policy(): Promise<AgentPolicy>;
+  /** 切换放权模式(工单 08):版本号 +1;非法模式抛 ValidationError(→400)。 */
+  setAcceptMode(mode: AcceptMode): Promise<AgentPolicy>;
+  /** 只读评估记录(工单 08):账本折叠出的「本来会做什么+为什么」清单。 */
+  evals(): Promise<AgentEvalRecord[]>;
 }
 
-export function createAgentCore(deps: { storage: LedgerStorage; worker: AgentWorker }): AgentCore {
+export function createAgentCore(deps: {
+  storage: LedgerStorage;
+  worker: AgentWorker;
+  /** 初始放权模式(缺省 observe);只给需要钉执行路径的既有用例与演示脚本用。 */
+  initialAcceptMode?: AcceptMode;
+}): AgentCore {
   const { storage, worker } = deps;
   const listeners = new Set<(event: AgentEvent) => void>();
+  let policy = initialPolicy(deps.initialAcceptMode);
+
+  // 每条 Report(途中的与最终的)走同一条出口:先落账,再发事件;能说的才配气泡。
+  const emitReport = async (report: AgentReport): Promise<void> => {
+    await storage.appendLedgerEntry({ type: "report", report });
+    publish({ type: "report", report });
+    // dropped 的语义是沉默(spec 故事 7:没什么值得说就保持沉默):
+    // 账本与工单视图照记「已放弃」,但不推气泡。
+    if (report.status === "dropped") return;
+    publish({
+      type: "channel",
+      // 桌宠气泡硬上限 40 字(spec);Report 原文完整留在账本里。
+      channel: { target: "pet-bubble", ticketId: report.ticketId, text: [...report.text].slice(0, 40).join("") },
+    });
+  };
 
   return {
     async emitTrigger(input) {
@@ -245,7 +275,37 @@ export function createAgentCore(deps: { storage: LedgerStorage; worker: AgentWor
       const trigger: AgentTrigger = { ...input, id: randomId() };
       await storage.appendLedgerEntry({ type: "trigger", trigger });
 
-      const decision = evaluate(trigger);
+      // Eval 两步:先做形状准入,再按放权模式给 inferred 候选定处置(工单 08)。
+      const admission = evaluate(trigger);
+      if (!admission.admitted) {
+        await storage.appendLedgerEntry({ type: "decision", decision: admission });
+        return { triggerId: trigger.id, admitted: false, ticket: null, report: null };
+      }
+
+      const rule = findPolicyRule(trigger);
+      let decision = admission;
+      if (rule) {
+        // inferred 候选(规则主动发起):off 不评估不执行;observe 只记评估;
+        // auto 记评估并立项执行。评估记录即账本里的 Disposition。
+        if (policy.acceptMode === "off") {
+          decision = { triggerId: trigger.id, admitted: false, reason: `放权模式 off，规则 ${rule.id} 不评估、不立项` };
+        } else {
+          await storage.appendLedgerEntry({
+            type: "disposition",
+            disposition: {
+              triggerId: trigger.id,
+              ruleId: rule.id,
+              wouldDo: rule.wouldDo,
+              why: rule.why,
+              outcome: policy.acceptMode === "auto" ? "executed" : "observed",
+            },
+          });
+          decision =
+            policy.acceptMode === "auto"
+              ? { triggerId: trigger.id, admitted: true, reason: `规则 ${rule.id} 命中，放权 auto 立项执行` }
+              : { triggerId: trigger.id, admitted: false, reason: `放权模式 observe，规则 ${rule.id} 命中，只记录不立项` };
+        }
+      }
       await storage.appendLedgerEntry({ type: "decision", decision });
       if (!decision.admitted) {
         return { triggerId: trigger.id, admitted: false, ticket: null, report: null };
@@ -264,19 +324,6 @@ export function createAgentCore(deps: { storage: LedgerStorage; worker: AgentWor
       };
       await storage.appendLedgerEntry({ type: "ticket", ticket });
 
-      // 每条 Report(途中的与最终的)走同一条出口:先落账,再发事件;能说的才配气泡。
-      const emitReport = async (report: AgentReport): Promise<void> => {
-        await storage.appendLedgerEntry({ type: "report", report });
-        publish({ type: "report", report });
-        // dropped 的语义是沉默(spec 故事 7:没什么值得说就保持沉默):
-        // 账本与工单视图照记「已放弃」,但不推气泡。
-        if (report.status === "dropped") return;
-        publish({
-          type: "channel",
-          // 桌宠气泡硬上限 40 字(spec);Report 原文完整留在账本里。
-          channel: { target: "pet-bubble", ticketId: report.ticketId, text: [...report.text].slice(0, 40).join("") },
-        });
-      };
       const report: AgentReport = { ...(await worker.run(ticket, trigger, emitReport)), ticketId: ticket.id };
       await emitReport(report);
 
@@ -293,6 +340,22 @@ export function createAgentCore(deps: { storage: LedgerStorage; worker: AgentWor
     async tickets() {
       return foldTickets(await storage.listLedgerEntries());
     },
+
+    async policy() {
+      return structuredClone(policy);
+    },
+
+    async setAcceptMode(mode) {
+      if (!ACCEPT_MODES.includes(mode)) {
+        throw new ValidationError(`放权模式不合法:${String(mode)}(只能是 off/observe/auto)`);
+      }
+      policy = { ...policy, version: policy.version + 1, acceptMode: mode };
+      return structuredClone(policy);
+    },
+
+    async evals() {
+      return foldEvals(await storage.listLedgerEntries());
+    },
   };
 
   function publish(event: AgentEvent): void {
@@ -300,7 +363,7 @@ export function createAgentCore(deps: { storage: LedgerStorage; worker: AgentWor
   }
 }
 
-/** Eval:本期只做准入——pet 命令须带非空文本,对局结束事件须带对局号与轮次,拖入文件须带文件名与合法类型;研判与放权模式见后续票。 */
+/** Eval 准入:pet 命令须带非空文本,对局结束事件须带对局号与轮次,拖入文件须带文件名与合法类型;研判(放权模式)在 emitTrigger 里接续。 */
 function evaluate(trigger: AgentTrigger): AgentDecision {
   if (trigger.kind === "game-ended") {
     const gameId = trigger.data.gameId;
@@ -338,3 +401,6 @@ const TRIGGER_KINDS: AgentTrigger["kind"][] = ["command", "game-ended", "dropped
 
 /** 拖入文件的类型白名单(工单 07):录音 / 生客画像 JSON / 角色卡。 */
 const FILE_KINDS: unknown[] = ["audio", "persona", "role"];
+
+/** 放权模式白名单(工单 08):off/observe/auto,缺省 observe(见 policy.ts)。 */
+const ACCEPT_MODES: AcceptMode[] = ["off", "observe", "auto"];

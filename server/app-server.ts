@@ -6,7 +6,7 @@ import type { ProductCore } from "../src/domain/product-core";
 import { NotFoundError, ValidationError } from "../src/domain/product-core";
 import type { ConversationStartOptions, MaterialDraftPatch, PlayerObservation } from "../src/domain/types";
 import type { AgentCore } from "./agent/core";
-import type { AgentTriggerInput } from "./agent/types";
+import type { AcceptMode, AgentTriggerInput } from "./agent/types";
 import { loadCurrentResearchReport } from "./report-parser";
 
 /** 领域之外的 http 层错误:请求体超过大小上限,映射为 413。 */
@@ -216,6 +216,20 @@ export function createRequestListener(deps: {
     // 桌宠 Agent(工单 05):只读工单视图(账本折叠出的每张工单最新状态)。
     if (req.method === "GET" && pathname === "/api/agent/tickets") {
       respondJson(res, 200, await agent.tickets());
+      return;
+    }
+    // 桌宠 Agent(工单 08):放权模式查询与切换;模式合法性由核心校验(ValidationError→400)。
+    if (req.method === "GET" && pathname === "/api/agent/policy") {
+      respondJson(res, 200, await agent.policy());
+      return;
+    }
+    if (req.method === "PUT" && pathname === "/api/agent/policy") {
+      respondJson(res, 200, await agent.setAcceptMode((body as { acceptMode?: AcceptMode }).acceptMode as AcceptMode));
+      return;
+    }
+    // 桌宠 Agent(工单 08):只读评估记录(规则命中后的「本来会做什么+为什么」)。
+    if (req.method === "GET" && pathname === "/api/agent/evals") {
+      respondJson(res, 200, await agent.evals());
       return;
     }
     // 桌宠 Agent(工单 02):SSE 订阅 Report 与 Channel 事件。

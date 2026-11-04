@@ -5,7 +5,14 @@
  * 测试用假实现(见 agent-client.test.ts);生产缺省用浏览器全局实现。
  */
 import type { EmitOutcome } from "../../server/agent/core";
-import type { AgentEvent, AgentTicketView, AgentTriggerInput } from "../../server/agent/types";
+import type {
+  AcceptMode,
+  AgentEvalRecord,
+  AgentEvent,
+  AgentPolicy,
+  AgentTicketView,
+  AgentTriggerInput,
+} from "../../server/agent/types";
 
 /** 注入缝:测试传假 fetch / 假 EventSource;缺省回落浏览器全局。 */
 export interface AgentClientDeps {
@@ -23,6 +30,12 @@ export interface AgentClient {
   onEvent(listener: (event: AgentEvent) => void): () => void;
   /** 拉取工单视图(账本折叠的最新状态;工单 05);失败抛错误消息。 */
   tickets(): Promise<AgentTicketView[]>;
+  /** 拉取放权策略(工单 08);失败抛错误消息。 */
+  policy(): Promise<AgentPolicy>;
+  /** 切换放权模式(工单 08);失败抛错误消息。 */
+  setAcceptMode(mode: AcceptMode): Promise<AgentPolicy>;
+  /** 拉取评估记录(工单 08);失败抛错误消息。 */
+  evals(): Promise<AgentEvalRecord[]>;
 }
 
 export function createAgentClient(deps: AgentClientDeps = {}): AgentClient {
@@ -55,6 +68,37 @@ export function createAgentClient(deps: AgentClientDeps = {}): AgentClient {
         throw new Error(body?.error || `工单查询失败(HTTP ${response.status})`);
       }
       return (await response.json()) as AgentTicketView[];
+    },
+
+    async policy() {
+      const response = await (deps.fetch ?? globalThis.fetch.bind(globalThis))(`${baseUrl}/api/agent/policy`);
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || `放权模式查询失败(HTTP ${response.status})`);
+      }
+      return (await response.json()) as AgentPolicy;
+    },
+
+    async setAcceptMode(mode) {
+      const response = await (deps.fetch ?? globalThis.fetch.bind(globalThis))(`${baseUrl}/api/agent/policy`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ acceptMode: mode }),
+      });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || `放权模式切换失败(HTTP ${response.status})`);
+      }
+      return (await response.json()) as AgentPolicy;
+    },
+
+    async evals() {
+      const response = await (deps.fetch ?? globalThis.fetch.bind(globalThis))(`${baseUrl}/api/agent/evals`);
+      if (!response.ok) {
+        const body = (await response.json().catch(() => null)) as { error?: string } | null;
+        throw new Error(body?.error || `评估记录查询失败(HTTP ${response.status})`);
+      }
+      return (await response.json()) as AgentEvalRecord[];
     },
 
     onEvent(listener) {

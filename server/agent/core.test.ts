@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import type {
+  AcceptMode,
   AgentEvent,
   AgentReport,
   AgentTicket,
   AgentTrigger,
   AgentTriggerInput,
   DecisionEntry,
+  DispositionEntry,
   ReportEntry,
   TicketEntry,
   TriggerEntry,
@@ -220,7 +222,12 @@ describe("对局后复盘一句话(工单 06)", () => {
   }
 
   it("对局结束:复盘 Worker 起草一句话(只评经理、≤40 字、带依据),气泡同步推送", async () => {
-    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+    // R1 属主动规则,执行路径钉在放权 auto 下(工单 08 起 observe 只记评估不执行)。
+    const core = createAgentCore({
+      storage: new InMemoryLedgerStorage(),
+      worker: new DemoWorker(),
+      initialAcceptMode: "auto",
+    });
     const events: AgentEvent[] = [];
     core.subscribe((event) => events.push(event));
 
@@ -237,10 +244,16 @@ describe("对局后复盘一句话(工单 06)", () => {
     // 依据(展开用):轮次 + 策略卡,对局号对上本局。
     expect(outcome.report?.basis).toEqual({ gameId: "conv-1", turnNumber: 2, cardId: "c1" });
 
-    // 账本按序追加,Thread 按 spec 的 gameId 键归并本局。
+    // 账本按序追加(规则命中先记评估),Thread 按 spec 的 gameId 键归并本局。
     const entries = await core.ledger();
-    expect(entries.map((entry) => entry.type)).toEqual(["trigger", "decision", "ticket", "report"]);
-    const ticketEntry = entries[2] as TicketEntry;
+    expect(entries.map((entry) => entry.type)).toEqual([
+      "trigger",
+      "disposition",
+      "decision",
+      "ticket",
+      "report",
+    ]);
+    const ticketEntry = entries[3] as TicketEntry;
     expect(ticketEntry.ticket.thread).toEqual({ kind: "gameId", key: "conv-1" });
 
     // 一句话同文进桌宠气泡(既有 Channel 通道)。
@@ -252,7 +265,11 @@ describe("对局后复盘一句话(工单 06)", () => {
   });
 
   it("没有用卡轮(无值得说的内容):Report 落 dropped,不出气泡", async () => {
-    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+    const core = createAgentCore({
+      storage: new InMemoryLedgerStorage(),
+      worker: new DemoWorker(),
+      initialAcceptMode: "auto",
+    });
     const events: AgentEvent[] = [];
     core.subscribe((event) => events.push(event));
 
@@ -262,7 +279,13 @@ describe("对局后复盘一句话(工单 06)", () => {
     expect(outcome.report?.basis).toBeUndefined();
     // 账本如实记 dropped(工单视图显示「已放弃」),但桌宠保持沉默:不推气泡。
     const entries = await core.ledger();
-    expect(entries.map((entry) => entry.type)).toEqual(["trigger", "decision", "ticket", "report"]);
+    expect(entries.map((entry) => entry.type)).toEqual([
+      "trigger",
+      "disposition",
+      "decision",
+      "ticket",
+      "report",
+    ]);
     expect(events.filter((event) => event.type === "report")).toHaveLength(1);
     expect(events.filter((event) => event.type === "channel")).toHaveLength(0);
   });
@@ -300,7 +323,12 @@ describe("拖给它:素材入草稿(工单 07)", () => {
     const clock = instantClock();
     return {
       clock,
-      core: createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker({ sleep: clock.sleep }) }),
+      // 拖入文件与批注都是主动规则(R2/R3),执行路径钉在放权 auto 下(工单 08)。
+      core: createAgentCore({
+        storage: new InMemoryLedgerStorage(),
+        worker: new DemoWorker({ sleep: clock.sleep }),
+        initialAcceptMode: "auto",
+      }),
     };
   }
 
@@ -546,5 +574,106 @@ describe("DemoWorker 分步演示(工单 05)", () => {
 
     expect(midReports).toEqual([]);
     expect(final).toMatchObject({ ticketId: "t-none", status: "ready", text: "现在没有等你拍板的工单。" });
+  });
+});
+
+describe("放权模式与评估记录(工单 08)", () => {
+  /** R1(复盘一句话)的样例触发:同一 Trigger 在三种放权模式下的不同结局由下列用例分别钉住。 */
+  function gameEnded(): AgentTriggerInput {
+    return {
+      source: "table",
+      kind: "game-ended",
+      data: { gameId: "conv-policy", rounds: [{ managerText: "先接住话头再往下谈。", cardId: "c1" }] },
+    };
+  }
+
+  it("默认 observe:规则命中只记评估(本来会做什么+为什么),不立项;账本 trigger→disposition→decision", async () => {
+    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+
+    // 策略带版本号与 R1–R7 主动规则(spec v9),缺省 observe。
+    const policy = await core.policy();
+    expect(policy).toMatchObject({ version: 1, acceptMode: "observe" });
+    expect(policy.rules.map((rule) => rule.id)).toEqual(["R1", "R2", "R3", "R4", "R5", "R6", "R7"]);
+
+    const outcome = await core.emitTrigger(gameEnded());
+
+    expect(outcome.admitted).toBe(false);
+    expect(outcome.ticket).toBeNull();
+    expect(outcome.report).toBeNull();
+
+    const entries = await core.ledger();
+    expect(entries.map((entry) => entry.type)).toEqual(["trigger", "disposition", "decision"]);
+    const disposition = (entries[1] as DispositionEntry).disposition;
+    expect(disposition.ruleId).toBe("R1");
+    expect(disposition.outcome).toBe("observed");
+    expect(disposition.wouldDo).toContain("复盘");
+    expect(disposition.why).toContain("对局");
+    const decision = (entries[2] as DecisionEntry).decision;
+    expect(decision.admitted).toBe(false);
+    expect(decision.reason).toContain("只记录");
+
+    const evals = await core.evals();
+    expect(evals).toHaveLength(1);
+    expect(evals[0]).toMatchObject({
+      ruleId: "R1",
+      wouldDo: disposition.wouldDo,
+      why: disposition.why,
+      outcome: "observed",
+    });
+    expect(evals[0]?.at).toBeTruthy();
+  });
+
+  it("off:规则命中不评估、不立项,评估记录为空", async () => {
+    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+    await core.setAcceptMode("off");
+
+    const outcome = await core.emitTrigger(gameEnded());
+
+    expect(outcome.admitted).toBe(false);
+    expect(outcome.ticket).toBeNull();
+    expect(outcome.report).toBeNull();
+    const entries = await core.ledger();
+    expect(entries.map((entry) => entry.type)).toEqual(["trigger", "decision"]);
+    expect((entries[1] as DecisionEntry).decision.reason).toContain("off");
+    expect(await core.evals()).toEqual([]);
+  });
+
+  it("切换放权模式版本号递增;auto 下同一 Trigger 立项执行,评估记为已执行;切回 observe 只记录", async () => {
+    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+
+    expect((await core.setAcceptMode("auto")).acceptMode).toBe("auto");
+    expect((await core.policy()).version).toBe(2);
+
+    const autoOutcome = await core.emitTrigger(gameEnded());
+    expect(autoOutcome.admitted).toBe(true);
+    expect(autoOutcome.report?.status).toBe("ready");
+    expect(await core.evals()).toMatchObject([{ ruleId: "R1", outcome: "executed" }]);
+
+    // 验收:切换模式后,再触发同一个 Trigger,结果符合规则——observe 只记录、不执行。
+    await core.setAcceptMode("observe");
+    const observeOutcome = await core.emitTrigger(gameEnded());
+    expect(observeOutcome.admitted).toBe(false);
+    expect(observeOutcome.report).toBeNull();
+    expect((await core.policy()).version).toBe(3);
+    expect((await core.evals()).map((record) => record.outcome)).toEqual(["executed", "observed"]);
+  });
+
+  it("pet 命令是 explicit 授权:任何放权模式下都直接立项,不产生评估记录", async () => {
+    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+    await core.setAcceptMode("off");
+
+    const outcome = await core.emitTrigger(petCommand());
+
+    expect(outcome.admitted).toBe(true);
+    expect(outcome.report?.status).toBe("ready");
+    expect(await core.evals()).toEqual([]);
+  });
+
+  it("非法放权模式 → ValidationError,版本号不变", async () => {
+    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+
+    await expect(core.setAcceptMode("turbo" as unknown as AcceptMode)).rejects.toThrow("放权模式不合法");
+    expect((await core.policy()).version).toBe(1);
+    expect((await core.policy()).acceptMode).toBe("observe");
   });
 });

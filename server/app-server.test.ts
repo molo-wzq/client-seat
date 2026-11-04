@@ -354,6 +354,8 @@ describe("守护:草稿不能直接上桌(工单 07)", () => {
   /** http 层行为断言:拖入文件只走到 agent 账本的 waiting(草稿待审),
    *  Worker 不调用任何素材/发布接口——素材库无新增、无发布,上桌仍走人审。 */
   it("拖入文件停在 waiting 草稿待审,素材库无任何新增或发布", async () => {
+    // 工单 08 起拖入文件是主动规则 R2:执行路径钉在放权 auto 下(observe 只记评估不执行)。
+    await request("/api/agent/policy", "PUT", { acceptMode: "auto" });
     const before = await request("/api/materials");
     const beforeCount = Array.isArray(before.json) ? before.json.length : 0;
 
@@ -421,6 +423,52 @@ describe("Agent 路由(工单 02)", () => {
     });
     const ticketId = (sent.json as { ticket?: { id?: string } }).ticket?.id;
     expect((events[1]?.data as { channel?: { ticketId?: string } }).channel?.ticketId).toBe(ticketId);
+  });
+});
+
+describe("Agent 放权模式路由(工单 08)", () => {
+  it("GET /api/agent/policy:返回当前放权模式与 R1–R7 规则数据", async () => {
+    await request("/api/agent/policy", "PUT", { acceptMode: "observe" });
+    const { status, json } = await request("/api/agent/policy");
+    expect(status).toBe(200);
+    expect(json).toMatchObject({ acceptMode: "observe" });
+    const rules = (json as { rules?: Array<{ id?: string; wouldDo?: string; why?: string }> }).rules ?? [];
+    expect(rules.map((rule) => rule.id)).toEqual(["R1", "R2", "R3", "R4", "R5", "R6", "R7"]);
+    expect(rules.every((rule) => rule.wouldDo && rule.why)).toBe(true);
+  });
+
+  it("PUT /api/agent/policy:切换放权模式且版本号递增;非法模式 → 400", async () => {
+    const first = await request("/api/agent/policy", "PUT", { acceptMode: "auto" });
+    expect(first.status).toBe(200);
+    expect(first.json).toMatchObject({ acceptMode: "auto" });
+    const version = (first.json as { version?: number }).version ?? 0;
+
+    const second = await request("/api/agent/policy", "PUT", { acceptMode: "observe" });
+    expect(second.status).toBe(200);
+    expect(second.json).toMatchObject({ acceptMode: "observe", version: version + 1 });
+
+    const bad = await request("/api/agent/policy", "PUT", { acceptMode: "turbo" });
+    expect(bad.status).toBe(400);
+    expect(bad.json?.error).toContain("放权模式不合法");
+  });
+
+  it("GET /api/agent/evals:observe 下规则命中返回评估记录(off 下不记录)", async () => {
+    // observe:同一个拖入 Trigger 只记「本来会做什么+为什么」,不立项。
+    await request("/api/agent/policy", "PUT", { acceptMode: "observe" });
+    const drop = await request("/api/agent/triggers", "POST", {
+      source: "materials",
+      kind: "dropped",
+      data: { fileName: "policy-evals.mp3", fileKind: "audio" },
+    });
+    expect(drop.json).toMatchObject({ admitted: false, report: null });
+
+    const evals = await request("/api/agent/evals");
+    expect(evals.status).toBe(200);
+    const records = (evals.json as Array<Record<string, unknown>>) ?? [];
+    expect(records.at(-1)).toMatchObject({ ruleId: "R2", outcome: "observed" });
+    expect(String(records.at(-1)?.wouldDo)).toContain("草稿");
+    expect(String(records.at(-1)?.why)).toBeTruthy();
+    expect(String(records.at(-1)?.at)).toBeTruthy();
   });
 });
 

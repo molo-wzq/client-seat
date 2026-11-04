@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState, type RefObject } from "react";
 import { reducedMotion } from "./game-feel";
 import { createAgentClient, type AgentClient } from "./agent-client";
-import type { AgentReport, AgentTicketView, ReportStatus } from "../../server/agent/types";
+import type {
+  AcceptMode,
+  AgentEvalRecord,
+  AgentPolicy,
+  AgentReport,
+  AgentTicketView,
+  ReportStatus,
+} from "../../server/agent/types";
 import fCheer from "../assets/desk-pet/f-cheer.webp";
 import fPout from "../assets/desk-pet/f-pout.webp";
 import fSleepy from "../assets/desk-pet/f-sleepy.webp";
@@ -45,6 +52,26 @@ const STATUS_LABEL: Record<ReportStatus, string> = {
 
 /** 刚领走还没汇报的工单给的占位文案。 */
 const NO_REPORT_TEXT = "刚领走，还没汇报";
+
+/** 放权模式三段开关(工单 08):off 关 / observe 观察 / auto 自动,文案与按钮一一对应。 */
+const ACCEPT_MODE_OPTIONS: ReadonlyArray<{ mode: AcceptMode; label: string }> = [
+  { mode: "off", label: "关" },
+  { mode: "observe", label: "观察" },
+  { mode: "auto", label: "自动" },
+];
+
+/** 评估记录的处置标签:observe 只记录未执行,auto 已立项执行。 */
+const EVAL_OUTCOME_LABEL: Record<AgentEvalRecord["outcome"], string> = {
+  observed: "只记录",
+  executed: "已执行",
+};
+
+/** 评估记录时间只显时分(账本 at 是 ISO 串,按本地时区取 HH:MM)。 */
+function formatEvalTime(at: string): string {
+  const date = new Date(at);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 /** 拖入文件的类型(demo,工单 07):按 MIME 与文件名推断——音频 / 生客画像 / 角色卡。 */
 function inferFileKind(file: { name: string; type: string }): "audio" | "persona" | "role" {
@@ -104,6 +131,7 @@ function savePos(pos: PetPos) {
  * inCall(对局中)只置灰命令条——快捷环里「再来一局」还得能按。
  * 工单 07:文件拖到桌宠上高亮「交给我」,松手交 Worker 起草进待审;
  * 待审卡可写批注唤醒原工单。demo 只传文件名与类型,不上传内容。
+ * 工单 08:待办面板顶部放权模式三段开关(off/observe/auto)与评估记录列表。
  */
 export function DeskPet({
   expression = "wave",
@@ -130,6 +158,9 @@ export function DeskPet({
   const [dropHover, setDropHover] = useState(false);
   const [inboxOpen, setInboxOpen] = useState(false);
   const [listOpen, setListOpen] = useState(false);
+  /** 放权模式与评估记录(工单 08):待办面板打开时拉取,null 表示策略还没到。 */
+  const [policy, setPolicy] = useState<AgentPolicy | null>(null);
+  const [evals, setEvals] = useState<AgentEvalRecord[]>([]);
   const rootRef = useRef<HTMLElement>(null);
   const commandInputRef = useRef<HTMLInputElement>(null);
   // 拖动基线:按下时的指针与桌宠位置,移动按差值换算,jsdom 里 rect 为 0 也能算对差值。
@@ -168,11 +199,34 @@ export function DeskPet({
     return agent.onEvent((event) => {
       if (event.type === "report") {
         setTickets((prev) => upsertTicket(prev, event.report));
+        // 有新汇报就可能伴随新的评估记录(工单 08),顺手刷新,面板开着就能看到。
+        agent.evals().then(setEvals).catch(() => undefined);
       } else if (event.type === "channel" && event.channel.target === "pet-bubble") {
         setBubble(clampBubble(event.channel.text));
       }
     });
   }, [agent]);
+
+  // 待办面板打开时拉取放权模式与评估记录(工单 08);失败静默,开关与列表先给空态。
+  useEffect(() => {
+    if (!inboxOpen) return;
+    let alive = true;
+    agent
+      .policy()
+      .then((next) => {
+        if (alive) setPolicy(next);
+      })
+      .catch(() => undefined);
+    agent
+      .evals()
+      .then((next) => {
+        if (alive) setEvals(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
+  }, [agent, inboxOpen]);
 
   // 命令条打开即聚焦,直接打字。
   useEffect(() => {
@@ -246,6 +300,18 @@ export function DeskPet({
     setNotes((prev) => ({ ...prev, [ticketId]: "" }));
   }
 
+  /** 放权模式出口(工单 08):切换以服务端返回为准,失败保持原样不打扰。 */
+  function switchAcceptMode(mode: AcceptMode) {
+    agent
+      .setAcceptMode(mode)
+      .then((next) => {
+        setPolicy(next);
+        return agent.evals();
+      })
+      .then((next) => setEvals(next))
+      .catch(() => undefined);
+  }
+
   function submitCommand() {
     const text = command.trim();
     if (!text || inCall) return;
@@ -289,11 +355,28 @@ export function DeskPet({
       </button>
     ) : null;
 
-  // 待办面板:列出等待工单,「同意」「驳回」把决定作为 Trigger 发回 Router(spec 故事 11);
+  // 待办面板:顶部放权模式三段开关与评估记录(工单 08,spec 故事 14),
+  // 下面列出等待工单,「同意」「驳回」把决定作为 Trigger 发回 Router(spec 故事 11);
   // 待审卡可写批注唤醒原工单(工单 07,spec 故事 13)。
   const inbox =
     inboxOpen && !dnd ? (
       <div className="desk-pet-inbox" role="region" aria-label="待办面板">
+        <div className="desk-pet-policy" role="group" aria-label="放权模式">
+          <span className="desk-pet-policy-label">放权模式</span>
+          <div className="desk-pet-policy-switch">
+            {ACCEPT_MODE_OPTIONS.map(({ mode, label }) => (
+              <button
+                key={mode}
+                type="button"
+                aria-pressed={policy?.acceptMode === mode ? "true" : "false"}
+                onClick={() => switchAcceptMode(mode)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {waitingTickets.length === 0 && <p className="desk-pet-inbox-empty">没有等你拍板的事</p>}
         {waitingTickets.map((ticket) => (
           <div className="desk-pet-inbox-item" key={ticket.ticketId}>
             <p className="desk-pet-inbox-text">{ticket.text || NO_REPORT_TEXT}</p>
@@ -323,6 +406,19 @@ export function DeskPet({
             </form>
           </div>
         ))}
+        <div className="desk-pet-evals" role="region" aria-label="评估记录">
+          <p className="desk-pet-evals-title">评估记录</p>
+          {evals.length === 0 && <p className="desk-pet-eval">还没有评估记录</p>}
+          {evals.map((record) => (
+            <p className="desk-pet-eval" key={`${record.triggerId}-${record.ruleId}`}>
+              <span className="desk-pet-eval-meta">
+                {formatEvalTime(record.at)} · {record.ruleId} · {EVAL_OUTCOME_LABEL[record.outcome]}
+              </span>
+              <br />
+              {record.wouldDo}——{record.why}
+            </p>
+          ))}
+        </div>
       </div>
     ) : null;
 
@@ -453,6 +549,14 @@ export function DeskPet({
       <div className="desk-pet-actions">
         <button type="button" className="desk-pet-action" onClick={switchVariant}>
           切换{variant === "f" ? "男版" : "女版"}
+        </button>
+        <button
+          type="button"
+          className="desk-pet-action"
+          aria-expanded={inboxOpen || undefined}
+          onClick={() => setInboxOpen((open) => !open)}
+        >
+          待办
         </button>
         <button
           type="button"
