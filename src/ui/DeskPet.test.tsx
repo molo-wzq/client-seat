@@ -903,6 +903,27 @@ describe("命令接口:App 驱动桌宠(工单 15)", () => {
     }
   });
 
+  it("牌局事件的 Report 表情(工单 16):非对话工单带 emotion → 桌宠短时微反应,停留后还原", () => {
+    vi.useFakeTimers();
+    try {
+      // 经理出卡 → Worker 落 dropped + think 的 Report(见 server/agent/reactions.test)。
+      const { agent, listeners } = eventCapturingAgent();
+      render(<DeskPet agent={agent} />);
+      act(() => {
+        listeners.forEach((listener) =>
+          listener({ type: "report", report: { ticketId: "t-react", status: "dropped", text: "看在眼里,不说话。", emotion: "think" } }),
+        );
+      });
+      expect(screen.getByRole("img", { name: /拿笔想/ })).toBeInTheDocument();
+      act(() => {
+        vi.advanceTimersByTime(2500);
+      });
+      expect(screen.getByRole("img", { name: /挥手笑/ })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("refreshPolicy 重拉放权:演示切过放权后开关立即同步", async () => {
     let mode: AgentPolicy["acceptMode"] = "observe";
     const agent = fakeAgent({ policy: vi.fn(() => Promise.resolve(emptyPolicy(mode))) });

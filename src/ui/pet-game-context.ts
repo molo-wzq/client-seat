@@ -119,3 +119,22 @@ export function lastGameOf(
   const ended = conversations.find((item) => item.status === "ended" && item.outcomeSummary);
   return ended ? { outcome: ended.outcomeSummary ?? "未知", endReason: ended.endReason || "未知" } : null;
 }
+
+/** 经理轮数(工单 16):探测「经理出卡」事件的基线。 */
+export function managerTurnCount(turns: ReadonlyArray<{ speaker: string }>): number {
+  return turns.filter((turn) => turn.speaker === "manager").length;
+}
+
+/**
+ * 新出的策略卡(工单 16「经理出卡」):最新一个经理轮用了卡才有;
+ * 卡名从本局资源解析,查不到写「未知」(CONTEXT 书写约定)。
+ */
+export function newlyPlayedCard(
+  turns: ReadonlyArray<{ speaker: string; usedCardId?: string }>,
+  cards: ReadonlyArray<StrategyCard>,
+): { cardId: string; cardName: string } | null {
+  const last = [...turns].reverse().find((turn) => turn.speaker === "manager");
+  if (!last?.usedCardId) return null;
+  const card = cards.find((item) => item.id === last.usedCardId);
+  return { cardId: last.usedCardId, cardName: card?.name ?? last.usedCardId };
+}

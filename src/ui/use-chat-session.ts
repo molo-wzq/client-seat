@@ -203,6 +203,8 @@ export function useChatSession({
     sendQuickAction: (action: QuickRingAction) => send(action, action),
     attachFiles,
     applyEvent,
+    /** 这张工单是否本面板的对话工单(工单 16):非对话工单的表情由桌宠直接表达。 */
+    ownsTicket: (ticketId: string) => chatTicketsRef.current.has(ticketId),
     markVisible,
     resetEmotion,
     quote,

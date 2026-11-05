@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildPetChatContext, lastGameOf } from "./pet-game-context";
+import { buildPetChatContext, lastGameOf, managerTurnCount, newlyPlayedCard } from "./pet-game-context";
 import { CHAT_CONTEXT_LIMITS } from "../shared/agent-contract";
 import type { Conversation, Persona, StrategyCard } from "../domain/types";
 import type { HiddenCardChoice } from "./HiddenCards";
@@ -165,5 +165,23 @@ describe("牌局快照组装(工单 16)", () => {
       endReason: "经理主动收口",
     });
     expect(lastGameOf(null, [])).toBeNull();
+  });
+
+  it("牌局事件探测(工单 16):经理轮数基线;最新经理轮用了卡才算出卡", () => {
+    const turns = [
+      turn(1, "customer", "喂"),
+      turn(2, "manager", "您那笔钱到期怎么安排?", "sc-1"),
+    ];
+    expect(managerTurnCount(turns)).toBe(1);
+    expect(managerTurnCount([])).toBe(0);
+    // 最新经理轮用了卡:解析出卡名;没用卡(如最新轮是客户)→ null。
+    expect(newlyPlayedCard(turns, [card])).toEqual({ cardId: "sc-1", cardName: "存款搬家" });
+    expect(newlyPlayedCard([turn(1, "customer", "喂")], [card])).toBeNull();
+    expect(newlyPlayedCard([turn(2, "manager", "没用药方")], [card])).toBeNull();
+    // 查不到的卡:卡名写「未知」口径(用 id 兜底)。
+    expect(newlyPlayedCard([turn(2, "manager", "用了新招", "sc-x")], [card])).toEqual({
+      cardId: "sc-x",
+      cardName: "sc-x",
+    });
   });
 });

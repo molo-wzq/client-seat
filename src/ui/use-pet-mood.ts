@@ -103,6 +103,21 @@ export function usePetMood({ onSingleClick }: { onSingleClick: () => void }) {
     [wake],
   );
 
+  /**
+   * 直接换一个短时表情(工单 16):牌局事件由 Worker 落成带表情的 Report 驱动,
+   * 情绪值来自 Report.emotion,停一下照常还回去;到达即醒来(同审查 S5)。
+   */
+  const express = useCallback(
+    (emotion: PetEmotion | null) => {
+      if (!emotion) return;
+      wake();
+      setReactionExpr(emotion);
+      if (reactionTimerRef.current !== null) window.clearTimeout(reactionTimerRef.current);
+      reactionTimerRef.current = window.setTimeout(() => setReactionExpr(null), REACTION_HOLD_MS);
+    },
+    [wake],
+  );
+
   // 闲置入睡(工单 12):3 分钟没动静变 sleepy,再点一下醒来(只是表情,不推送)。
   useEffect(() => {
     const timer = window.setTimeout(() => setSleepy(true), IDLE_SLEEP_MS);
@@ -118,5 +133,5 @@ export function usePetMood({ onSingleClick }: { onSingleClick: () => void }) {
     };
   }, []);
 
-  return { sleepy, pokeExpression, reactionExpr, bubble, poke, wake, reactTo, say, handleAvatarClick, POKE_LINES };
+  return { sleepy, pokeExpression, reactionExpr, bubble, poke, wake, reactTo, express, say, handleAvatarClick, POKE_LINES };
 }

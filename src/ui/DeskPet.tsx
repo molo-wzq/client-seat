@@ -109,11 +109,13 @@ export function DeskPet({
   // 事件回调经 ref 取最新实现(会话/情绪/视图每次渲染都是新对象),订阅 effect 才能只依赖 agent。
   const sessionRef = useRef(session);
   const sayRef = useRef(mood.say);
+  const expressRef = useRef(mood.express);
   const inCallRef = useRef(inCall);
   const upsertReportRef = useRef(agentView.upsertReport);
   useEffect(() => {
     sessionRef.current = session;
     sayRef.current = mood.say;
+    expressRef.current = mood.express;
     inCallRef.current = inCall;
     upsertReportRef.current = agentView.upsertReport;
   });
@@ -209,9 +211,15 @@ export function DeskPet({
 
   // 订阅 agent 事件流:report 刷新工单视图与评估,对话部分交给 useChatSession,
   // pet-bubble 出气泡(面板开着或通话中不弹)。
+  // 非对话工单的 Report 带表情(工单 16:牌局事件/复盘)→ 桌宠直接做短时微反应。
   useEffect(() => {
     return agent.onEvent((event) => {
-      if (event.type === "report") upsertReportRef.current(event.report);
+      if (event.type === "report") {
+        upsertReportRef.current(event.report);
+        if (event.report.emotion && !sessionRef.current.ownsTicket(event.report.ticketId)) {
+          expressRef.current(event.report.emotion);
+        }
+      }
       sessionRef.current.applyEvent(event);
       if (event.type === "channel" && event.channel.target === "pet-bubble") {
         if (!panelOpenRef.current && !inCallRef.current) sayRef.current(event.channel.text);

@@ -12,7 +12,9 @@ export type AgentSource = "table" | "materials" | "research" | "pet" | "system";
  * 拖文件到桌宠为 "dropped"(data:{fileName,fileKind}),待审批注为 "annotate"(data:{ticketId,note})(工单 07),
  * 模型报错为 "model-error"(工单 10 补上类型,R5 规则自此可命中;data:{error} 可选),
  * 桌宠对话为 "chat"(工单 11;data:{text,history,view},工单 16 起另带 context:ChatContext,落账前剔除),
- * 周报到期为 "research-due"(工单 11;data:{weekId}),策略卡发布为 "cards-published"(工单 11;data:{materialId,cardIds})。
+ * 周报到期为 "research-due"(工单 11;data:{weekId}),策略卡发布为 "cards-published"(工单 11;data:{materialId,cardIds}),
+ * 牌局事件为 "card-played" / "hidden-raised" / "hidden-revealed"(工单 16;data:{gameId,cardId?,cardName?,item?},
+ * 由反应 Worker 落成带表情的 dropped Report,驱动桌宠微反应)。
  * 每个 kind 只认所属域的 source(如 research-due 只来自 research),冒名即拒绝。
  */
 export type AgentTriggerKind =
@@ -23,7 +25,10 @@ export type AgentTriggerKind =
   | "model-error"
   | "chat"
   | "research-due"
-  | "cards-published";
+  | "cards-published"
+  | "card-played"
+  | "hidden-raised"
+  | "hidden-revealed";
 
 /** 触发:一次可感知的事件或命令,进入链路的唯一输入。 */
 export interface AgentTrigger {

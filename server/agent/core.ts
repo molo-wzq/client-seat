@@ -283,6 +283,13 @@ function evaluate(trigger: AgentTrigger): AgentDecision {
       ? { triggerId: trigger.id, admitted: true, reason: "对局结束,准予复盘立项" }
       : { triggerId: trigger.id, admitted: false, reason: "对局结束事件不完整(缺对局号或轮次),不立项" };
   }
+  if (trigger.kind === "card-played" || trigger.kind === "hidden-raised" || trigger.kind === "hidden-revealed") {
+    // 牌局事件(工单 16):只做反应,须带对局号;缺了不立项(与 game-ended 同口径)。
+    const gameId = trigger.data.gameId;
+    return typeof gameId === "string" && gameId !== ""
+      ? { triggerId: trigger.id, admitted: true, reason: "牌局事件,准予反应立项" }
+      : { triggerId: trigger.id, admitted: false, reason: "牌局事件不完整(缺对局号),不立项" };
+  }
   if (trigger.kind === "dropped") {
     const fileName = typeof trigger.data.fileName === "string" ? trigger.data.fileName.trim() : "";
     const complete = fileName !== "" && FILE_KINDS.includes(trigger.data.fileKind);
@@ -327,7 +334,12 @@ function evaluate(trigger: AgentTrigger): AgentDecision {
 
 /** Thread 键归并(spec):对局按 gameId,周报按 weekId,发布按 materialId,pet 触发按 commandId。 */
 function threadOf(trigger: AgentTrigger): AgentThread {
-  if (trigger.kind === "game-ended") {
+  if (
+    trigger.kind === "game-ended" ||
+    trigger.kind === "card-played" ||
+    trigger.kind === "hidden-raised" ||
+    trigger.kind === "hidden-revealed"
+  ) {
     return { kind: "gameId", key: typeof trigger.data.gameId === "string" ? trigger.data.gameId : "" };
   }
   if (trigger.kind === "research-due") {
@@ -368,13 +380,16 @@ const KIND_SOURCES: Record<AgentTrigger["kind"], AgentTrigger["source"][]> = {
   chat: ["pet"],
   annotate: ["pet"],
   "game-ended": ["table"],
+  "card-played": ["table"],
+  "hidden-raised": ["table"],
+  "hidden-revealed": ["table"],
   dropped: ["materials"],
   "cards-published": ["materials"],
   "model-error": ["system"],
   "research-due": ["research"],
 };
 
-/** 触发类型白名单:pet 命令/对话 + 对局结束事件 + 拖入文件 + 待审批注(工单 07)+ 模型报错(工单 10)+ 周报到期/策略卡发布(工单 11)。 */
+/** 触发类型白名单:pet 命令/对话 + 对局事件(结束与牌局反应,工单 16)+ 拖入文件 + 待审批注(工单 07)+ 模型报错(工单 10)+ 周报到期/策略卡发布(工单 11)。 */
 const TRIGGER_KINDS: AgentTrigger["kind"][] = [
   "command",
   "game-ended",
@@ -384,6 +399,9 @@ const TRIGGER_KINDS: AgentTrigger["kind"][] = [
   "chat",
   "research-due",
   "cards-published",
+  "card-played",
+  "hidden-raised",
+  "hidden-revealed",
 ];
 
 /** 拖入文件的类型白名单(工单 07):录音 / 生客画像 JSON / 角色卡。 */

@@ -14,7 +14,7 @@ import { SetupAct } from "./ui/SetupAct";
 import { TableAct } from "./ui/TableAct";
 import { WireframePrototype } from "./ui/wireframe-prototype";
 import { createAgentClient, type AgentClient } from "./ui/agent-client";
-import { buildPetChatContext, lastGameOf } from "./ui/pet-game-context";
+import { buildPetChatContext, lastGameOf, managerTurnCount, newlyPlayedCard } from "./ui/pet-game-context";
 import { playSfx } from "./ui/game-feel";
 
 /** 缺省桌宠 agent 客户端(与 DeskPet 的实例同理,无状态,可各持一个)。 */
@@ -41,6 +41,8 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
   // ref 缓存避免同一局来回进出结算时重复触发。
   const [petReview, setPetReview] = useState<PetReviewView | null>(null);
   const petReviewRef = useRef<PetReviewView | null>(null);
+  // 「经理出卡」事件基线(工单 16):按对局记已见经理轮数,只在新增时发触发。
+  const seenManagerTurnsRef = useRef<{ id: string; count: number }>({ id: "", count: 0 });
   // 一键演示(工单 10):控制条开关与演示期间的桌宠表情接管。
   const [demoOpen, setDemoOpen] = useState(false);
   const [demoExpression, setDemoExpression] = useState<PetExpression | null>(null);
@@ -92,10 +94,14 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
     if (new URLSearchParams(window.location.search).get("demo") === "pet") setDemoOpen(true);
   }, []);
 
-  // 举牌即事件(工单 12):有牌举着待决定,桌宠换「拿笔想」。
+  // 举牌即事件(工单 12→16):有牌举着待决定,发 table 触发由 Worker 落表情(pout)。
   useEffect(() => {
-    if (raisePending) petRef.current?.react({ kind: "hidden-raised" });
-  }, [raisePending]);
+    if (raisePending && conversation?.status === "ongoing") {
+      void agent
+        .sendTrigger({ source: "table", kind: "hidden-raised", data: { gameId: conversation.id } })
+        .catch(() => undefined);
+    }
+  }, [raisePending, conversation, agent]);
 
   const publishedCards = useMemo(
     () => materials.flatMap((material) => material.cards.filter((card) => card.status === "published")),
@@ -364,14 +370,36 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
                     ...current,
                     [conversation.id]: { ...(current[conversation.id] ?? {}), [item]: choice },
                   }));
-                  // 亲手翻开隐藏牌→桌宠欢呼(工单 12 事件反应)。
-                  if (choice === "flip") petRef.current?.react({ kind: "hidden-revealed" });
+                  // 亲手翻开隐藏牌→发 table 触发,Worker 落 cheer(工单 16:表情由事件驱动)。
+                  if (choice === "flip") {
+                    void agent
+                      .sendTrigger({ source: "table", kind: "hidden-revealed", data: { gameId: conversation.id, item } })
+                      .catch(() => undefined);
+                  }
                 }}
                 onRaisePendingChange={setRaisePending}
                 onConversationChange={(next) => {
                   const accept = (current: Conversation) => next.revision === undefined || current.revision === undefined || next.revision >= current.revision;
-                  setConversation((current) => current?.id === next.id && accept(current) ? next : current);
+                  setConversation((current) => (current?.id === next.id && accept(current) ? next : current));
                   setConversations((current) => current.map((item) => item.id === next.id && accept(item) ? next : item));
+                  // 经理出了新的一张卡→发 table 触发,Worker 落 think(工单 16)。
+                  // 只对「新增的经理轮」发:换局/找回旧局先记基线,不回放历史出卡。
+                  const played = newlyPlayedCard(next.turns, next.resources?.cards ?? []);
+                  const seen = seenManagerTurnsRef.current;
+                  if (next.status === "ongoing" && seen.id === next.id) {
+                    if (managerTurnCount(next.turns) > seen.count && played) {
+                      void agent
+                        .sendTrigger({
+                          source: "table",
+                          kind: "card-played",
+                          data: { gameId: next.id, cardId: played.cardId, cardName: played.cardName },
+                        })
+                        .catch(() => undefined);
+                    }
+                    seenManagerTurnsRef.current = { id: next.id, count: managerTurnCount(next.turns) };
+                  } else {
+                    seenManagerTurnsRef.current = { id: next.id, count: managerTurnCount(next.turns) };
+                  }
                 }}
                 onFinished={(finished) => {
                   setResult(finished);
@@ -429,7 +457,8 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
       )}
       {/* 桌宠固定在牌桌右下角,不参与布局,也不遮挡主内容(工单 15:单面板,App 只发命令)。
           单击头像进对话面板;通话中照样能聊(消息不进经理上下文);
-          举牌/翻牌/挂断经命令接口换表情,进结算后变「欢呼」陪着看复盘(工单 06→12);
+          表情由牌局事件驱动(工单 16):经理出卡/举牌/翻牌走 table 触发,Worker 落表情,
+          挂断走命令接口,复盘「欢呼」随 game-ended 的 Report 来,App 不再用 prop 切表情;
           演示期间表情由演示脚本接管(工单 10)。 */}
       <DeskPet
         ref={petRef}
@@ -440,13 +469,6 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
         view={view}
         chatContext={petChatContext}
         demoExpression={demoExpression}
-        expression={
-          view === "postgame"
-            ? "cheer"
-            : raisePending && view === "table" && conversation?.status === "ongoing"
-              ? "think"
-              : "wave"
-        }
       />
     </div>
   );

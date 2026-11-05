@@ -1,5 +1,5 @@
 import type { AgentWorker, WorkerContext, WorkerRunOptions } from "../core";
-import type { AgentReport, AgentTicket, AgentTrigger, PostgameBasis } from "../types";
+import type { AgentReport, AgentTicket, AgentTrigger, PetEmotion, PostgameBasis } from "../types";
 
 /**
  * demo Worker:确定性脚本,不调模型(无 key 演示路径;真实模型见 workers.ts)。
@@ -8,7 +8,31 @@ import type { AgentReport, AgentTicket, AgentTrigger, PostgameBasis } from "../t
  * 把最近(或指定)的等待工单调回 ready/dropped——决议本身也是一张小工单。
  * 工单 06 起:对局结束事件(game-ended)由复盘脚本起草一句话。
  * 工单 07 起:拖文件到桌宠(dropped)走素材草稿脚本,停在 waiting 草稿待审。
+ * 工单 16 起:牌局事件(经理出卡/隐藏牌被问到/玩家揭示)落成带表情的
+ * dropped Report——对局中不说话,只用表情(spec 故事 3),前端据此驱动微反应。
  */
+
+/** 牌局事件(工单 16):是否桌上的反应类触发。 */
+export function isTableReaction(kind: AgentTrigger["kind"] | undefined): kind is "card-played" | "hidden-raised" | "hidden-revealed" {
+  return kind === "card-played" || kind === "hidden-raised" || kind === "hidden-revealed";
+}
+
+/** 牌局事件 → 表情(工单 16):出招看局、被问到边上鼓腮、玩家翻牌欢呼。 */
+export function tableReactionEmotion(kind: "card-played" | "hidden-raised" | "hidden-revealed"): PetEmotion {
+  if (kind === "card-played") return "think";
+  if (kind === "hidden-raised") return "pout";
+  return "cheer";
+}
+
+/** 反应 Report:一律 dropped(沉默,不出气泡),表情走结构化字段。 */
+function runTableReaction(ticket: AgentTicket, kind: "card-played" | "hidden-raised" | "hidden-revealed"): AgentReport {
+  return {
+    ticketId: ticket.id,
+    status: "dropped",
+    text: "看在眼里,不说话。",
+    emotion: tableReactionEmotion(kind),
+  };
+}
 
 /**
  * 即时命令的确定性回复:键与前端 DeskPet 快捷环的按钮文案一致(工单 03),
@@ -40,6 +64,7 @@ export class DemoWorker implements AgentWorker {
   async run(ticket: AgentTicket, trigger: AgentTrigger, options: WorkerRunOptions): Promise<AgentReport> {
     const { onReport, context = { tickets: async () => [] } } = options;
     if (trigger?.kind === "game-ended") return this.runPostgameReview(ticket, trigger);
+    if (isTableReaction(trigger?.kind)) return runTableReaction(ticket, trigger.kind);
     if (trigger?.kind === "dropped") return this.runMaterialDraft(ticket, onReport);
     if (trigger?.kind === "annotate") return this.runAnnotate(ticket, trigger, onReport, context);
     if (trigger?.kind === "model-error") return this.runModelError(ticket, onReport);
@@ -164,7 +189,8 @@ export class DemoWorker implements AgentWorker {
     if (!draft) {
       return { ticketId: ticket.id, status: "dropped", text: "这局没有单独值得学的招，先不多说。" };
     }
-    return { ticketId: ticket.id, status: "ready", text: draft.text, basis: draft.basis };
+    // 工单 16:结算的「欢呼」表情由 Report 携带(不再靠外部 prop 切换)。
+    return { ticketId: ticket.id, status: "ready", text: draft.text, basis: draft.basis, emotion: "cheer" };
   }
 }
 
