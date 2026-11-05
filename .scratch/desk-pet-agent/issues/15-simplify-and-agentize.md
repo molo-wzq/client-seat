@@ -1,6 +1,6 @@
 # 15 · 桌宠交互精简与 Agent 化（含前端审查修复与 DeskPet 拆分）
 
-Status: ready-for-agent
+Status: done
 Blocked by: 14
 
 ## 背景
@@ -41,3 +41,7 @@ B1、B2，S1–S10 全部修复。建议项修 R1（存储节流）、R3、R4、
 - 7 幕演示完整可用（测试覆盖）。
 - 中文输入法组字时按 Enter 不发送（测试覆盖）。
 - 通话中消息不进经理侧（测试覆盖）。
+
+## Comments
+
+- 2026-11-05 阶段 3 完成（cc55790→008be54 共 6 个小提交），Status 置 done。实现：Agent 轨迹行（buildTraceSteps 归并 Worker/评估，回复上方可折叠「做了什么」+「看工单」定位工作日志高亮）；/ 命令补全（上下选择、Enter 确认、Esc 只关补全，手输整句命令同样执行）；Ctrl+K 收口（只认 Ctrl 不抢 ⌘K、勿扰时忽略）；拖入文件作为「📎 文件名」附件消息进对话流；删 4 个固定芯片、空对话给 2 个开场建议；演示 7 幕焦点改为对话流待拍板卡与工作日志（DemoFocusPanel 改 chat/todo/log/none，App 经 DeskPetHandle 窄接口定位）。审查项 R3/R4/R9/R11 已修（R1/R5/R8/R10 此前已修）；顺手给 openPanel 定位滚动加了 scrollIntoView 可选调用守卫，清掉 jsdom 下 4 个未处理错误。账本视图：SSE 报告先乐观落视图，再拉一次 tickets() 用 mergeTicketViews 原位合并补 Worker 名/触发号（轨迹行数据源）。验收：npx vitest run src/ui 28 文件 214 用例全过、npm run typecheck 通过；demo 7 幕经 PetDemoConsole/DeskPet 测试覆盖。备注：DeskPet.tsx 现 391 行，仍高于 300 行目标，剩余为事件路由与命令接口接线，可在后续工单继续下沉。
