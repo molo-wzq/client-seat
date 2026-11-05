@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { OPENING_SUGGESTIONS } from "./pet-reactions";
+import { resolveSlashCommand, slashCandidates } from "./slash-commands";
 import type { PetChatMessage } from "./chat-history";
 import type { AcceptMode, AgentPolicy, AgentTicketView } from "../shared/agent-contract";
 import type { WorkLogItem } from "./agent-trace";
@@ -14,7 +15,8 @@ export type { PetChatMessage } from "./chat-history";
 
 /**
  * 桌宠唯一面板(工单 15):以对话为主体——顶部 Agent 状态条(两档放权、点开工作日志),
- * 右上「⋯」菜单(切换男女/勿扰/观察档),中间消息流(待拍板卡插进来),底部输入。
+ * 右上「⋯」菜单(切换男女/勿扰/观察档),中间消息流(待拍板卡插进来),底部输入
+ * (输「/」弹命令补全,上下选择 Enter 确认;空对话给 2 个开场建议)。
  * 待拍板卡被「改一改」选中时,输入框上方出现引用条,发出的话就是该工单的批注。
  * 面板只管渲染与输入;消息状态、流式拼接与表情在 useChatSession,互动感在 usePetMood。
  * 通话中照样能聊(工单 15:桌宠站客户一侧,消息不进经理上下文)。
@@ -74,10 +76,16 @@ export function PetChatPanel({
   onToggleLog: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [slashIndex, setSlashIndex] = useState(0);
+  /** Esc 关掉过补全,继续打字(或重进命令态)再弹出。 */
+  const [slashDismissed, setSlashDismissed] = useState(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   /** 引用条对应的草稿文案,展示「正在改哪一版」。 */
   const quotingTicket = tickets.find((ticket) => ticket.ticketId === annotating) ?? null;
+  /** 命令态候选(工单 15):候选过滤在纯模块;选中项钳制在候选数内。 */
+  const slashOptions = slashDismissed ? [] : slashCandidates(draft);
+  const activeSlashIndex = Math.min(slashIndex, Math.max(0, slashOptions.length - 1));
 
   // 打开即聚焦,直接打字(工单 12:单击头像优先进入对话)。
   useEffect(() => {
@@ -90,10 +98,24 @@ export function PetChatPanel({
     if (list) list.scrollTop = list.scrollHeight;
   }, [messages, awaitingReply, tickets]);
 
+  /** 确认一个 / 命令:执行对应动作(发命令+跳转),收起补全。 */
+  function runSlash(action: Parameters<typeof onQuickAction>[0]): void {
+    onQuickAction(action);
+    setDraft("");
+    setSlashDismissed(false);
+    setSlashIndex(0);
+  }
+
   function submit() {
     const text = draft.trim();
     if (!text) return;
-    onSend(text);
+    // 整句恰是某个命令:按命令执行(补全被 Esc 关掉后手输的路也通,工单 15)。
+    const command = resolveSlashCommand(text);
+    if (command) {
+      onQuickAction(command);
+    } else {
+      onSend(text);
+    }
     setDraft("");
   }
 
@@ -104,9 +126,32 @@ export function PetChatPanel({
     onClose();
   }
 
-  /** 输入框的按键:Enter 发送、Shift+Enter 换行;组字期放行(审查 B2)。 */
+  /** 输入框的按键:命令态先服务补全(上下/Enter/Esc),其余 Enter 发送、Shift+Enter 换行;组字期放行(审查 B2)。 */
   function onInputKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    if (slashOptions.length > 0) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault(); // 光标不动,只挪选中项
+        setSlashIndex((activeSlashIndex + 1) % slashOptions.length);
+        return;
+      }
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        setSlashIndex((activeSlashIndex - 1 + slashOptions.length) % slashOptions.length);
+        return;
+      }
+      if (e.key === "Enter") {
+        e.preventDefault(); // Enter 确认候选,不当消息发送
+        runSlash(slashOptions[activeSlashIndex]!.action);
+        return;
+      }
+      if (e.key === "Escape") {
+        e.stopPropagation(); // 只关补全,不冒泡给面板根(面板还开着)
+        setSlashDismissed(true);
+        return;
+      }
+      return; // 其余按键照常输入
+    }
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault(); // Enter 发送,Shift+Enter 留给换行
       submit();
@@ -205,6 +250,21 @@ export function PetChatPanel({
           </button>
         </div>
       )}
+      {slashOptions.length > 0 && (
+        <div className="desk-pet-slash" role="listbox" aria-label="命令补全">
+          {slashOptions.map((item, index) => (
+            <button
+              key={item.command}
+              type="button"
+              role="option"
+              aria-selected={index === activeSlashIndex || undefined}
+              onClick={() => runSlash(item.action)}
+            >
+              {item.command}
+            </button>
+          ))}
+        </div>
+      )}
       <form
         className="desk-pet-chat-input"
         onSubmit={(e) => {
@@ -218,7 +278,10 @@ export function PetChatPanel({
           rows={2}
           placeholder={quotingTicket ? "说一句,这条工单就按它改" : "跟桌宠说点什么…(Enter 发送)"}
           value={draft}
-          onChange={(e) => setDraft(e.target.value)}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setSlashDismissed(false); // 重新打字:补全跟着回来
+          }}
           onKeyDown={onInputKeyDown}
         />
         <div className="desk-pet-chat-input-actions">

@@ -157,13 +157,12 @@
 }
 .desk-pet-chat-close:hover { color: #4d3624; }
 
-/* 快捷芯片(原快捷环收进来):深木底浅字小药丸,对局中不锁。 */
+/* 开场建议(空对话,原固定芯片):深木底浅字小药丸。 */
 .desk-pet-chat-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 4px;
   padding: 6px 0;
-  border-bottom: 1px dashed #d1c6b2; /* 浅卡其分隔 */
 }
 .desk-pet-chip {
   padding: 2px 9px;
@@ -177,6 +176,31 @@
 }
 .desk-pet-chip:hover { background: #5d4430; }
 .desk-pet-chip:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* / 命令补全(工单 15):输入框上方一列卡纸小条,选中项黄铜描边。 */
+.desk-pet-slash {
+  display: grid;
+  gap: 2px;
+  padding: 4px;
+  border: 1px solid #b28c52;
+  border-radius: 8px;
+  background: #ece9e2; /* 卡纸 */
+}
+.desk-pet-slash button {
+  padding: 3px 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: #0f2d1f; /* 深绿 */
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+.desk-pet-slash button[aria-selected="true"] {
+  border-color: #bf8636; /* 黄铜 */
+  background: #e0d5bd;
+}
+.desk-pet-slash button:focus-visible { outline: 2px solid #bf8636; outline-offset: 1px; }
 
 /* 消息记录:玩家靠右深木底,桌宠靠左米白底,流式带光标。 */
 .desk-pet-chat-list {

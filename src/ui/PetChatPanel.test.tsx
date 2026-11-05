@@ -226,3 +226,67 @@ describe("对话面板(工单 12/15)", () => {
     expect(screen.getByRole("log", { name: "对话记录" })).toHaveTextContent(/随时叫我/);
   });
 });
+
+describe("/ 命令补全(工单 15)", () => {
+  it("输入 / 弹出命令候选:前缀过滤、上下键选择、Enter 确认执行动作并清空输入", async () => {
+    const user = userEvent.setup();
+    const props = renderPanel();
+    const input = screen.getByRole("textbox", { name: "对话输入" });
+
+    await user.type(input, "/");
+    let options = within(screen.getByRole("listbox", { name: "命令补全" })).getAllByRole("option");
+    expect(options).toHaveLength(4);
+
+    await user.type(input, "再来");
+    options = within(screen.getByRole("listbox", { name: "命令补全" })).getAllByRole("option");
+    expect(options).toHaveLength(1);
+    expect(options[0]).toHaveTextContent("/再来一局");
+    expect(options[0]).toHaveAttribute("aria-selected", "true");
+
+    // 打全部命令字:上下键轮换,Enter 确认的是选中项(第二项 /复盘 → 上局复盘)。
+    await user.clear(input);
+    await user.type(input, "/");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    fireEvent.keyDown(input, { key: "ArrowUp" });
+    const selected = within(screen.getByRole("listbox", { name: "命令补全" })).getAllByRole("option")[1];
+    expect(selected).toHaveTextContent("/复盘");
+    expect(selected).toHaveAttribute("aria-selected", "true");
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(props.onQuickAction).toHaveBeenCalledWith("上局复盘");
+    expect(input).toHaveValue("");
+  });
+
+  it("点击候选项同样执行;Esc 只关补全不关面板(工单 15)", async () => {
+    const user = userEvent.setup();
+    const props = renderPanel();
+    const input = screen.getByRole("textbox", { name: "对话输入" });
+
+    await user.type(input, "/换");
+    await user.click(screen.getByRole("option", { name: "/换客户" }));
+    expect(props.onQuickAction).toHaveBeenCalledWith("换个客户");
+    expect(input).toHaveValue("");
+
+    await user.type(input, "/");
+    expect(screen.getByRole("listbox", { name: "命令补全" })).toBeInTheDocument();
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("listbox", { name: "命令补全" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "对话面板" })).toBeInTheDocument();
+  });
+
+  it("补全关掉后,手输整句命令回车照样执行;「/ 命令 + 正文」只当普通一句话(工单 15)", async () => {
+    const user = userEvent.setup();
+    const props = renderPanel();
+    const input = screen.getByRole("textbox", { name: "对话输入" });
+
+    await user.type(input, "/再来一局");
+    fireEvent.keyDown(input, { key: "Escape" }); // 关掉补全,只留正文
+    await user.type(input, "{Enter}");
+    expect(props.onQuickAction).toHaveBeenCalledWith("再来一局");
+    expect(props.onSend).not.toHaveBeenCalled();
+
+    await user.type(input, "/投研 顺便看看上周的{Enter}");
+    expect(props.onSend).toHaveBeenCalledWith("/投研 顺便看看上周的");
+    expect(props.onQuickAction).toHaveBeenCalledTimes(1);
+  });
+});
