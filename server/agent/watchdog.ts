@@ -64,8 +64,8 @@ export function createWatchdog(deps: WatchdogDeps): Watchdog {
     for (const [ticketId, view] of latest) {
       const state = watched.get(ticketId);
       if (!state || state.lastSeq < view.seq) {
-        // 新工单或新进展:从现在起重新计时,之前的重试标记一并作废。
-        watched.set(ticketId, { lastSeq: view.seq, sinceMs: current, retriedAtMs: null });
+        // 新进展重新计时，但保留重试次数，避免每次重试报 progress 后无限重启。
+        watched.set(ticketId, { lastSeq: view.seq, sinceMs: current, retriedAtMs: state?.retriedAtMs ?? null });
         continue;
       }
       // waiting=待人决定,ready/dropped/failed/blocked=已收口:都不归 Watchdog 管。

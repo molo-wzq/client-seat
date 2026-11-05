@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import type { AcceptMode } from "../shared/agent-contract";
 import type { AgentClient } from "./agent-client";
 import type { PetExpression } from "./DeskPet";
 import {
@@ -39,6 +40,8 @@ interface DemoIO {
   onFocusPanel?: (panel: DemoFocusPanel) => void;
   /** 对话代发(工单 12):让 App 请桌宠在对话面板替玩家发一句。 */
   onChat?: (text: string) => void;
+  /** 放权切换成功的上报:App 递增信号,开着的待办面板重拉后开关立即同步。 */
+  onPolicyChange?: (mode: AcceptMode) => void;
   setScene: (scene: DemoScene) => void;
   setMoves: (updater: (prev: DemoMove[]) => DemoMove[]) => void;
   setReview: (review: { text: string } | null) => void;
@@ -97,7 +100,10 @@ function runDemoAction(action: DemoAction, io: DemoIO): void {
       break;
     }
     case "policy":
-      void io.agent.setAcceptMode(action.mode).catch(() => undefined);
+      void io.agent
+        .setAcceptMode(action.mode)
+        .then(() => io.onPolicyChange?.(action.mode))
+        .catch(() => undefined);
       break;
     case "focus":
       io.onFocusPanel?.(action.panel);
@@ -118,6 +124,7 @@ export function PetDemoConsole({
   onPetExpression,
   onFocusPanel,
   onChat,
+  onPolicyChange,
   onClose,
 }: {
   agent: AgentClient;
@@ -127,6 +134,8 @@ export function PetDemoConsole({
   onFocusPanel?: (panel: DemoFocusPanel) => void;
   /** 对话代发(工单 12):App 请桌宠在对话面板替玩家发一句。 */
   onChat?: (text: string) => void;
+  /** 演示切过放权(工单 10):上报新模式,App 递增信号让开着的开关立即同步。 */
+  onPolicyChange?: (mode: AcceptMode) => void;
   onClose?: () => void;
 }) {
   const [state, setState] = useState(initialDemoState);
@@ -149,6 +158,7 @@ export function PetDemoConsole({
       onPetExpression,
       onFocusPanel,
       onChat,
+      onPolicyChange,
       setScene,
       setMoves,
       setReview,
@@ -156,7 +166,7 @@ export function PetDemoConsole({
     };
     for (const action of step.actions) runDemoAction(action, io);
     // 动作是数据,解释器只依赖这几个稳定引用;逐字面列全以免漏跑。
-  }, [state.index, step, agent, onPetExpression, onFocusPanel, onChat]);
+  }, [state.index, step, agent, onPetExpression, onFocusPanel, onChat, onPolicyChange]);
 
   // 自动播放:到点进下一步;暂停或演完时计时器随之清掉。
   useEffect(() => {

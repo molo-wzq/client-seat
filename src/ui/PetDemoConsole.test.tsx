@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { EmitOutcome } from "../../server/agent/core";
-import type { AgentTriggerInput, AgentTicket } from "../../server/agent/types";
+import type { EmitOutcome } from "../shared/agent-contract";
+import type { AgentTriggerInput, AgentTicket } from "../shared/agent-contract";
 import { DEMO_GAME_ID, DEMO_STEPS } from "./pet-demo";
 import { PetDemoConsole } from "./PetDemoConsole";
 import type { AgentClient } from "./agent-client";
@@ -16,7 +16,13 @@ const DROPPED_INDEX = DEMO_STEPS.findIndex((step) =>
   step.actions.some((a) => a.kind === "trigger" && a.input.kind === "dropped"),
 );
 const ANNOTATE_INDEX = DEMO_STEPS.findIndex((step) => step.actions.some((a) => a.kind === "annotate-last-drop"));
-const POLICY_INDEX = DEMO_STEPS.findIndex((step) => step.actions.some((a) => a.kind === "policy"));
+/** 第⑦幕先切「观察」做对比,再切回「自动」;开场的 auto 在第①幕第一步(挂载即执行)。 */
+const POLICY_OBSERVE_INDEX = DEMO_STEPS.findIndex((step) =>
+  step.actions.some((a) => a.kind === "policy" && a.mode === "observe"),
+);
+const POLICY_AUTO_INDEX = DEMO_STEPS.findIndex(
+  (step, index) => index > POLICY_OBSERVE_INDEX && step.actions.some((a) => a.kind === "policy" && a.mode === "auto"),
+);
 const MODEL_ERROR_INDEX = DEMO_STEPS.findIndex((step) =>
   step.actions.some((a) => a.kind === "trigger" && a.input.kind === "model-error"),
 );
@@ -191,14 +197,25 @@ describe("演示控制条(工单 10)", () => {
     expect(onFocusPanel).toHaveBeenCalledWith("inbox");
   });
 
-  it("第⑦幕:放权切 auto,模型报错触发发给 agent(受阻进待办由真实链路呈现)", async () => {
+  it("开场即切自动放权;第⑦幕先观察再切回自动,每次切换上报同步信号", async () => {
     const agent = fakeAgent();
-    render(<PetDemoConsole agent={agent} />);
+    const onPolicyChange = vi.fn();
+    render(<PetDemoConsole agent={agent} onPolicyChange={onPolicyChange} />);
 
-    await stepTo(POLICY_INDEX);
+    // 第①幕第一步挂载即执行:放权切「自动」,后面的复盘/起草才真的执行。
     expect(agent.setAcceptMode).toHaveBeenCalledWith("auto");
+    await act(async () => {});
+    expect(onPolicyChange).toHaveBeenCalledWith("auto");
 
-    await stepForward(MODEL_ERROR_INDEX - POLICY_INDEX);
+    // 第⑦幕:先切「观察」(只记录不动手),再切回「自动」。
+    await stepTo(POLICY_OBSERVE_INDEX);
+    expect(agent.setAcceptMode).toHaveBeenCalledWith("observe");
+    await stepForward(POLICY_AUTO_INDEX - POLICY_OBSERVE_INDEX);
+    expect(agent.setAcceptMode).toHaveBeenLastCalledWith("auto");
+    expect(onPolicyChange).toHaveBeenLastCalledWith("auto");
+
+    // 模型报错触发仍走真实链路(受阻进待办由真实链路呈现)。
+    await stepForward(MODEL_ERROR_INDEX - POLICY_AUTO_INDEX);
     expect(agent.sendTrigger).toHaveBeenCalledWith(
       expect.objectContaining({ source: "system", kind: "model-error" }),
     );

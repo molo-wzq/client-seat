@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { PostgameBasis } from "../../server/agent/types";
+import type { PostgameBasis } from "../shared/agent-contract";
 import type { ConversationResult, FeelingStamp } from "../domain/types";
 import { FEELING_STAMP_META } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";

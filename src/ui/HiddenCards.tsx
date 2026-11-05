@@ -103,7 +103,7 @@ export function settleHiddenCards(
     return {
       item: card.item,
       revealed: false,
-      miss: card.everRaised ? ("edge" as const) : ("untouched" as const),
+      miss: card.state === "raised" || card.everRaised ? ("edge" as const) : ("untouched" as const),
     };
   });
 }

@@ -4,7 +4,7 @@
  * 全程只发真实 Trigger 走真实链路(Source→Eval→Ticket→Worker→Report→Channel),
  * 不依赖任何真实模型——汇报时无 key 也能完整跑通。
  */
-import type { AcceptMode, AgentTriggerInput } from "../../server/agent/types";
+import type { AcceptMode, AgentTriggerInput } from "../shared/agent-contract";
 import type { ConversationTurn, StrategyCard } from "../domain/types";
 import type { PetExpression } from "./DeskPet";
 
@@ -124,8 +124,12 @@ function demoGameEndedInput(): AgentTriggerInput {
 /* ---- 7 幕演示脚本(数据) ---- */
 
 export const DEMO_STEPS: readonly DemoStep[] = [
-  // ① 桌宠挥手入场
-  { act: 1, note: "第①幕·入场:桌宠挥挥手,在客户席坐下", holdMs: 1600, actions: [{ kind: "pet", expression: "wave" }, { kind: "scene", scene: "none" }] },
+  // ① 桌宠挥手入场(开场即把放权切到「自动」:后面复盘、起草这些主动活才真的执行)
+  { act: 1, note: "第①幕·入场:你来当客户,桌宠挥挥手,放权先切「自动」", holdMs: 1800, actions: [
+    { kind: "pet", expression: "wave" },
+    { kind: "policy", mode: "auto" },
+    { kind: "scene", scene: "none" },
+  ] },
   { act: 1, note: "打个招呼——点开对话面板,回复逐字流出、表情跟着换", holdMs: 3600, actions: [
     { kind: "focus", panel: "chat" },
     { kind: "chat", text: "小贝，跟观众打个招呼" },
@@ -167,12 +171,15 @@ export const DEMO_STEPS: readonly DemoStep[] = [
     { kind: "focus", panel: "inbox" },
     { kind: "annotate-last-drop", note: "开头一句改得口语一点" },
   ] },
-  // ⑦ 放权模式 + 评估记录 + Watchdog 标受阻
-  { act: 7, note: "第⑦幕·放权:从「观察」切到「自动」", holdMs: 2400, actions: [
-    { kind: "policy", mode: "auto" },
+  // ⑦ 放权模式 + 评估记录 + Watchdog 标受阻(开场一直是 auto,这里先切观察做对比)
+  { act: 7, note: "第⑦幕·放权:先切到「观察」——只记录,不动手", holdMs: 2400, actions: [
+    { kind: "policy", mode: "observe" },
     { kind: "focus", panel: "inbox" },
   ] },
-  { act: 7, note: "评估记录留痕:本来会做什么、为什么;observe 只记录、auto 已执行", holdMs: 2600, actions: [] },
+  { act: 7, note: "评估记录留痕:本来会做什么、为什么;自动时都干了,观察只记着", holdMs: 2600, actions: [] },
+  { act: 7, note: "切回「自动」,该干的接着替你干", holdMs: 2400, actions: [
+    { kind: "policy", mode: "auto" },
+  ] },
   { act: 7, note: "模型报错→重试无果,Watchdog 标受阻进待办,不打扰玩家", holdMs: 3000, actions: [
     { kind: "trigger", input: { source: "system", kind: "model-error", data: { error: "演示:模型超时" } } },
   ] },

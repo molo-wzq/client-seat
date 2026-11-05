@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { createAgentClient } from "./agent-client";
-import type { AgentTriggerInput } from "../../server/agent/types";
+import type { AgentTriggerInput } from "../shared/agent-contract";
 
 /**
  * 前端 agent 客户端(工单 03 测试缝):fetch 与 EventSource 均注入假实现,

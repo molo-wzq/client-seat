@@ -1,8 +1,13 @@
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { EmitOutcome } from "../../server/agent/core";
-import type { AgentEvalRecord, AgentEvent, AgentPolicy, AgentTicketView } from "../../server/agent/types";
+import type {
+  AgentEvalRecord,
+  AgentEvent,
+  AgentPolicy,
+  AgentTicketView,
+  EmitOutcome,
+} from "../shared/agent-contract";
 import { DeskPet, type PetExpression } from "./DeskPet";
 import { IDLE_SLEEP_MS, POKE_LINES } from "./pet-reactions";
 import type { AgentClient } from "./agent-client";
@@ -671,6 +676,25 @@ describe("放权模式与评估记录(工单 08)", () => {
 
     expect(screen.getByRole("region", { name: "评估记录" })).toHaveTextContent("还没有评估记录");
     expect(screen.getByRole("region", { name: "待办面板" })).toHaveTextContent("没有等你拍板的事");
+  });
+
+  it("演示经 policy 动作切过放权后(policySignal 变化),开着的面板开关立即同步", async () => {
+    // 服务端模式先 observe;演示脚本(或别处)切到 auto 后,信号 +1 触发重拉。
+    let mode: AgentPolicy["acceptMode"] = "observe";
+    const agent = fakeAgent({ policy: vi.fn(() => Promise.resolve(emptyPolicy(mode))) });
+    const { rerender } = render(<DeskPet agent={agent} focusPanel="inbox" />);
+
+    await screen.findByRole("group", { name: "放权模式" });
+    expect(screen.getByRole("button", { name: "观察" })).toHaveAttribute("aria-pressed", "true");
+
+    mode = "auto";
+    rerender(<DeskPet agent={agent} focusPanel="inbox" policySignal={1} />);
+
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "自动" })).toHaveAttribute("aria-pressed", "true"),
+    );
+    expect(screen.getByRole("button", { name: "观察" })).toHaveAttribute("aria-pressed", "false");
+    expect(agent.policy).toHaveBeenCalledTimes(2);
   });
 });
 

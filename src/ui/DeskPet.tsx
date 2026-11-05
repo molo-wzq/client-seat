@@ -17,7 +17,7 @@ import type {
   AgentReport,
   AgentTicketView,
   ReportStatus,
-} from "../../server/agent/types";
+} from "../shared/agent-contract";
 import fCheer from "../assets/desk-pet/f-cheer.webp";
 import fPout from "../assets/desk-pet/f-pout.webp";
 import fSleepy from "../assets/desk-pet/f-sleepy.webp";
@@ -180,6 +180,7 @@ export function DeskPet({
   reaction = null,
   demoChatCue = null,
   onDemoChatDone,
+  policySignal = 0,
 }: {
   expression?: PetExpression;
   inCall?: boolean;
@@ -197,6 +198,8 @@ export function DeskPet({
   /** 演示代发一句对话(工单 12):打开面板并发送,如同玩家亲手输入;nonce 保证只发一次。 */
   demoChatCue?: { nonce: number; text: string } | null;
   onDemoChatDone?: () => void;
+  /** 放权被动过的信号(工单 10):演示脚本每切一次放权就 +1,开着的面板据此重拉,开关立即同步。 */
+  policySignal?: number;
 }) {
   const [variant, setVariant] = useState<PetVariant>(
     () => (window.localStorage.getItem(VARIANT_KEY) === "m" ? "m" : "f"),
@@ -452,6 +455,7 @@ export function DeskPet({
 
   // 待办面板打开时拉取放权模式与评估记录(工单 08);演示经 focusPanel 强开时同样要拉
   // (工单 10 第⑦幕直接展示放权开关与评估记录)。失败静默,开关与列表先给空态。
+  // policySignal 变化(演示脚本切过放权)时重拉:面板开着,开关也要立即显示当前模式。
   useEffect(() => {
     if (!inboxOpen && focusPanel !== "inbox") return;
     let alive = true;
@@ -470,7 +474,7 @@ export function DeskPet({
     return () => {
       alive = false;
     };
-  }, [agent, inboxOpen, focusPanel]);
+  }, [agent, inboxOpen, focusPanel, policySignal]);
 
   // 对话历史落本地(工单 12):只存最近 50 条,流式标记不落。
   useEffect(() => {
@@ -726,7 +730,7 @@ export function DeskPet({
   const popovers = (
     <div className="desk-pet-popovers">
       {dropHover && !dnd && <p className="desk-pet-drop-hint">交给我</p>}
-      {bubble !== null && !dnd && (
+      {bubble !== null && !dnd && !inCall && (
         <p className="desk-pet-bubble" role="status" aria-label="桌宠气泡">
           {bubble}
         </p>

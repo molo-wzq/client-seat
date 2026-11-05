@@ -7,7 +7,7 @@ import { createInProcessProductCore } from "./product/in-process-product-api";
 import { SCORING_PATTERN } from "./test/scoring-pattern";
 import { App } from "./App";
 import type { AgentClient } from "./ui/agent-client";
-import type { AgentReport, AgentTriggerInput } from "../server/agent/types";
+import type { AgentReport, AgentTriggerInput } from "./shared/agent-contract";
 
 /**
  * 最高层端到端产品测试(spec.md 测试决策):只断言用户可观察行为,
@@ -212,6 +212,9 @@ describe("桌宠复盘一句话(工单 06)", () => {
     render(<App api={api} agent={agent} />);
 
     await finishQuickCall(user);
+
+    expect(agent.onEvent).toHaveBeenCalledTimes(1);
+    expect(agent.tickets).toHaveBeenCalledTimes(1);
 
     // 自动发送的触发:table 来源、game-ended 类型,带本局各轮经理话术与未翻开隐藏牌数。
     expect(sendTrigger).toHaveBeenCalledTimes(1);

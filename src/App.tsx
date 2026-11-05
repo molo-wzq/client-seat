@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, ConversationResult, ConversationStartOptions, Material, Persona } from "./domain/types";
 import type { ProductCore } from "./domain/product-core";
 import type { RoleCard } from "./domain/role-card";
-import type { PostgameBasis } from "../server/agent/types";
+import type { PostgameBasis } from "./shared/agent-contract";
 import { BusyHint } from "./ui/BusyHint";
 import { CardsView, HistoryView, MaterialsView, ResearchReportView, RolesView } from "./ui/CatalogViews";
 import { DeskPet, type PetExpression, type PetReactionEvent, type QuickRingAction } from "./ui/DeskPet";
@@ -49,6 +49,8 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
   const demoChatNonce = useRef(0);
   // 事件反应(工单 12):翻牌/举牌/挂断换表情;每次都传新对象,桌宠按事件反应。
   const [petReaction, setPetReaction] = useState<PetReactionEvent | null>(null);
+  // 演示切过放权的信号(工单 10):每切一次 +1,DeskPet 开着的待办面板据此重拉,开关立即同步。
+  const [petPolicySignal, setPetPolicySignal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [catalogBusy, setCatalogBusy] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -409,6 +411,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
             demoChatNonce.current += 1;
             setDemoChat({ nonce: demoChatNonce.current, text });
           }}
+          onPolicyChange={() => setPetPolicySignal((current) => current + 1)}
           onClose={closeDemo}
         />
       )}
@@ -418,6 +421,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
           举牌/翻牌/挂断经 reaction 换表情,进结算后变「欢呼」陪着看复盘(工单 06→12);
           演示期间表情由演示脚本接管(工单 10)。 */}
       <DeskPet
+        agent={agent}
         inCall={view === "table" && conversation?.status === "ongoing"}
         onQuickAction={handleQuickAction}
         onOpenDemo={() => setDemoOpen(true)}
@@ -426,6 +430,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
         reaction={petReaction}
         demoChatCue={demoChat}
         onDemoChatDone={() => setDemoChat(null)}
+        policySignal={petPolicySignal}
         expression={
           demoExpression
             ?? (view === "postgame"
