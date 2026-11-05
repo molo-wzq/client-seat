@@ -2,16 +2,27 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, ConversationResult, ConversationStartOptions, Material, Persona } from "./domain/types";
 import type { ProductCore } from "./domain/product-core";
 import type { RoleCard } from "./domain/role-card";
+import type { PostgameBasis } from "./shared/agent-contract";
 import { BusyHint } from "./ui/BusyHint";
 import { CardsView, HistoryView, MaterialsView, ResearchReportView, RolesView } from "./ui/CatalogViews";
+import { DeskPet, type PetExpression, type QuickRingAction } from "./ui/DeskPet";
+import { PetDemoConsole } from "./ui/PetDemoConsole";
+import { settleHiddenCards, type HiddenCardChoice } from "./ui/HiddenCards";
 import { LeftRail, type AppView } from "./ui/LeftRail";
 import { ResultStep } from "./ui/ResultStep";
 import { SetupAct } from "./ui/SetupAct";
 import { TableAct } from "./ui/TableAct";
 import { WireframePrototype } from "./ui/wireframe-prototype";
+import { createAgentClient, type AgentClient } from "./ui/agent-client";
 import { playSfx } from "./ui/game-feel";
 
-export function App({ api }: { api: ProductCore }) {
+/** 缺省桌宠 agent 客户端(与 DeskPet 的实例同理,无状态,可各持一个)。 */
+const defaultPetAgent = createAgentClient();
+
+/** 桌宠复盘一句话的视图(工单 06):一句话 + 展开用的依据。 */
+type PetReviewView = { text: string; basis: PostgameBasis };
+
+export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?: AgentClient }) {
   const [view, setView] = useState<AppView>("setup");
   const [personas, setPersonas] = useState<Persona[]>([]);
   const [materials, setMaterials] = useState<Material[]>([]);
@@ -22,6 +33,19 @@ export function App({ api }: { api: ProductCore }) {
   const [quickBusy, setQuickBusy] = useState(false);
   const [connectBusy, setConnectBusy] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(false);
+  // 隐藏牌(工单 04):玩家「翻/先藏着」的选择只存客户端,按局归档;结算时用于揭晓。
+  const [hiddenChoicesByCall, setHiddenChoicesByCall] = useState<Record<string, Record<string, HiddenCardChoice>>>({});
+  const [raisePending, setRaisePending] = useState(false);
+  // 桌宠复盘一句话(工单 06):对局结束发 game-ended 触发后,ready Report 送达即显示;
+  // ref 缓存避免同一局来回进出结算时重复触发。
+  const [petReview, setPetReview] = useState<PetReviewView | null>(null);
+  const petReviewRef = useRef<PetReviewView | null>(null);
+  // 一键演示(工单 10):控制条开关、演示期间的桌宠表情接管与面板焦点。
+  const [demoOpen, setDemoOpen] = useState(false);
+  const [demoExpression, setDemoExpression] = useState<PetExpression | null>(null);
+  const [petFocus, setPetFocus] = useState<"tickets" | "inbox" | null>(null);
+  // 演示切过放权的信号(工单 10):每切一次 +1,DeskPet 开着的待办面板据此重拉,开关立即同步。
+  const [petPolicySignal, setPetPolicySignal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [catalogBusy, setCatalogBusy] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -61,6 +85,11 @@ export function App({ api }: { api: ProductCore }) {
   useEffect(() => {
     void initialLoad();
   }, [api]);
+
+  // 一键演示入口(工单 10):URL 带 ?demo=pet 直接开演;命令条输入「演示」同效。
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("demo") === "pet") setDemoOpen(true);
+  }, []);
 
   const publishedCards = useMemo(
     () => materials.flatMap((material) => material.cards.filter((card) => card.status === "published")),
@@ -144,6 +173,81 @@ export function App({ api }: { api: ProductCore }) {
     setResult(null);
   }
 
+  /**
+   * 快捷环跳转(工单 10,spec 故事 8):回话由 Agent 照回,这里只管真的跳——
+   * 换个客户→布置/名册,再来一局→重开本局(同客重试),上局复盘→结算/记录,
+   * 本周投研→布置幕的情报档案夹(投研弹药库)并滚到它跟前。
+   */
+  function handleQuickAction(action: QuickRingAction) {
+    if (action === "换个客户") {
+      setView("setup");
+      return;
+    }
+    if (action === "再来一局") {
+      if (seatedPersona) {
+        void connect(seatedPersona.id, result ? { replayOfId: result.conversationId } : undefined);
+      } else {
+        void quickStart();
+      }
+      return;
+    }
+    if (action === "上局复盘") {
+      if (result) setView("postgame");
+      else if (conversation?.status === "ended") void openHistory(conversation);
+      else setView("history");
+      return;
+    }
+    setView("setup");
+    window.requestAnimationFrame(() => {
+      document.querySelector(".setup-research-dock")?.scrollIntoView({ block: "center" });
+    });
+  }
+
+  /** 关演示:表情与面板焦点一并还给正常交互。 */
+  function closeDemo() {
+    setDemoOpen(false);
+    setDemoExpression(null);
+    setPetFocus(null);
+  }
+
+  /**
+   * 对局结束进结算(工单 06):自动发 table/game-ended 触发,桌宠后台起草
+   * 「经理哪招值得学」;ready 才显示,dropped 就保持沉默。同一局只发一次。
+   */
+  function requestPetReview(next: ConversationResult) {
+    const cached = petReviewRef.current;
+    if (cached && cached.basis.gameId === next.conversationId) {
+      setPetReview(cached);
+      return;
+    }
+    setPetReview(null);
+    const cards = next.resources?.cards ?? [];
+    const hidden = next.resources?.persona?.hidden ?? [];
+    const rounds = next.turns
+      .filter((turn) => turn.speaker === "manager")
+      .map((turn) => ({ managerText: turn.text, ...(turn.usedCardId ? { cardId: turn.usedCardId } : {}) }));
+    const hiddenUnrevealedCount = hidden.length
+      ? settleHiddenCards(hidden, next.turns, cards, hiddenChoicesByCall[next.conversationId] ?? {}).filter(
+          (card) => !card.revealed,
+        ).length
+      : 0;
+    void agent
+      .sendTrigger({
+        source: "table",
+        kind: "game-ended",
+        data: { gameId: next.conversationId, rounds, hiddenUnrevealedCount },
+      })
+      .then((outcome) => {
+        const report = outcome.report;
+        if (report && report.status === "ready" && report.basis && report.basis.gameId === next.conversationId) {
+          const review = { text: report.text, basis: report.basis };
+          petReviewRef.current = review;
+          setPetReview(review);
+        }
+      })
+      .catch(() => undefined);
+  }
+
   async function openHistory(item: Conversation) {
     if (entryRequestRef.current) return;
     entryRequestRef.current = true;
@@ -159,6 +263,7 @@ export function App({ api }: { api: ProductCore }) {
       setConversation(fresh);
       setResult(nextResult);
       setView("postgame");
+      requestPetReview(nextResult);
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -235,6 +340,14 @@ export function App({ api }: { api: ProductCore }) {
                 conversation={conversation}
                 persona={seatedPersona}
                 publishedCards={publishedCards}
+                hiddenChoices={hiddenChoicesByCall[conversation.id] ?? {}}
+                onHiddenChoice={(item, choice) =>
+                  setHiddenChoicesByCall((current) => ({
+                    ...current,
+                    [conversation.id]: { ...(current[conversation.id] ?? {}), [item]: choice },
+                  }))
+                }
+                onRaisePendingChange={setRaisePending}
                 onConversationChange={(next) => {
                   const accept = (current: Conversation) => next.revision === undefined || current.revision === undefined || next.revision >= current.revision;
                   setConversation((current) => current?.id === next.id && accept(current) ? next : current);
@@ -244,6 +357,7 @@ export function App({ api }: { api: ProductCore }) {
                   setResult(finished);
                   setConversation((current) => (current ? { ...current, status: "ended" } : current));
                   setView((current) => current === "table" ? "postgame" : current);
+                  requestPetReview(finished);
                   void refreshCatalog().catch(() => undefined);
                 }}
               />
@@ -257,6 +371,8 @@ export function App({ api }: { api: ProductCore }) {
               onReplay={seatedPersona ? () => void connect(seatedPersona.id, { replayOfId: result.conversationId }) : undefined}
               replayBusy={entryBusy}
               onBranch={(turnNumber, text) => branch(turnNumber, text)}
+              hiddenChoices={hiddenChoicesByCall[result.conversationId] ?? {}}
+              petReview={petReview}
             />}
             {view === "materials" && (
               <MaterialsView api={api} materials={materials} onPublished={() => void refreshCatalog()} />
@@ -272,6 +388,37 @@ export function App({ api }: { api: ProductCore }) {
           </>
         )}
       </main>
+      {/* 一键演示控制条(工单 10):右上角,按脚本驱动 7 幕;桌宠表情与面板焦点由演示接管。 */}
+      {demoOpen && (
+        <PetDemoConsole
+          agent={agent}
+          onPetExpression={setDemoExpression}
+          onFocusPanel={(panel) => setPetFocus(panel === "none" ? null : panel)}
+          onPolicyChange={() => setPetPolicySignal((current) => current + 1)}
+          onClose={closeDemo}
+        />
+      )}
+      {/* 桌宠固定在牌桌右下角,不参与布局,也不遮挡主内容。
+          对局进行中(主幕 + ongoing)命令条置灰(工单 03);
+          有隐藏牌举着待决定时表情变「拿笔想」(工单 04);
+          进结算后变「欢呼」,陪着看经理的复盘一句话(工单 06);
+          演示期间表情由演示脚本接管(工单 10)。 */}
+      <DeskPet
+        agent={agent}
+        inCall={view === "table" && conversation?.status === "ongoing"}
+        onQuickAction={handleQuickAction}
+        onOpenDemo={() => setDemoOpen(true)}
+        focusPanel={petFocus}
+        policySignal={petPolicySignal}
+        expression={
+          demoExpression
+            ?? (view === "postgame"
+              ? "cheer"
+              : raisePending && view === "table" && conversation?.status === "ongoing"
+                ? "think"
+                : "wave")
+        }
+      />
     </div>
   );
 }

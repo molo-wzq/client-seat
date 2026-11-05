@@ -1,0 +1,385 @@
+/* 桌宠:圆形卡纸底 + 黄铜描边,固定在牌桌右下角。 */
+.desk-pet {
+  position: fixed;
+  right: 18px;
+  bottom: 18px;
+  z-index: 60;
+}
+
+.desk-pet-avatar {
+  position: relative; /* 角标锚在头像右上角 */
+  display: grid;
+  place-items: center;
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  border: 2px solid #b28c52; /* 黄铜 */
+  background: radial-gradient(circle at 50% 30%, #f4ecdc, #ebe0ce 70%); /* 卡纸 */
+  box-shadow: 0 0 0 3px #4d362440, 0 5px 10px #0006; /* 深木衬圈 + 落影 */
+  cursor: grab;
+  touch-action: none; /* 指针拖动优先,不触发页面滚动 */
+}
+.desk-pet[data-dragging] .desk-pet-avatar { cursor: grabbing; }
+.desk-pet[data-dragging] { z-index: 70; }
+
+.desk-pet-avatar img {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  object-fit: cover;
+  user-select: none;
+}
+
+/* 待机小动作:轻微呼吸。勿扰或拖动中不打扰。 */
+.desk-pet:not(.desk-pet-collapsed):not([data-dragging]) .desk-pet-avatar {
+  animation: desk-pet-breathe 3.6s ease-in-out infinite;
+}
+@keyframes desk-pet-breathe {
+  50% { transform: translateY(-2px) scale(1.03); }
+}
+.desk-pet[data-reduced-motion] .desk-pet-avatar { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .desk-pet .desk-pet-avatar { animation: none; }
+}
+
+.desk-pet-actions { display: flex; gap: 4px; margin-top: 5px; }
+.desk-pet-action {
+  padding: 2px 7px;
+  border: 1px solid #b28c52;
+  border-radius: 9px;
+  color: #e6d7ba;
+  background: #4d3624e0; /* 深木底 */
+  font-size: 10px;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.desk-pet-action:hover { background: #5d4430; }
+.desk-pet-action:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 勿扰:收成一颗小圆钮,只保留头像剪影。 */
+.desk-pet-restore {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid #b28c52;
+  background: radial-gradient(circle at 50% 30%, #f4ecdc, #ebe0ce 70%);
+  box-shadow: 0 0 0 3px #4d362440, 0 3px 7px #0006;
+  cursor: pointer;
+}
+.desk-pet-restore img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.desk-pet-restore:focus-visible { outline: 2px solid #bf8636; outline-offset: 3px; }
+
+/* 头顶悬浮栈(工单 03):气泡在上、快捷环居中、命令条贴身,右对齐不遮主内容。 */
+.desk-pet-popovers {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  max-width: 280px;
+}
+
+/* 气泡:卡纸便签 + 黄铜边,一句话不超过 40 字由数据保证。 */
+.desk-pet-bubble {
+  margin: 0;
+  padding: 7px 12px;
+  border: 1px solid #b28c52;
+  border-radius: 12px 12px 3px 12px;
+  background: radial-gradient(circle at 50% 0%, #f4ecdc, #ebe0ce 80%);
+  color: #4d3624; /* 深木字 */
+  font-size: 12px;
+  line-height: 1.6;
+  box-shadow: 0 3px 8px #0005;
+}
+
+/* 快捷环:竖排 4 项,深木底浅字,与桌宠动作钮同一语言。 */
+.desk-pet-ring { display: flex; flex-direction: column; gap: 4px; }
+.desk-pet-ring-item {
+  padding: 4px 12px;
+  border: 1px solid #b28c52;
+  border-radius: 10px;
+  color: #e6d7ba;
+  background: #4d3624e0;
+  font-size: 12px;
+  line-height: 1.6;
+  cursor: pointer;
+  text-align: right;
+}
+.desk-pet-ring-item:hover { background: #5d4430; }
+.desk-pet-ring-item:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 命令条:卡纸底输入 + 占位的按住说话,对局中整体置灰。 */
+.desk-pet-commandbar { display: flex; gap: 4px; align-items: center; }
+.desk-pet-command-input {
+  width: 210px;
+  padding: 5px 10px;
+  border: 1px solid #b28c52;
+  border-radius: 10px;
+  background: #f4ecdc;
+  color: #4d3624;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.desk-pet-command-input::placeholder { color: #4d362480; }
+.desk-pet-command-input:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+.desk-pet-commandbar[data-incall] .desk-pet-command-input {
+  background: #d8cdb9; /* 灰卡纸:对局中置灰禁用 */
+  color: #8a7a5f;
+  cursor: not-allowed;
+}
+.desk-pet-hold-speak {
+  padding: 5px 9px;
+  border: 1px solid #b28c52;
+  border-radius: 10px;
+  color: #e6d7ba;
+  background: #4d3624e0;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.desk-pet-hold-speak:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ---- 工单 05:角标、待办面板、工单列表 ---- */
+
+/* 头顶角标:待人决定的数量,砖红印章钉在头像右上角。 */
+.desk-pet-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 2px solid #f4ecdc; /* 卡纸镶边,压在深木衬圈上也看得清 */
+  border-radius: 999px;
+  background: #cc092b; /* 砖红(印章/注意) */
+  color: #ede0d9;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  box-shadow: 0 2px 5px #0006;
+}
+.desk-pet-badge:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 待办面板与工单列表共用:卡纸底 + 黄铜边的便签面板。 */
+.desk-pet-inbox,
+.desk-pet-tickets {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 248px;
+  max-height: 220px;
+  overflow-y: auto;
+  padding: 9px 11px;
+  border: 1px solid #b28c52;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 0%, #f4ecdc, #ebe0ce 80%);
+  box-shadow: 0 3px 8px #0005;
+}
+
+/* 待办条目:一句待人决定 + 同意/驳回。 */
+.desk-pet-inbox-item { margin: 0; }
+.desk-pet-inbox-text { margin: 0 0 5px; color: #4d3624; font-size: 12px; line-height: 1.6; }
+.desk-pet-inbox-empty { margin: 0; color: #7a664f; font-size: 12px; line-height: 1.6; }
+.desk-pet-inbox-actions { display: flex; gap: 6px; }
+.desk-pet-inbox-actions button {
+  padding: 3px 12px;
+  border: 1px solid #b28c52;
+  border-radius: 9px;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+/* 同意=主要(深绿实底),驳回=次级(深木底浅字),与全站按钮语言一致。 */
+.desk-pet-inbox-actions button:first-child { background: #0f2d1f; color: #ede0d9; }
+.desk-pet-inbox-actions button:first-child:hover { background: #1a4230; }
+.desk-pet-inbox-actions button + button { background: #4d3624e0; color: #e6d7ba; }
+.desk-pet-inbox-actions button + button:hover { background: #5d4430; }
+.desk-pet-inbox-actions button:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 放权模式三段开关(工单 08):当前档深绿实底,未选档透明底细边。 */
+.desk-pet-policy { display: flex; align-items: center; gap: 8px; }
+.desk-pet-policy-label { color: #4d3624; font-size: 12px; }
+.desk-pet-policy-switch { display: flex; gap: 4px; }
+.desk-pet-policy-switch button {
+  padding: 2px 10px;
+  border: 1px solid #b28c52;
+  border-radius: 9px;
+  background: transparent;
+  color: #4d3624;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.desk-pet-policy-switch button[aria-pressed="true"] { background: #0f2d1f; border-color: #0f2d1f; color: #ede0d9; }
+.desk-pet-policy-switch button:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 评估记录(工单 08):一行元信息(时间·规则·处置)+ 一句「本来会做什么——为什么」。 */
+.desk-pet-evals {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed #b28c52;
+}
+.desk-pet-evals-title { margin: 0; color: #7a664f; font-size: 11px; }
+.desk-pet-eval { margin: 0; color: #4d3624; font-size: 12px; line-height: 1.6; }
+.desk-pet-eval-meta { color: #7a664f; font-size: 11px; }
+
+/* 工单列表条目:状态徽标 + 一句最新汇报。 */
+.desk-pet-ticket {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  color: #4d3624;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.desk-pet-status {
+  flex: none;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 10px;
+  line-height: 1.7;
+  font-weight: 700;
+}
+/* 状态取色沿用 asset-library:暖黄=进行/受阻,砖红=等待,深绿=就绪,空心红=失败,中灰=放弃。 */
+.desk-pet-status[data-status="progress"] { background: #f4d06f; color: #4d3624; }
+.desk-pet-status[data-status="blocked"] { background: #b28c52; color: #f4ecdc; }
+.desk-pet-status[data-status="waiting"] { background: #cc092b; color: #fff; }
+.desk-pet-status[data-status="ready"] { background: #0f2d1f; color: #ede0d9; }
+.desk-pet-status[data-status="failed"] { border: 1px solid #cc092b; color: #cc092b; }
+.desk-pet-status[data-status="dropped"] { border: 1px solid #6b6b8b; color: #6b6b8b; }
+
+/* ---- 工单 07:拖给它(交给我)与待审批注 ---- */
+
+/* 文件拖到桌宠上:头像外圈换成暖黄接力圈,表示这里能收。 */
+.desk-pet[data-drop-hover] .desk-pet-avatar {
+  border-color: #f4d06f; /* 暖黄(提示) */
+  box-shadow: 0 0 0 4px #f4d06f99, 0 5px 10px #0006;
+}
+/* 「交给我」提示:暖黄小签,压在气泡位上方,松手即逝。 */
+.desk-pet-drop-hint {
+  margin: 0;
+  padding: 4px 12px;
+  border: 1px solid #b28c52;
+  border-radius: 999px;
+  background: #f4d06f;
+  color: #4d3624;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.6;
+  box-shadow: 0 3px 8px #0005;
+}
+
+/* 待审批注:卡纸底输入 + 深木底发送钮,与命令条同一语言。 */
+.desk-pet-note { display: flex; gap: 4px; margin-top: 6px; }
+.desk-pet-note-input {
+  flex: 1;
+  min-width: 0;
+  padding: 4px 8px;
+  border: 1px solid #b28c52;
+  border-radius: 9px;
+  background: #f4ecdc;
+  color: #4d3624;
+  font-size: 11px;
+  line-height: 1.6;
+}
+.desk-pet-note-input::placeholder { color: #4d362480; }
+.desk-pet-note-input:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+.desk-pet-note button {
+  padding: 3px 10px;
+  border: 1px solid #b28c52;
+  border-radius: 9px;
+  background: #4d3624e0;
+  color: #e6d7ba;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.desk-pet-note button:hover { background: #5d4430; }
+.desk-pet-note button:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* ---- 工单 10:一键演示控制条与舞台 ---- */
+
+/* 右上角演示控制条:卡纸底 + 深绿主按钮,不与右下角桌宠打架。 */
+.pet-demo {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  z-index: 60;
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 10px 12px;
+  border: 1px solid #b28c52; /* 牛皮纸边(取样 #B28C52 系) */
+  border-radius: 14px;
+  background: #f4ecdc; /* 米白卡纸亮部 */
+  box-shadow: 0 10px 24px #0007;
+  color: #4d3624; /* 深木纹:正文 */
+  font-size: 12px;
+  line-height: 1.6;
+}
+.pet-demo-bar { display: flex; align-items: center; gap: 6px; }
+.pet-demo-bar button {
+  padding: 4px 12px;
+  border: 1px solid #b28c52;
+  border-radius: 999px;
+  background: #0f2d1f; /* 深绿:主按钮 */
+  color: #ede0d9;
+  font-weight: 700;
+  cursor: pointer;
+}
+.pet-demo-bar button:hover { background: #1a402c; }
+.pet-demo-bar button:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+.pet-demo-bar button:disabled { background: #6b6b8b; border-color: #6b6b8b; cursor: default; }
+.pet-demo-bar button[aria-label="关闭演示"] {
+  padding: 4px 9px;
+  background: transparent;
+  color: #6b6b8b; /* 中灰:次级 */
+}
+/* 步数计数右对齐,等宽数字不跳动。 */
+.pet-demo-counter { margin: 0 0 0 auto; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pet-demo-note { margin: 6px 0 0; }
+
+/* 舞台:控制条下方,虚线分隔,只演当前一幕。 */
+.pet-demo-stage { margin-top: 8px; padding-top: 8px; border-top: 1px dashed #b28c52; }
+.pet-demo-hint { margin: 0; color: #6b6b8b; }
+
+/* 第②幕台账:经理出招一行,桌宠反应是暖黄小签。 */
+.pet-demo-moves { list-style: none; display: grid; gap: 6px; margin: 0; padding: 0; }
+.pet-demo-move {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 6px 8px;
+  border: 1px solid #d1c6b2; /* 浅卡其分隔 */
+  border-radius: 10px;
+  background: #ece9e2; /* 客户气泡米白 */
+}
+.pet-demo-reaction {
+  align-self: flex-end;
+  padding: 1px 8px;
+  border-radius: 999px;
+  background: #f4d06f; /* 暖黄:提示 */
+  color: #4d3624;
+  font-weight: 700;
+  font-size: 11px;
+}
+
+/* 第④幕结算:已翻深绿底、未翻卡纸底,复盘一句话砖红引线。 */
+.pet-demo-settle ul { list-style: none; display: grid; gap: 4px; margin: 0; padding: 0; }
+.pet-demo-settle-card { padding: 4px 8px; border-radius: 8px; background: #ece9e2; }
+.pet-demo-settle-card[data-revealed] { background: #0f2d1f; color: #ede0d9; }
+.pet-demo-review {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-left: 3px solid #cc092b; /* 砖红:强调 */
+  background: #ece9e2;
+  font-weight: 700;
+}

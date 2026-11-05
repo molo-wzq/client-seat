@@ -8,6 +8,8 @@ import type { CopywritingPort, DialoguePort } from "../src/domain/ports";
 import { createProductCore } from "../src/domain/product-core";
 import { purgeExpiredConversations } from "../src/domain/conversation-retention";
 import { createRequestListener } from "./app-server";
+import { createAgentCore, DemoWorker } from "./agent/core";
+import { createWatchdog } from "./agent/watchdog";
 import { loadEnvFile, readConversationRetention } from "./env";
 import { FileStorage } from "./file-store";
 import { readLlmConfig, readLlmFallbackConfig } from "./model-config";
@@ -69,13 +71,26 @@ const core = createProductCore({
   retention,
 });
 
+// 桌宠 Agent(ADR 0007):账本与产品数据同库;demo Worker 为确定性脚本,不调模型。
+const agent = createAgentCore({ storage, worker: new DemoWorker() });
+
+// Watchdog(工单 09):工单超时没进展先重试一次,再卡住就标受阻进待办,不发桌宠气泡。
+// 阈值默认 10 分钟;演示可用 WATCHDOG_THRESHOLD_MS 调短,配置不合法回落默认。
+const watchdogThresholdMs = Number(process.env.WATCHDOG_THRESHOLD_MS);
+createWatchdog({
+  agent,
+  thresholdMs: Number.isFinite(watchdogThresholdMs) && watchdogThresholdMs > 0 ? watchdogThresholdMs : undefined,
+}).start();
+
 // 启动即按保留策略清一次:不开新对话也能回收旧数据。
 const purgedIds = await purgeExpiredConversations(storage, new Date(), retention);
 if (purgedIds.length > 0) {
   console.log(`[phone-coach] 已按存储上限清理 ${purgedIds.length} 通过期对话(上限:${retention.maxCount ?? "不限"} 通 / ${retention.maxAgeMs !== null ? `${retention.maxAgeMs / 86400000} 天` : "不限"})`);
 }
 
-const server = http.createServer(createRequestListener({ core, staticRoot: path.join(ROOT, "dist") }));
+const server = http.createServer(
+  createRequestListener({ core, staticRoot: path.join(ROOT, "dist"), agent }),
+);
 server.listen(PORT, HOST, () => {
   console.log(`[phone-coach] API 服务已启动:http://${HOST}:${PORT}(数据文件:${DATA_FILE})`);
 });
