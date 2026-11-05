@@ -688,6 +688,89 @@ describe("放权、状态条与工作日志(工单 15)", () => {
   });
 });
 
+describe("Agent 轨迹行与工单定位(工单 15)", () => {
+  /**
+   * 带完整账本视图的对话 agent:SSE 报告先落乐观视图(只有状态与文案),
+   * 拉回的账本折叠视图补 Worker 名与触发号,轨迹行据此归并评估记录。
+   */
+  function traceAgent(): { agent: AgentClient; listeners: Array<(event: AgentEvent) => void> } {
+    const listeners: Array<(event: AgentEvent) => void> = [];
+    const agent = fakeAgent({
+      onEvent: (listener) => {
+        listeners.push(listener);
+        return () => undefined;
+      },
+      sendTrigger: vi.fn(() =>
+        Promise.resolve({
+          triggerId: "tr-c",
+          admitted: true,
+          ticket: { id: "t-tr", triggerId: "tr-c", thread: { kind: "commandId" as const, key: "tr-c" } },
+          report: null,
+        } satisfies EmitOutcome),
+      ),
+      tickets: vi.fn((): Promise<AgentTicketView[]> =>
+        Promise.resolve([
+          { ticketId: "t-tr", status: "ready", text: "我在呢，你说。", triggerId: "tr-c", worker: "对话", at: "2026-11-05T10:00:00.000Z" },
+        ]),
+      ),
+      evals: vi.fn((): Promise<AgentEvalRecord[]> =>
+        Promise.resolve([
+          {
+            at: "2026-11-05T10:00:01.000Z",
+            triggerId: "tr-c",
+            ruleId: "R1",
+            wouldDo: "接住话头先回应",
+            why: "客户先开口",
+            outcome: "executed" as const,
+          },
+        ]),
+      ),
+    });
+    return { agent, listeners };
+  }
+
+  /** 发一句对话并等 SSE ready 到达(轨迹行数据随账本视图刷新补齐)。 */
+  async function sendAndSettle(listeners: Array<(event: AgentEvent) => void>) {
+    const user = userEvent.setup();
+    openPanelByHotkey();
+    await user.type(screen.getByRole("textbox", { name: "对话输入" }), "在吗{Enter}");
+    await act(async () => {});
+    act(() => {
+      listeners.forEach((listener) =>
+        listener({ type: "report", report: { ticketId: "t-tr", status: "ready", text: "我在呢，你说。" } }),
+      );
+    });
+  }
+
+  it("回复上方出现「做了什么」轨迹行:Worker 名与评估按同一触发归并,展开见明细", async () => {
+    const user = userEvent.setup();
+    const { agent, listeners } = traceAgent();
+    render(<DeskPet agent={agent} />);
+    await sendAndSettle(listeners);
+
+    const toggle = await screen.findByRole("button", { name: /做了什么/ });
+    expect(toggle).toHaveTextContent("🔍 查了对话");
+    expect(toggle).toHaveTextContent("📋 接住话头先回应");
+    expect(toggle).toHaveTextContent("✅ 办完了");
+
+    await user.click(toggle);
+    expect(screen.getByText(/R1 · 客户先开口 · 已执行/)).toBeInTheDocument();
+  });
+
+  it("回复里的工单可点开:「看工单」展开工作日志并高亮该工单那行", async () => {
+    const { agent, listeners } = traceAgent();
+    render(<DeskPet agent={agent} />);
+    await sendAndSettle(listeners);
+    await screen.findByRole("button", { name: /做了什么/ });
+
+    await userEvent.click(screen.getByRole("button", { name: "看工单" }));
+    const log = await screen.findByRole("log", { name: "工作日志" });
+    const row = within(log).getByRole("article");
+    expect(row).toHaveAttribute("data-highlight", "true");
+    expect(row).toHaveTextContent("对话·我在呢，你说。");
+  });
+});
+
 describe("拖给它:素材入草稿(工单 07)", () => {
   it("文件拖到桌宠上高亮「交给我」,拖走即消失", () => {
     render(<DeskPet agent={fakeAgent()} />);

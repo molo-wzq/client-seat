@@ -35,10 +35,12 @@ function baseProps(overrides: Partial<Parameters<typeof PetChatPanel>[0]> = {}) 
     menuOpen: false,
     logOpen: false,
     workLog: [],
+    traces: [],
     onSend: vi.fn(),
     onClose: vi.fn(),
     onClear: vi.fn(),
     onQuickAction: vi.fn(),
+    onLocateTicket: vi.fn(),
     onApprove: vi.fn(),
     onReject: vi.fn(),
     onRevise: vi.fn(),
@@ -288,5 +290,49 @@ describe("/ 命令补全(工单 15)", () => {
     await user.type(input, "/投研 顺便看看上周的{Enter}");
     expect(props.onSend).toHaveBeenCalledWith("/投研 顺便看看上周的");
     expect(props.onQuickAction).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("Agent 轨迹行与工单定位(工单 15)", () => {
+  const traceSteps = [
+    { icon: "🔍", label: "查了投研" },
+    { icon: "📋", label: "起草工单", detail: "R4 · 周报到期，投研弹药要先备好 · 已执行" },
+    { icon: "⏸", label: "等你拍板" },
+  ];
+
+  it("桌宠回复上方有可折叠「做了什么」:默认收起一行步骤,展开见评估明细", async () => {
+    const user = userEvent.setup();
+    renderPanel({
+      messages: [msg("player", "帮我整理投研"), msg("pet", "草稿拟好了，等你拍板。", { ticketId: "t-r" })],
+      traces: [{ ticketId: "t-r", steps: traceSteps }],
+    });
+    const list = screen.getByRole("log", { name: "对话记录" });
+    const toggle = within(list).getByRole("button", { name: /做了什么/ });
+    expect(toggle).toHaveTextContent("🔍 查了投研");
+    expect(toggle).toHaveTextContent("⏸ 等你拍板");
+    expect(within(list).queryByText(/R4/)).not.toBeInTheDocument();
+
+    await user.click(toggle);
+    expect(within(list).getByText(/R4 · 周报到期/)).toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+
+    await user.click(toggle);
+    expect(within(list).queryByText(/R4/)).not.toBeInTheDocument();
+    expect(toggle).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("回复里的工单可点开:「看工单」把工单号报给上层定位到工作日志", async () => {
+    const props = renderPanel({
+      messages: [msg("pet", "办好了。", { ticketId: "t-1" })],
+      traces: [{ ticketId: "t-1", steps: [{ icon: "✅", label: "办完了" }] }],
+    });
+    await userEvent.click(screen.getByRole("button", { name: "看工单" }));
+    expect(props.onLocateTicket).toHaveBeenCalledWith("t-1");
+  });
+
+  it("没有轨迹数据的回复(工单不在账本视图里)不显示轨迹行", () => {
+    renderPanel({ messages: [msg("pet", "网络不顺…", { ticketId: "t-gone" })] });
+    expect(screen.queryByRole("button", { name: /做了什么/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "看工单" })).not.toBeInTheDocument();
   });
 });

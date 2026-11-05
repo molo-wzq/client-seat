@@ -23,6 +23,17 @@ function upsertTicket(prev: AgentTicketView[], report: AgentReport): AgentTicket
     : [...prev, { ticketId: report.ticketId, status: report.status, text: report.text }];
 }
 
+/**
+ * 拉回的账本折叠视图并进当前视图(工单 15 轨迹行):SSE 报告只有状态与文案,
+ * 账本折叠视图才带 Worker 名/触发号/立项时间。已知工单原位覆盖、新工单追加、
+ * 只在 SSE 里出现过的工单保留(服务器还没来得及入账的极端竞态不丢乐观更新)。
+ */
+export function mergeTicketViews(prev: AgentTicketView[], fetched: AgentTicketView[]): AgentTicketView[] {
+  const byId = new Map(prev.map((ticket) => [ticket.ticketId, ticket]));
+  for (const ticket of fetched) byId.set(ticket.ticketId, ticket);
+  return [...byId.values()];
+}
+
 /** 假客户端缺方法也不崩(App 级测试的 agent 只实现一部分接口)。 */
 export function safeFetch<T>(run: () => Promise<T>, apply: (value: T) => void): void {
   try {
@@ -79,12 +90,13 @@ export function useAgentView(agent: AgentClient) {
     }
   }
 
-  /** SSE report 事件:原位刷新工单视图;待审/受阻顺带晃一下角标并刷新评估。 */
+  /** SSE report 事件:先按报告乐观刷新,再拉一次账本折叠视图补 Worker 名/触发号(轨迹行数据源)。 */
   function upsertReport(report: AgentReport) {
     setTickets((prev) => upsertTicket(prev, report));
     if (report.status === "waiting" || report.status === "blocked") {
       setTodoShake((count) => count + 1);
     }
+    safeFetch(() => agent.tickets(), (next) => setTickets((prev) => mergeTicketViews(prev, next)));
     refreshEvals();
   }
 

@@ -3,7 +3,7 @@ import { OPENING_SUGGESTIONS } from "./pet-reactions";
 import { resolveSlashCommand, slashCandidates } from "./slash-commands";
 import type { PetChatMessage } from "./chat-history";
 import type { AcceptMode, AgentPolicy, AgentTicketView } from "../shared/agent-contract";
-import type { WorkLogItem } from "./agent-trace";
+import type { TraceStep, WorkLogItem } from "./agent-trace";
 import { AgentStatusBar } from "./AgentStatusBar";
 import { WorkLog } from "./WorkLog";
 import { PetMenu } from "./PetMenu";
@@ -32,10 +32,13 @@ export function PetChatPanel({
   menuOpen,
   logOpen,
   workLog,
+  logHighlightTicketId,
+  traces,
   onSend,
   onClose,
   onClear,
   onQuickAction,
+  onLocateTicket,
   onApprove,
   onReject,
   onRevise,
@@ -60,11 +63,17 @@ export function PetChatPanel({
   menuOpen: boolean;
   logOpen: boolean;
   workLog: WorkLogItem[];
+  /** 工作日志要高亮定位的工单号(工单 15:回复里的工单点开后来到这里)。 */
+  logHighlightTicketId?: string;
+  /** 轨迹行数据(工单 15):按工单号给「做了什么」步骤;归并在 agent-trace,面板只渲染。 */
+  traces: ReadonlyArray<{ ticketId: string; steps: TraceStep[] }>;
   onSend: (text: string) => void;
   onClose: () => void;
   onClear: () => void;
-  /** 快捷芯片与回复建议共用出口:发命令 + 跳转。 */
+  /** 回复建议按钮与 / 命令共用出口:发命令 + 跳转。 */
   onQuickAction: (label: string) => void;
+  /** 回复里的工单可点开(工单 15):上层展开工作日志并高亮定位该工单。 */
+  onLocateTicket: (ticketId: string) => void;
   onApprove: (ticketId: string) => void;
   onReject: (ticketId: string) => void;
   onRevise: (ticketId: string) => void;
@@ -86,6 +95,8 @@ export function PetChatPanel({
   /** 命令态候选(工单 15):候选过滤在纯模块;选中项钳制在候选数内。 */
   const slashOptions = slashDismissed ? [] : slashCandidates(draft);
   const activeSlashIndex = Math.min(slashIndex, Math.max(0, slashOptions.length - 1));
+  /** 展开明细的轨迹行(工单 15):按工单号记,默认都收起。 */
+  const [expandedTraces, setExpandedTraces] = useState<ReadonlySet<string>>(() => new Set());
 
   // 打开即聚焦,直接打字(工单 12:单击头像优先进入对话)。
   useEffect(() => {
@@ -97,6 +108,16 @@ export function PetChatPanel({
     const list = listRef.current;
     if (list) list.scrollTop = list.scrollHeight;
   }, [messages, awaitingReply, tickets]);
+
+  /** 轨迹行展开/收起(工单 15):同一张工单再点一次即收起。 */
+  function toggleTrace(ticketId: string): void {
+    setExpandedTraces((prev) => {
+      const next = new Set(prev);
+      if (next.has(ticketId)) next.delete(ticketId);
+      else next.add(ticketId);
+      return next;
+    });
+  }
 
   /** 确认一个 / 命令:执行对应动作(发命令+跳转),收起补全。 */
   function runSlash(action: Parameters<typeof onQuickAction>[0]): void {
@@ -196,7 +217,7 @@ export function PetChatPanel({
         onToggleLog={onToggleLog}
         logOpen={logOpen}
       />
-      {logOpen && <WorkLog items={workLog} />}
+      {logOpen && <WorkLog items={workLog} highlightTicketId={logHighlightTicketId} />}
       <div className="desk-pet-chat-list" ref={listRef} role="log" aria-label="对话记录">
         {messages.length === 0 && !awaitingReply && tickets.length === 0 && (
           <>
@@ -211,18 +232,48 @@ export function PetChatPanel({
             </div>
           </>
         )}
-        {messages.map((message) => (
-          <div className="desk-pet-chat-msg" data-speaker={message.speaker} key={message.key}>
-            <p className="desk-pet-chat-bubble" data-streaming={message.streaming || undefined} aria-busy={message.streaming || undefined}>
-              {message.text}
-            </p>
-            {message.quickActions?.map((label) => (
-              <button key={label} type="button" className="desk-pet-chat-action" onClick={() => onQuickAction(label)}>
-                {label}
-              </button>
-            ))}
-          </div>
-        ))}
+        {messages.map((message) => {
+          const trace = message.speaker === "pet" ? traces.find((item) => item.ticketId === message.ticketId) : undefined;
+          const traceOpen = expandedTraces.has(trace?.ticketId ?? "");
+          return (
+            <div className="desk-pet-chat-msg" data-speaker={message.speaker} key={message.key}>
+              {trace && trace.steps.length > 0 && (
+                <div className="desk-pet-trace">
+                  <button
+                    type="button"
+                    className="desk-pet-trace-toggle"
+                    aria-expanded={traceOpen}
+                    onClick={() => toggleTrace(trace.ticketId)}
+                  >
+                    做了什么:{trace.steps.map((step) => `${step.icon} ${step.label}`).join(" → ")}
+                  </button>
+                  {traceOpen && (
+                    <ul className="desk-pet-trace-detail">
+                      {trace.steps.map((step) => (
+                        <li key={`${step.icon}-${step.label}`}>
+                          {step.icon} {step.label}
+                          {step.detail ? `——${step.detail}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  {/* 回复里的工单可点开(工单 15):去工作日志定位这张工单。 */}
+                  <button type="button" className="desk-pet-trace-locate" onClick={() => onLocateTicket(trace.ticketId)}>
+                    看工单
+                  </button>
+                </div>
+              )}
+              <p className="desk-pet-chat-bubble" data-streaming={message.streaming || undefined} aria-busy={message.streaming || undefined}>
+                {message.text}
+              </p>
+              {message.quickActions?.map((label) => (
+                <button key={label} type="button" className="desk-pet-chat-action" onClick={() => onQuickAction(label)}>
+                  {label}
+                </button>
+              ))}
+            </div>
+          );
+        })}
         {tickets.map((ticket) => (
           <TicketCard
             key={ticket.ticketId}

@@ -202,6 +202,50 @@
 }
 .desk-pet-slash button:focus-visible { outline: 2px solid #bf8636; outline-offset: 1px; }
 
+/* Agent 轨迹行(工单 15):回复上方一行小字卡纸淡色,不抢正文;展开明细、可去工作日志。 */
+.desk-pet-trace {
+  display: grid;
+  gap: 2px;
+  margin-bottom: 2px;
+}
+.desk-pet-trace-toggle {
+  justify-self: start;
+  max-width: 100%;
+  padding: 1px 7px;
+  border: 1px dashed #d1c6b2; /* 浅卡其 */
+  border-radius: 6px;
+  background: #ece9e2cc; /* 卡纸淡色 */
+  color: #6b5a45;
+  font-size: 10.5px;
+  line-height: 1.6;
+  text-align: left;
+  cursor: pointer;
+}
+.desk-pet-trace-toggle:hover { border-color: #bf8636; }
+.desk-pet-trace-toggle:focus-visible { outline: 2px solid #bf8636; outline-offset: 1px; }
+.desk-pet-trace-detail {
+  margin: 0;
+  padding: 2px 8px;
+  border-left: 2px solid #d1c6b2;
+  display: grid;
+  gap: 1px;
+  color: #6b5a45;
+  font-size: 10.5px;
+  line-height: 1.5;
+  list-style: none;
+}
+.desk-pet-trace-locate {
+  justify-self: start;
+  padding: 0 6px;
+  border: none;
+  background: transparent;
+  color: #0f6b3f; /* 深绿链接感 */
+  font-size: 10.5px;
+  text-decoration: underline;
+  cursor: pointer;
+}
+.desk-pet-trace-locate:focus-visible { outline: 2px solid #bf8636; outline-offset: 1px; }
+
 /* 消息记录:玩家靠右深木底,桌宠靠左米白底,流式带光标。 */
 .desk-pet-chat-list {
   display: flex;

@@ -8,7 +8,7 @@ import { useChatSession } from "./use-chat-session";
 import { usePetMood } from "./use-pet-mood";
 import { usePetPosition } from "./use-pet-position";
 import { useAgentView } from "./use-agent-view";
-import { mergeWorkLog } from "./agent-trace";
+import { buildTraceSteps, mergeWorkLog, type TraceStep } from "./agent-trace";
 import type { PetEmotion } from "../shared/agent-contract";
 import "./desk-pet.css";
 
@@ -93,6 +93,8 @@ export function DeskPet({
   const [panelOpen, setPanelOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [logOpen, setLogOpen] = useState(false);
+  /** 工作日志高亮定位的工单号(工单 15:回复里的工单点开)。 */
+  const [logHighlight, setLogHighlight] = useState<string | null>(null);
   const rootRef = useRef<HTMLElement>(null);
   const avatarRef = useRef<HTMLButtonElement>(null);
   const panelOpenRef = useRef(false);
@@ -130,8 +132,25 @@ export function DeskPet({
     setPanelOpen(false);
     setMenuOpen(false);
     setLogOpen(false);
+    setLogHighlight(null);
     session.resetEmotion();
     avatarRef.current?.focus(); // 焦点还给头像(审查 S7)
+  }
+
+  /** 回复里的工单点开(工单 15):展开工作日志、高亮这张工单并滚到它跟前。 */
+  function locateTicket(ticketId: string): void {
+    setLogOpen(true);
+    setLogHighlight(ticketId);
+    window.setTimeout(() => {
+      scrollIntoViewSafe(rootRef.current, ".desk-pet-log-row[data-highlight]");
+    }, 0);
+  }
+
+  /** 状态条开合工作日志:收起时清掉定位高亮。 */
+  function toggleLog(): void {
+    const next = !logOpen;
+    setLogOpen(next);
+    if (!next) setLogHighlight(null);
   }
 
   /** 快捷芯片与回复建议:回话照发、跳转照跳,点完收起面板。 */
@@ -232,6 +251,16 @@ export function DeskPet({
   const pendingTickets = agentView.tickets.filter((ticket) => ticket.status === "waiting" || ticket.status === "blocked");
   const runningCount = agentView.tickets.filter((ticket) => ticket.status === "progress").length;
 
+  // 轨迹行(工单 15):对话里每条桌宠回复按工单号归并「做了什么」,账本里没有的回复不给。
+  const traceByTicket = new Map<string, TraceStep[]>();
+  for (const message of session.messages) {
+    if (message.speaker !== "pet" || !message.ticketId || traceByTicket.has(message.ticketId)) continue;
+    traceByTicket.set(message.ticketId, buildTraceSteps(message.ticketId, agentView.tickets, agentView.evals));
+  }
+  const chatTraces = [...traceByTicket]
+    .filter(([, steps]) => steps.length > 0)
+    .map(([ticketId, steps]) => ({ ticketId, steps }));
+
   const anchored = position.pos ? { left: position.pos.left, top: position.pos.top, right: "auto", bottom: "auto" } : undefined;
   const avatarAlt = `桌宠·${variantLabel[variant]}·${expressionLabel[shownExpression]}`;
 
@@ -256,6 +285,8 @@ export function DeskPet({
           menuOpen={menuOpen}
           logOpen={logOpen}
           workLog={mergeWorkLog(agentView.tickets, agentView.evals)}
+          logHighlightTicketId={logHighlight ?? undefined}
+          traces={chatTraces}
           onSend={(text) => {
             mood.wake();
             session.send(text);
@@ -263,6 +294,7 @@ export function DeskPet({
           onClose={closePanel}
           onClear={session.clearHistory}
           onQuickAction={runQuickAction}
+          onLocateTicket={locateTicket}
           onApprove={(ticketId) => decide(ticketId, "同意")}
           onReject={(ticketId) => decide(ticketId, "驳回")}
           onRevise={session.quote}
@@ -270,7 +302,7 @@ export function DeskPet({
           onToggleMenu={() => setMenuOpen((open) => !open)}
           onSwitchVariant={switchVariant}
           onDnd={() => setDnd(true)}
-          onToggleLog={() => setLogOpen((open) => !open)}
+          onToggleLog={toggleLog}
         />
       )}
     </div>
