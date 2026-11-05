@@ -1,10 +1,8 @@
 import fs from "node:fs";
 import path from "node:path";
-import { DEFAULT_MODEL_BASE_URL, DEFAULT_MODEL_NAME } from "../src/adapters/openai-model-adapter";
-import { DEFAULT_ASR_MODEL } from "./audio-transcriber";
 import {
-  readAgentRouterConfig,
-  readAgentWorkerConfig,
+  ASR_CONFIG_ENV,
+  LLM_CONFIG_ENV,
   readAsrConfig,
   readLlmConfig,
   readLlmFallbackConfig,
@@ -18,9 +16,12 @@ import {
  *   apiKeyEnv, models[], capabilities }——密钥只从环境变量读,绝不写进文件;
  * - roles:manager/judge/copywriting/asr/agent.router/agent.worker/agent.chat,
  *   每个角色一条有序 fallback 链("providerId:model" 数组);
+ * - judge 未显式配置时不自成链(S6):不注入裁判,链上各项自裁——裁判跟着
+ *   本次实际出话的模型走,主模型挂掉不会再请求它;
+ * - agent.chat 未配置时继承 agent.router 的链(S7);
  * - 兼容:没写 models.config.json 或角色未在文件里配置时,沿用旧
- *   MIMO_* / ASR_* / LLM_FALLBACK_* / AGENT_* 环境变量(映射成默认 provider),
- *   旧 .env.local 一个字都不用改。
+ *   MIMO_* / ASR_* / LLM_FALLBACK_* / AGENT_* 环境变量(映射成默认 provider,
+ *   Agent 分组读取在本文件内),旧 .env.local 一个字都不用改。
  * resolveModelRegistry 是纯函数:配置错误(能力不匹配、引用未知 provider、
  * anthropic-messages 未实现)直接抛错,由组合根按启动失败处理。
  */
@@ -93,16 +94,25 @@ const ROLE_REQUIRED_CAPABILITIES: Record<ModelRole, Array<keyof ProviderCapabili
 const OPENAI_CHAT_CAPABILITIES: ProviderCapabilities = { stream: true, tools: true, json: true, audio: false };
 
 /**
+ * Agent 分组环境变量(工单 11;读取原 model-config 的 Agent 函数并入此处):
+ * AGENT_ROUTER_* 用轻量模型(分派与说话),AGENT_WORKER_* 用强模型(投研、盲区等
+ * 重活),两组独立配置;未填字段回退 LLM 组——LLM 也没配密钥时链为空(退回 demo)。
+ */
+const AGENT_GROUP_ENV = {
+  router: { key: "AGENT_ROUTER_API_KEY", baseUrl: "AGENT_ROUTER_BASE_URL", model: "AGENT_ROUTER_MODEL" },
+  worker: { key: "AGENT_WORKER_API_KEY", baseUrl: "AGENT_WORKER_BASE_URL", model: "AGENT_WORKER_MODEL" },
+} as const;
+
+/**
  * 旧环境变量 → 默认 provider + 角色链(工单 13 兼容层)。
  * 分组语义复用 model-config 的既有读法,保证旧 .env.local 行为逐字段一致;
  * 没配密钥的链项直接剔除(角色链为空 = 调用方退回 demo)。
+ * judge 例外(S6):未显式配置即空链,不注入裁判。
  */
 function resolveLegacyRoles(env: Env): { providers: ModelProvider[]; roles: Record<ModelRole, RoleModelEntry[]> } {
   const llm = readLlmConfig(env);
   const llmFallback = readLlmFallbackConfig(env);
   const asr = readAsrConfig(env);
-  const agentRouter = readAgentRouterConfig(env);
-  const agentWorker = readAgentWorkerConfig(env);
 
   const mimo: ModelProvider = {
     id: "mimo",
@@ -136,11 +146,13 @@ function resolveLegacyRoles(env: Env): { providers: ModelProvider[]; roles: Reco
   }
 
   // ASR:始终合成独立 asr provider(未配 ASR_* 时密钥地址即 LLM 组的,模型用转写默认)。
+  // apiKeyEnv 记录实际取 key 的变量(S7):回退 LLM 组时指 MIMO_API_KEY,
+  // 文件引用该 provider 时按真实来源查密钥,不再误报未设置。
   const asrProvider: ModelProvider = {
     id: "asr",
     protocol: "openai-chat",
     baseUrl: asr.baseUrl,
-    apiKeyEnv: "ASR_API_KEY",
+    apiKeyEnv: env[ASR_CONFIG_ENV.key] ? ASR_CONFIG_ENV.key : LLM_CONFIG_ENV.key,
     models: [asr.model],
     capabilities: { stream: false, tools: false, json: false, audio: true },
   };
@@ -151,14 +163,15 @@ function resolveLegacyRoles(env: Env): { providers: ModelProvider[]; roles: Reco
 
   // Agent 两组:AGENT_*_BASE_URL/_MODEL/_API_KEY 任一出现即合成独立 provider,
   // 否则与 LLM 组同值、直接挂到 mimo provider 上(工单 11 回退语义)。
-  const routerEntry = agentChain(env, agentRouter, "AGENT_ROUTER", mimo, providers);
-  const workerEntry = agentChain(env, agentWorker, "AGENT_WORKER", mimo, providers);
+  const routerEntry = agentChain(env, AGENT_GROUP_ENV.router, "agent-router", llm, mimo, providers);
+  const workerEntry = agentChain(env, AGENT_GROUP_ENV.worker, "agent-worker", llm, mimo, providers);
 
   return {
     providers,
     roles: {
       manager: [...llmChain],
-      judge: [...llmChain],
+      // judge 未显式配置不成链(S6):组合根不注入裁判,manager 链上各项自裁。
+      judge: [],
       copywriting: [...llmChain],
       asr: asrEntry,
       "agent.router": routerEntry,
@@ -168,31 +181,35 @@ function resolveLegacyRoles(env: Env): { providers: ModelProvider[]; roles: Reco
   };
 }
 
-/** Agent 分组合成:配置了 AGENT_* 独立组则建独立 provider,否则挂回 mimo。 */
+/**
+ * Agent 分组合成:配置了 AGENT_* 独立组则建独立 provider,否则挂回 mimo。
+ * apiKeyEnv 记录实际取 key 的变量(S7):密钥回退 LLM 组时写 MIMO_API_KEY。
+ */
 function agentChain(
   env: Env,
-  config: ResolvedModelConfig,
-  envPrefix: "AGENT_ROUTER" | "AGENT_WORKER",
+  group: { readonly key: string; readonly baseUrl: string; readonly model: string },
+  providerId: "agent-router" | "agent-worker",
+  llm: ResolvedModelConfig,
   mimo: ModelProvider,
   providers: ModelProvider[],
 ): RoleModelEntry[] {
-  if (!config.apiKey) return [];
-  const configured =
-    env[`${envPrefix}_API_KEY`] || env[`${envPrefix}_BASE_URL`] || env[`${envPrefix}_MODEL`];
+  const apiKey = env[group.key] || llm.apiKey;
+  if (!apiKey) return [];
+  const baseUrl = env[group.baseUrl] || llm.baseUrl;
+  const model = env[group.model] || llm.model;
+  const configured = Boolean(env[group.key] || env[group.baseUrl] || env[group.model]);
   const provider: ModelProvider = configured
     ? {
-        id: envPrefix === "AGENT_ROUTER" ? "agent-router" : "agent-worker",
+        id: providerId,
         protocol: "openai-chat",
-        baseUrl: config.baseUrl,
-        apiKeyEnv: `${envPrefix}_API_KEY`,
-        models: [config.model],
+        baseUrl,
+        apiKeyEnv: env[group.key] ? group.key : LLM_CONFIG_ENV.key,
+        models: [model],
         capabilities: OPENAI_CHAT_CAPABILITIES,
       }
     : mimo;
   if (configured) providers.push(provider);
-  return [
-    { providerId: provider.id, model: config.model, protocol: provider.protocol, baseUrl: config.baseUrl, apiKey: config.apiKey },
-  ];
+  return [{ providerId: provider.id, model, protocol: provider.protocol, baseUrl, apiKey }];
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -301,6 +318,9 @@ export function resolveModelRegistry(deps: { config?: ModelsConfig | undefined; 
   if (deps.config === undefined) return { providers: legacy.providers, roles: legacy.roles };
   const fileProviders = parseFileProviders(deps.config.providers);
   const fileRoles = parseFileRoles(deps.config.roles, deps.env, fileProviders, legacy.providers);
+  // agent.chat 缺省继承文件里的 agent.router(S7):文件只配 agent.router 时也要
+  // 真正生效——继承要发生在覆盖 legacy 之前,否则会被旧变量的 agent.chat 盖回去。
+  if (!fileRoles["agent.chat"] && fileRoles["agent.router"]) fileRoles["agent.chat"] = fileRoles["agent.router"];
   return {
     providers: [...legacy.providers, ...fileProviders],
     roles: { ...legacy.roles, ...fileRoles },
@@ -308,14 +328,19 @@ export function resolveModelRegistry(deps: { config?: ModelsConfig | undefined; 
 }
 
 /**
- * 启动摘要:每个角色实际用的 provider:model 链(→ 分隔),空链标 demo。
+ * 启动摘要:每个角色实际用的 provider:model 链(→ 分隔),空链标 demo;
+ * judge 空链不是 demo——它跟 manager 链上各项自裁(S6)。
  * 只拼 providerId 与模型名,绝不拼密钥(工单 13)。
  */
 export function formatRegistrySummary(registry: ResolvedModelRegistry): string {
   return MODEL_ROLES.map((role) => {
     const chain = registry.roles[role];
     const label =
-      chain.length === 0 ? "demo(未配密钥)" : chain.map((entry) => `${entry.providerId}/${entry.model}`).join(" → ");
+      role === "judge" && chain.length === 0
+        ? "跟随 manager 链(各项自裁)"
+        : chain.length === 0
+          ? "demo(未配密钥)"
+          : chain.map((entry) => `${entry.providerId}/${entry.model}`).join(" → ");
     return `${role}: ${label}`;
   }).join("\n");
 }

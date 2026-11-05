@@ -148,7 +148,7 @@ ZHIPU_API_KEY=你的智谱密钥
 DEEPSEEK_API_KEY=你的 DeepSeek 密钥
 ```
 
-- **角色**：`manager`（经理对话）、`judge`（裁判元数据提取）、`copywriting`（素材分析与说话人整理）、`asr`（录音转写）、`agent.router` / `agent.worker` / `agent.chat`（桌宠 Agent）。值可以是单个 `"providerId:model"`，也可以是数组——fallback 链，按序切换。
+- **角色**：`manager`（经理对话）、`judge`（裁判元数据提取）、`copywriting`（素材分析与说话人整理）、`asr`（录音转写）、`agent.router` / `agent.worker` / `agent.chat`（桌宠 Agent）。值可以是单个 `"providerId:model"`，也可以是数组——fallback 链，按序切换。`agent.chat` 未配置时继承 `agent.router` 的链；`judge` 未配置时不单独成链——裁判跟着链上实际出话的模型走（各项自裁），主模型挂掉后元数据提取不会再请求它。
 - **能力是硬校验**：`agent.*` 要求 `stream`，`judge` 与 `copywriting` 要求 `json`，`asr` 要求 `audio`；声明不满足时启动即报错。`protocol` 本期只实现 `openai-chat`，引用 `anthropic-messages` 的角色会得到明确的「尚未实现」报错（协议字段已预留）。
 - **兼容**：不创建这个文件、或某角色没写在文件里时，沿用 `MIMO_*` / `ASR_*` / `LLM_FALLBACK_*` / `AGENT_*` 环境变量——旧的 `.env.local` 一个字都不用改。
 - 启动时逐角色打印实际使用的 provider:model 链（不打印密钥），形如 `[phone-coach] 模型 manager: zhipu/glm-4.6 → deepseek/deepseek-chat`；未配密钥的角色标 `demo(未配密钥)`，演示模式完整可用。

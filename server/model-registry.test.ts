@@ -16,15 +16,19 @@ const FALLBACK_ENV = {
 };
 
 describe("多模型注册表(工单 13):旧环境变量映射为默认 provider", () => {
-  it("LLM 组 + LLM_FALLBACK_*:manager/judge/copywriting 主链 mimo,备用作第二链项", () => {
+  it("LLM 组 + LLM_FALLBACK_*:manager/copywriting 主链 mimo,备用作第二链项", () => {
     const registry = resolveModelRegistry({ env: { ...LLM_ENV, ...FALLBACK_ENV } });
     const expected = [
       { providerId: "mimo", model: "llm-model", baseUrl: "https://llm.example.com/v1", apiKey: "llm-key", protocol: "openai-chat" },
       { providerId: "llm-fallback", model: "fb-model", baseUrl: "https://fb.example.com/v1", apiKey: "fb-key", protocol: "openai-chat" },
     ];
     expect(registry.roles.manager).toEqual(expected);
-    expect(registry.roles.judge).toEqual(expected);
     expect(registry.roles.copywriting).toEqual(expected);
+  });
+
+  it("judge 不在旧变量里自成链(S6):未显式配置时为空——不注入裁判,各项自裁跟实际出话模型走", () => {
+    const registry = resolveModelRegistry({ env: { ...LLM_ENV, ...FALLBACK_ENV } });
+    expect(registry.roles.judge).toEqual([]);
   });
 
   it("只配主组无备用:链只有一项;只配备用无主组:备用作唯一链项(现状行为)", () => {
@@ -62,6 +66,37 @@ describe("多模型注册表(工单 13):旧环境变量映射为默认 provider"
       { providerId: "mimo", model: "llm-model", baseUrl: "https://llm.example.com/v1", apiKey: "llm-key", protocol: "openai-chat" },
     ]);
     expect(registry.roles["agent.chat"]).toEqual(registry.roles["agent.router"]);
+  });
+
+  it("AGENT_* 只配部分字段:密钥/地址/模型各自回退 LLM 组(原 model-config 读取并入)", () => {
+    const onlyKey = resolveModelRegistry({ env: { ...LLM_ENV, AGENT_WORKER_API_KEY: "w-key" } });
+    expect(onlyKey.roles["agent.worker"]).toEqual([
+      { providerId: "agent-worker", model: "llm-model", baseUrl: "https://llm.example.com/v1", apiKey: "w-key", protocol: "openai-chat" },
+    ]);
+    const onlyModel = resolveModelRegistry({ env: { ...LLM_ENV, AGENT_ROUTER_MODEL: "router-model" } });
+    expect(onlyModel.roles["agent.router"]).toEqual([
+      { providerId: "agent-router", model: "router-model", baseUrl: "https://llm.example.com/v1", apiKey: "llm-key", protocol: "openai-chat" },
+    ]);
+  });
+
+  it("合成 provider 的 apiKeyEnv 记录实际取 key 的变量(S7):回退 LLM 组时指 MIMO_API_KEY", () => {
+    const registry = resolveModelRegistry({ env: { ...LLM_ENV, AGENT_ROUTER_MODEL: "router-model" } });
+    expect(registry.providers.find((provider) => provider.id === "asr")?.apiKeyEnv).toBe("MIMO_API_KEY");
+    expect(registry.providers.find((provider) => provider.id === "agent-router")?.apiKeyEnv).toBe("MIMO_API_KEY");
+    // 独立配置了密钥时才指自己的变量。
+    const standalone = resolveModelRegistry({ env: { ...LLM_ENV, ASR_API_KEY: "asr-key", AGENT_ROUTER_API_KEY: "router-key" } });
+    expect(standalone.providers.find((provider) => provider.id === "asr")?.apiKeyEnv).toBe("ASR_API_KEY");
+    expect(standalone.providers.find((provider) => provider.id === "agent-router")?.apiKeyEnv).toBe("AGENT_ROUTER_API_KEY");
+  });
+
+  it("文件引用回退态的合成 provider(asr)不再误报密钥未设置(S7)", () => {
+    const registry = resolveModelRegistry({
+      config: { roles: { asr: `asr:${DEFAULT_ASR_MODEL}` } },
+      env: LLM_ENV,
+    });
+    expect(registry.roles.asr).toEqual([
+      { providerId: "asr", model: DEFAULT_ASR_MODEL, protocol: "openai-chat", baseUrl: "https://llm.example.com/v1", apiKey: "llm-key" },
+    ]);
   });
 
   it("全部未配:所有角色链为空(demo 模式),mimo provider 落代码默认值", () => {
@@ -129,6 +164,18 @@ describe("多模型注册表(工单 13):models.config.json 的 providers 与 rol
     expect(registry.providers.map((provider) => provider.id)).toEqual(
       expect.arrayContaining(["mimo", "zhipu", "deepseek"]),
     );
+  });
+
+  it("文件只配 agent.router 时 agent.chat 继承同链(S7):agent.router 的配置真正生效", () => {
+    const registry = resolveModelRegistry({
+      config: { providers: FILE_PROVIDERS, roles: { "agent.router": "zhipu:glm-4.6-air" } },
+      env: FILE_ENV,
+    });
+    const expected = [
+      { providerId: "zhipu", model: "glm-4.6-air", protocol: "openai-chat", baseUrl: "https://open.bigmodel.cn/api/paas/v4", apiKey: "zhipu-key" },
+    ];
+    expect(registry.roles["agent.router"]).toEqual(expected);
+    expect(registry.roles["agent.chat"]).toEqual(expected);
   });
 
   it("角色引用未知 provider 或 provider 未登记的模型 → 报错指明角色与引用", () => {
@@ -233,9 +280,10 @@ describe("启动摘要(工单 13):逐角色打印实际 provider:model,不含密
     }
   });
 
-  it("角色链为空时标 demo(未配密钥)", () => {
+  it("角色链为空时标 demo(未配密钥);judge 为空标跟 manager 链自裁(S6)", () => {
     const summary = formatRegistrySummary(resolveModelRegistry({ env: {} }));
     expect(summary).toContain("manager: demo(未配密钥)");
     expect(summary).toContain("agent.chat: demo(未配密钥)");
+    expect(summary).toContain("judge: 跟随 manager 链(各项自裁)");
   });
 });

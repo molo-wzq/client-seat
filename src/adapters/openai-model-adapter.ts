@@ -3,6 +3,7 @@ import {
   assembleManagerMetaPrompt,
   assembleManagerSystemPrompt,
 } from "./prompts";
+import { errorMessage, maskModelSecrets } from "./model-errors";
 import { cleanReplyText, sanitizeCustomerText } from "../domain/reply-text";
 import { DEFAULT_ROLE_CARD, roleDemoMessages, roleTailReminder } from "../domain/role-card";
 import { PROMPT_TUNING_ENV, tuningDisabled, tuningEnabled } from "../domain/prompt-tuning";
@@ -130,7 +131,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     const meta = await this.extractManagerMeta(input, reply).catch((error) => {
       // 降级而非失败:话术已经生成且播给用户,此时抛错会回滚整轮;
       // 丢的只是策略卡高亮与自动收口信号,12 轮硬上限仍然兜底。
-      console.warn("[adapter] 元数据提取失败,本轮降级为无元数据:", (error as Error).message);
+      console.warn("[adapter] 元数据提取失败,本轮降级为无元数据:", maskModelSecrets(errorMessage(error)));
       return null;
     });
     if (!meta) return { reply, ...withReasoning };
@@ -352,7 +353,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     const content = choice?.message?.content ?? "";
     const reasoning = choice?.message?.reasoning_content ?? "";
     if (!content.trim() && !reasoning.trim()) {
-      console.warn("[adapter] 语言模型返回缺少内容:", JSON.stringify(data).slice(0, 400));
+      console.warn("[adapter] 语言模型返回缺少内容:", maskModelSecrets(JSON.stringify(data).slice(0, 400)));
       throw new Error("语言模型返回为空");
     }
     if (choice?.finish_reason === "length") {

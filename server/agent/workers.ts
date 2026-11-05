@@ -1,6 +1,7 @@
 import type { AgentWorker, WorkerRunOptions } from "./core";
 import { DemoWorker } from "./workers/demo";
 import type { AgentReport, AgentTicket, AgentTrigger, PetEmotion } from "./types";
+import { classifyModelError, errorMessage, maskModelSecrets } from "../../src/adapters/model-errors";
 import { DEFAULT_PET_PERSONA, PET_EMOTIONS, assemblePetSystemPrompt, type PetPersonaCard } from "./pet-persona";
 // PET_EMOTIONS 仅用于拼 EMOTION_TAG 正则与上限,标签语义见 pet-persona.ts。
 
@@ -200,17 +201,20 @@ class ChatWorker implements AgentWorker {
         ...(quickActions.length > 0 ? { quickActions } : {}),
       };
     } catch (error) {
-      const reason = (error instanceof Error ? error.message : String(error)).slice(0, 200);
+      // 原始报错不进 Report/账本/气泡(S5):对外只写中文短码,
+      // 原文(掩掉形如密钥的串)只进服务端日志。
+      const code = classifyModelError(error);
+      console.warn(`[agent] 对话模型失败(${code}):${maskModelSecrets(errorMessage(error))}`);
       // 半截正文已经上屏(S2):不再退回 demo 流,直接以 failed 收口——
       // 否则面板会把演示话术接在半截真实输出后面,拼成两段不相干的话。
       if (streamed) {
-        return { ticketId: ticket.id, status: "failed", text: `真实模型没接上：${reason}。刚才那句只说了一半，再说一遍？` };
+        return { ticketId: ticket.id, status: "failed", text: `真实模型没接上：${code}。刚才那句只说了一半，再说一遍？` };
       }
       // 一个字都没流出:落 failed 写明原因,退回 demo 脚本(工单 11:桌宠不卡死)。
       await onReport({
         ticketId: ticket.id,
         status: "failed",
-        text: `真实模型没接上：${reason}。先用演示话回你。`,
+        text: `真实模型没接上：${code}。先用演示话回你。`,
       });
       return this.runDemoChat(ticket, text, onDelta);
     }
@@ -262,10 +266,13 @@ class DraftWorker implements AgentWorker {
       ]);
       return { ticketId: ticket.id, status: "waiting", text: truncateChars(draft.trim(), DRAFT_MAX_CHARS) };
     } catch (error) {
+      // 同 S5:Report 只写中文短码,原文(掩密钥)只进服务端日志;非 Error 也不二次抛错。
+      const code = classifyModelError(error);
+      console.warn(`[agent] 草稿模型失败(${code}):${maskModelSecrets(errorMessage(error))}`);
       await onReport({
         ticketId: ticket.id,
         status: "failed",
-        text: `真实模型没接上：${(error as Error).message.slice(0, 200)}。先用演示草稿顶上。`,
+        text: `真实模型没接上：${code}。先用演示草稿顶上。`,
       });
       return { ticketId: ticket.id, status: "waiting", text: this.deps.demoText };
     }

@@ -59,7 +59,8 @@ for (const line of formatRegistrySummary(registry).split("\n")) {
 }
 
 // 按角色组装适配器:链上每个模型一个 OpenAI 兼容适配器,交给 FailoverModelAdapter
-// 依次切换(工单 13);裁判元数据提取用 judge 角色的链首模型,缺省与主模型同体。
+// 依次切换(工单 13);judge 只在显式配置时注入链首模型,未配置时不注入——
+// 链上各项自裁,裁判跟着本次实际出话的模型走,主模型挂掉不会再请求它(S6)。
 const buildModel = (entry: RoleModelEntry): OpenAICompatibleModelAdapter =>
   new OpenAICompatibleModelAdapter({ apiKey: entry.apiKey!, baseUrl: entry.baseUrl, model: entry.model });
 const buildChain = (entries: RoleModelEntry[], judge?: OpenAICompatibleModelAdapter): FailoverModelAdapter =>

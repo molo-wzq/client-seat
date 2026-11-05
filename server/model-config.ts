@@ -28,22 +28,6 @@ export const LLM_FALLBACK_CONFIG_ENV = {
   model: "LLM_FALLBACK_MODEL",
 } as const;
 
-/**
- * Agent 分组(工单 11):桌宠 Router 用轻量模型(分派与说话),Worker 用强模型(投研、盲区等重活)。
- * 两组独立配置;未填字段回退 LLM 组——LLM 也没配密钥时 apiKey 为 undefined,调用方退回 demo。
- */
-export const AGENT_ROUTER_CONFIG_ENV = {
-  key: "AGENT_ROUTER_API_KEY",
-  baseUrl: "AGENT_ROUTER_BASE_URL",
-  model: "AGENT_ROUTER_MODEL",
-} as const;
-
-export const AGENT_WORKER_CONFIG_ENV = {
-  key: "AGENT_WORKER_API_KEY",
-  baseUrl: "AGENT_WORKER_BASE_URL",
-  model: "AGENT_WORKER_MODEL",
-} as const;
-
 export interface ResolvedModelConfig {
   /** 未配密钥时为 undefined,由调用方决定降级(演示模式)或报错。 */
   apiKey: string | undefined;
@@ -81,25 +65,5 @@ export function readAsrConfig(env: Env): ResolvedModelConfig {
     apiKey: env[ASR_CONFIG_ENV.key] || llm.apiKey,
     baseUrl: env[ASR_CONFIG_ENV.baseUrl] || llm.baseUrl,
     model: env[ASR_CONFIG_ENV.model] || env.MIMO_ASR_MODEL || DEFAULT_ASR_MODEL,
-  };
-}
-
-/** Agent Router 配置(工单 11):AGENT_ROUTER_* 优先,未填字段回退 LLM 组。 */
-export function readAgentRouterConfig(env: Env): ResolvedModelConfig {
-  const llm = readLlmConfig(env);
-  return {
-    apiKey: env[AGENT_ROUTER_CONFIG_ENV.key] || llm.apiKey,
-    baseUrl: env[AGENT_ROUTER_CONFIG_ENV.baseUrl] || llm.baseUrl,
-    model: env[AGENT_ROUTER_CONFIG_ENV.model] || llm.model,
-  };
-}
-
-/** Agent Worker 配置(工单 11):AGENT_WORKER_* 优先,未填字段回退 LLM 组。 */
-export function readAgentWorkerConfig(env: Env): ResolvedModelConfig {
-  const llm = readLlmConfig(env);
-  return {
-    apiKey: env[AGENT_WORKER_CONFIG_ENV.key] || llm.apiKey,
-    baseUrl: env[AGENT_WORKER_CONFIG_ENV.baseUrl] || llm.baseUrl,
-    model: env[AGENT_WORKER_CONFIG_ENV.model] || llm.model,
   };
 }

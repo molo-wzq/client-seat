@@ -5,6 +5,7 @@ import type {
   ManagerTurnOutput,
   TranscriptAnalysis,
 } from "../domain/ports";
+import { errorMessage, maskModelSecrets } from "./model-errors";
 
 /**
  * 通用流式补全端口(工单 13):与 server/agent 的 AgentModelPort 结构一致,
@@ -38,7 +39,7 @@ export class FailoverModelAdapter implements CopywritingPort, DialoguePort, Comp
         return await model.analyzeTranscript(transcript);
       } catch (error) {
         lastError = error;
-        console.warn("[failover] 素材分析失败,切链上下一个模型:", (error as Error).message);
+        console.warn("[failover] 素材分析失败,切链上下一个模型:", maskModelSecrets(errorMessage(error)));
       }
     }
     throw lastError;
@@ -59,7 +60,7 @@ export class FailoverModelAdapter implements CopywritingPort, DialoguePort, Comp
       } catch (error) {
         if (streamed) throw error;
         lastError = error;
-        console.warn("[failover] 对话失败(话术未流出),切链上下一个模型:", (error as Error).message);
+        console.warn("[failover] 对话失败(话术未流出),切链上下一个模型:", maskModelSecrets(errorMessage(error)));
       }
     }
     throw lastError;
@@ -80,7 +81,7 @@ export class FailoverModelAdapter implements CopywritingPort, DialoguePort, Comp
       } catch (error) {
         if (streamed) throw error;
         lastError = error;
-        console.warn("[failover] 流式补全失败(无增量流出),切链上下一个模型:", (error as Error).message);
+        console.warn("[failover] 流式补全失败(无增量流出),切链上下一个模型:", maskModelSecrets(errorMessage(error)));
       }
     }
     throw lastError;

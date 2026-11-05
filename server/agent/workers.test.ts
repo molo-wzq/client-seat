@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AgentEvent, AgentReport, AgentTicket, AgentTrigger } from "./types";
 import { createAgentCore, type ReportSink } from "./core";
 import { createModelWorkers, type AgentModelMessage, type AgentModelPort } from "./workers";
@@ -158,10 +158,41 @@ describe("对话 Worker(工单 11,假模型端口)", () => {
 
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({ ticketId: "t-chat", status: "failed" });
-    expect(reports[0].text).toContain("网关 502");
+    // Report 只写分类短码(S5),原始报错不进 Report/账本/气泡。
+    expect(reports[0].text).toContain("模型网关错误");
+    expect(reports[0].text).not.toContain("网关 502");
     // 回退也是对话脚本:带表情、说得像桌宠,面板里看得见(工单 12)。
     expect(report).toMatchObject({ status: "ready", emotion: "wave" });
     expect(report.text).toContain("我在呢");
+  });
+
+  it("模型原始报错不进 Report(S5):failed 只写中文短码,原文(掩密钥)只进服务端日志", async () => {
+    const model = new FakeModelPort();
+    model.error = new Error(
+      '语言模型调用失败(HTTP 500):{"error":{"message":"key sk-abc123XYZ rejected","auth":"Bearer abc.def.ghi"}}',
+    );
+    const worker = createModelWorkers({ routerModel: model });
+    const reports: AgentReport[] = [];
+    const trigger = chatTrigger("在吗");
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      const report = await worker.run(ticketOf(trigger), trigger, { onReport: collectingSink(reports) });
+
+      expect(reports[0]).toMatchObject({ status: "failed" });
+      expect(reports[0].text).toContain("模型网关错误");
+      // 网关原始响应体(含密钥形串)不出现在任何玩家可见文本里。
+      for (const raw of ["HTTP 500", "sk-abc123XYZ", "Bearer abc.def.ghi"]) {
+        expect(reports[0].text).not.toContain(raw);
+        expect(report.text).not.toContain(raw);
+      }
+      // 原文进服务端日志,但形如密钥的串已掩掉。
+      const logged = warn.mock.calls.map((call) => call.join(" ")).join("\n");
+      expect(logged).toContain("sk-***");
+      expect(logged).not.toContain("sk-abc123XYZ");
+      expect(logged).not.toContain("Bearer abc.def.ghi");
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("流式已开始后模型失败:demo 话术不再接在半截输出后面,直接落 failed(S2)", async () => {
@@ -266,6 +297,25 @@ describe("投研/盲区 Worker(工单 11,假模型端口)", () => {
     expect(reports).toHaveLength(1);
     expect(reports[0].status).toBe("failed");
     expect(reports[0].text).toContain("超时");
+    expect(report).toMatchObject({ status: "waiting" });
+    expect(report.text).toContain("草稿");
+  });
+
+  it("草稿模型抛非 Error(如字符串):不二次抛错,照常落 failed(短码)并退回 demo 草稿(S5)", async () => {
+    const model = new FakeModelPort();
+    model.error = "boom" as unknown as Error;
+    const worker = createModelWorkers({ workerModel: model });
+    const reports: AgentReport[] = [];
+    const trigger = researchTrigger();
+
+    const report = await worker.run(
+      { ...ticketOf(trigger), id: "t-research" },
+      trigger,
+      { onReport: collectingSink(reports) },
+    );
+
+    expect(reports[0].status).toBe("failed");
+    expect(reports[0].text).toContain("模型调用失败");
     expect(report).toMatchObject({ status: "waiting" });
     expect(report.text).toContain("草稿");
   });
