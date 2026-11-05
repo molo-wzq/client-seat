@@ -152,7 +152,10 @@ export function createAgentCore(deps: {
         throw new ValidationError(`触发来源与类型不匹配:${input.kind} 只能来自 ${KIND_SOURCES[input.kind].join("/")}`);
       }
       const trigger: AgentTrigger = { ...input, id: randomId(), data: sanitizeTriggerData(input.data) };
-      await storage.appendLedgerEntry({ type: "trigger", trigger });
+      // 账本里的触发再剔一层 context(工单 16):牌局快照含隐藏牌,只活在本次执行,
+      // 不落账、不进任何只读视图;Worker 拿到的仍是上面的 trigger(含 context)。
+      const ledgerTrigger: AgentTrigger = { ...trigger, data: sanitizeLedgerTriggerData(trigger.data) };
+      await storage.appendLedgerEntry({ type: "trigger", trigger: ledgerTrigger });
 
       // Eval 两步:先做形状准入,再按放权模式给 inferred 候选定处置(工单 08)。
       const admission = evaluate(trigger);
@@ -341,12 +344,20 @@ const SOURCES: AgentTrigger["source"][] = ["table", "materials", "research", "pe
 /**
  * 落账前剔除触发数据里的敏感字段(S4):hidden 原文是客户端私有信息,
  * 服务端既不使用也不落账——即使有人照旧传入,也在进链路前丢弃。
+ * context(工单 16 的牌局快照,内含隐藏牌)只进桌宠对话 Worker 的提示词,
+ * 同样不落账:见 emitTrigger 里的 ledgerTrigger。
  */
 const SENSITIVE_TRIGGER_FIELDS = ["hidden"];
 
 function sanitizeTriggerData(data: Record<string, unknown>): Record<string, unknown> {
   const clean = { ...data };
   for (const field of SENSITIVE_TRIGGER_FIELDS) delete clean[field];
+  return clean;
+}
+
+/** 账本专用视图(工单 16):在 S4 之上再剔整个 context,快照只活在本次执行里。 */
+function sanitizeLedgerTriggerData(data: Record<string, unknown>): Record<string, unknown> {
+  const { context: _context, ...clean } = data;
   return clean;
 }
 

@@ -11,7 +11,7 @@ export type AgentSource = "table" | "materials" | "research" | "pet" | "system";
  * 触发类型:同一来源下的事件类别——pet 命令条为 "command",对局结束为 "game-ended"(工单 06),
  * 拖文件到桌宠为 "dropped"(data:{fileName,fileKind}),待审批注为 "annotate"(data:{ticketId,note})(工单 07),
  * 模型报错为 "model-error"(工单 10 补上类型,R5 规则自此可命中;data:{error} 可选),
- * 桌宠对话为 "chat"(工单 11;data:{text,history,view},见 ChatTriggerData),
+ * 桌宠对话为 "chat"(工单 11;data:{text,history,view},工单 16 起另带 context:ChatContext,落账前剔除),
  * 周报到期为 "research-due"(工单 11;data:{weekId}),策略卡发布为 "cards-published"(工单 11;data:{materialId,cardIds})。
  * 每个 kind 只认所属域的 source(如 research-due 只来自 research),冒名即拒绝。
  */
@@ -172,6 +172,55 @@ export interface PostgameBasis {
   /** 该轮经理所用策略卡 id;未用卡时缺省。 */
   cardId?: string;
 }
+
+/**
+ * 牌局快照上下文(工单 16):前端随 chat 触发附带的 `data.context`,
+ * 只进桌宠对话 Worker 的提示词(客户侧,可含隐藏牌,ADR 0007),
+ * 落账前整个剔除(与 hidden 同一道 S4 机制,见 core.sanitizeTriggerData)。
+ * 两态:牌局进行中带牌面与进度;不在牌局时换成所处幕与最近一局摘要。
+ */
+export type ChatContext = GameChatContext | IdleChatContext;
+
+/** 牌局进行中的快照。 */
+export interface GameChatContext {
+  phase: "game";
+  /** 当前客户角色卡的公开面:姓名与可见字段(经理也能看到的那些)。 */
+  customer: { name: string; visible: string[] };
+  /** 本局玩家自己的隐藏牌(仅客户侧可见;绝不进经理上下文)。 */
+  hiddenCards: string[];
+  /** 最近几轮对话,按经理/玩家区分(条数上限见 CHAT_CONTEXT_LIMITS)。 */
+  turns: Array<{ speaker: "manager" | "player"; text: string }>;
+  /** 经理已出的策略卡及其出处。 */
+  cardsPlayed: Array<{ cardId: string; cardName: string; source: string }>;
+  /** 当前回合数(经理轮序,从 1 计)与总回合数。 */
+  turnNumber: number;
+  maxTurns: number;
+  /** 已揭示的隐藏牌数(x/N 的 x;N 为 hiddenCards 总数)。 */
+  revealedHidden: number;
+}
+
+/** 不在牌局时的快照:所处幕与最近一局摘要。 */
+export interface IdleChatContext {
+  phase: "idle";
+  /** 当前所处幕(如「布置」「复盘」)。 */
+  act: string;
+  /** 最近一局摘要;没有历史时缺省。 */
+  lastGame?: { summary: string };
+}
+
+/** 快照长度上限(工单 16):前端组装与服务端防御性截断共用同一份。 */
+export const CHAT_CONTEXT_LIMITS = {
+  /** 最近对话轮数。 */
+  turns: 6,
+  /** 单条文本字段字符上限(轮次原文、摘要等)。 */
+  textChars: 160,
+  /** 客户公开面条目上限。 */
+  visibleItems: 6,
+  /** 隐藏牌条数上限。 */
+  hiddenCards: 8,
+  /** 经理已出策略卡条数上限(最近的在前也只带这么多)。 */
+  cardsPlayed: 12,
+} as const;
 
 /** 呈现通道:本期只有桌宠气泡(硬上限 40 字);后续票扩展翻牌动画、待办面板等。 */
 export interface AgentChannel {

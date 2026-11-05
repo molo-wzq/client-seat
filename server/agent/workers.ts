@@ -3,6 +3,7 @@ import { DemoWorker } from "./workers/demo";
 import type { AgentReport, AgentTicket, AgentTrigger, PetEmotion } from "./types";
 import { classifyModelError, errorMessage, maskModelSecrets } from "../../src/adapters/model-errors";
 import { DEFAULT_PET_PERSONA, PET_EMOTIONS, assemblePetSystemPrompt, type PetPersonaCard } from "./pet-persona";
+import { CHAT_CONTEXT_LIMITS, type ChatContext } from "../../src/shared/agent-contract";
 // PET_EMOTIONS 仅用于拼 EMOTION_TAG 正则与上限,标签语义见 pet-persona.ts。
 
 /**
@@ -113,6 +114,56 @@ function parseHistory(value: unknown): AgentModelMessage[] {
     .slice(-CHAT_HISTORY_TURNS);
 }
 
+/** 防御性取字符串数组(快照字段用):非字符串条目丢弃,条数与单条长度截到上限。 */
+function textList(value: unknown, maxItems: number): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter((item): item is string => typeof item === "string" && item.trim() !== "")
+    .slice(0, maxItems)
+    .map((item) => truncateChars(item, CHAT_CONTEXT_LIMITS.textChars));
+}
+
+/**
+ * 牌局快照渲染(工单 16):把 data.context 渲染成提示词里的一段「牌局快照」。
+ * 桌宠坐客户一侧(ADR 0007),快照含玩家隐藏牌——只进桌宠提示词,绝不进经理上下文;
+ * 形状不对整体忽略(快照是增强不是依赖),长度按 CHAT_CONTEXT_LIMITS 截断。
+ */
+export function renderChatContext(context: ChatContext): string {
+  if (context.phase === "idle") {
+    const summary = context.lastGame ? truncateChars(context.lastGame.summary, CHAT_CONTEXT_LIMITS.textChars) : "";
+    return [
+      "## 牌局快照(不在牌局)",
+      `当前所处幕:${truncateChars(context.act, 20)}`,
+      ...(summary ? [`最近一局:${summary}`] : []),
+    ].join("\n");
+  }
+  const turns = context.turns
+    .slice(-CHAT_CONTEXT_LIMITS.turns)
+    .map((turn) => `${turn.speaker === "manager" ? "经理" : "玩家"}:${truncateChars(turn.text, CHAT_CONTEXT_LIMITS.textChars)}`)
+    .filter((line) => !line.endsWith(":"));
+  const cards = context.cardsPlayed
+    .slice(-CHAT_CONTEXT_LIMITS.cardsPlayed)
+    .map((card) => `${card.cardName}(出处:${truncateChars(card.source, 60)})`)
+    .filter((line) => !line.startsWith("(出处:"));
+  return [
+    "## 牌局快照(进行中)",
+    `客户公开面:${context.customer.name}${textList(context.customer.visible, CHAT_CONTEXT_LIMITS.visibleItems).join(";")}`,
+    `玩家隐藏牌(只有你这一侧知道,绝不向经理透露):${textList(context.hiddenCards, CHAT_CONTEXT_LIMITS.hiddenCards).join(";")}`,
+    `回合进度:第 ${context.turnNumber}/${context.maxTurns} 轮;已揭示隐藏牌 ${context.revealedHidden}/${context.hiddenCards.length}`,
+    ...(turns.length > 0 ? [`最近对话:\n${turns.join("\n")}`] : []),
+    ...(cards.length > 0 ? [`经理已出的策略卡:${cards.join("、")}`] : []),
+  ].join("\n");
+}
+
+/** 从触发 data 里防御性取快照:形状不是 ChatContext 两态之一就当没有。 */
+function parseChatContext(value: unknown): ChatContext | undefined {
+  if (typeof value !== "object" || value === null) return undefined;
+  const context = value as ChatContext;
+  if (context.phase === "idle" && typeof context.act === "string") return context;
+  if (context.phase === "game" && typeof context.customer?.name === "string") return context;
+  return undefined;
+}
+
 /** 对话 Worker:走 Router(轻量)模型;出错/无 key 退回 demo 脚本,桌宠不卡死。 */
 class ChatWorker implements AgentWorker {
   constructor(
@@ -130,10 +181,15 @@ class ChatWorker implements AgentWorker {
     const { onReport, onDelta } = options;
     const text = asText(trigger.data.text);
     const view = asText(trigger.data.view);
+    // 牌局快照(工单 16):拼在人格提示词后,只进桌宠这一侧;落账前已剔除(core)。
+    const context = parseChatContext(trigger.data.context);
+    const systemPrompt =
+      assemblePetSystemPrompt(this.deps.persona, view || undefined) +
+      (context ? `\n${renderChatContext(context)}` : "");
     // 无 key:走演示脚本回复,一样分拍流式、带表情与快捷动作(工单 12:demo 完整可演示)。
     if (!this.deps.model) return this.runDemoChat(ticket, text, onDelta);
     const messages: AgentModelMessage[] = [
-      { role: "system", content: assemblePetSystemPrompt(this.deps.persona, view || undefined) },
+      { role: "system", content: systemPrompt },
       ...parseHistory(trigger.data.history),
       { role: "user", content: text },
     ];

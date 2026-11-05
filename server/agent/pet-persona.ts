@@ -33,7 +33,8 @@ export const DEFAULT_PET_PERSONA: PetPersonaCard = {
 
 /**
  * 组装桌宠系统提示词:人格卡 + 输出协议(表情前缀、长度上限)。
- * 只描述输出协议与人格,不含任何隐藏信息——隐藏牌原文永远不进提示词。
+ * 只描述输出协议与人格,不含任何隐藏信息——牌局快照(含隐藏牌,客户侧可见)
+ * 由 Worker 按触发单独追加(workers.renderChatContext),经理提示词永远不进。
  */
 export function assemblePetSystemPrompt(persona: PetPersonaCard, view?: string): string {
   const lines = [
