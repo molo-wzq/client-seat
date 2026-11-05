@@ -4,6 +4,7 @@ import type { AgentEvent, AgentReport, ChatContext, PetEmotion } from "../shared
 import { CHAT_KEY, loadChatHistory, serializeChat, type PetChatMessage } from "./chat-history";
 import { appendCapped, applyChatReport as reportToMessages, mergeDelta } from "./chat-stream";
 import { DEMO_COMMAND, type QuickRingAction } from "./pet-reactions";
+import { BOT_NOTES_KEY, BOT_NOTES_LIMIT, loadBotNotes } from "./bot-notes";
 
 /** 进模型的对话历史轮数(spec:history 最近 N 轮;一轮 = 玩家 + 桌宠各一句)。 */
 const CHAT_HISTORY_MESSAGES = 16;
@@ -20,6 +21,7 @@ export function useChatSession({
   agent,
   view,
   chatContext,
+  gameId,
   onOpenDemo,
 }: {
   agent: AgentClient;
@@ -27,10 +29,15 @@ export function useChatSession({
   view?: string;
   /** 牌局快照(工单 16):随 chat 触发附带给桌宠 Worker;不在牌局时为 idle 快照或 null。 */
   chatContext?: ChatContext | null;
+  gameId?: string;
   /** 对话输入「演示」时唤出一键演示(工单 15:分流在上层,面板不识别命令词)。 */
   onOpenDemo?: () => void;
 }) {
   const [messages, setMessages] = useState<PetChatMessage[]>(loadSessionChat);
+  const [notes, setNotes] = useState(loadBotNotes);
+  const [activeSteps, setActiveSteps] = useState<Record<string, string>>({});
+  const generation = useRef(0);
+  const nextRun = useRef(0);
   const [pending, setPending] = useState(0);
   /** 等待数与状态同源(settle 里要读「结算后还剩几个」来决定要不要还原表情)。 */
   const pendingRef = useRef(0);
@@ -97,6 +104,37 @@ export function useChatSession({
       .slice(-CHAT_HISTORY_MESSAGES)
       .map(({ speaker, text: messageText }) => ({ speaker, text: messageText }));
     setMessages((prev) => appendCapped(prev, { key: nextMessageKey(), speaker: "player", text }));
+    if (agent.sendBotChat) {
+      const runId = `bot-${++nextRun.current}`;
+      const version = generation.current;
+      void agent.sendBotChat({ text, history, notes, gameId }, (event) => {
+        if (version !== generation.current) return;
+        if (event.type === "step") {
+          setActiveSteps((prev) => ({ ...prev, [runId]: event.text }));
+        } else if (event.type === "delta") {
+          setMessages((prev) => mergeDelta(prev, runId, event.text, nextMessageKey));
+        } else if (event.type === "done") {
+          const report: AgentReport = { ticketId: runId, status: "ready", text: event.text };
+          setMessages((prev) => reportToMessages(prev, report, nextMessageKey).map((message) =>
+            message.ticketId === runId ? { ...message, bot: { evidence: event.evidence, steps: event.steps } } : message,
+          ));
+        }
+      }).catch(() => {
+        if (version !== generation.current) return;
+        setMessages((prev) => reportToMessages(prev, {
+          ticketId: runId, status: "failed", text: "刚才的回复中断了。你可以再发一次。",
+        }, nextMessageKey));
+      }).finally(() => {
+        if (version !== generation.current) return;
+        setActiveSteps((prev) => {
+          const next = { ...prev };
+          delete next[runId];
+          return next;
+        });
+        settle(runId);
+      });
+      return;
+    }
     agent
       .sendTrigger({
         source: "pet",
@@ -130,6 +168,7 @@ export function useChatSession({
 
   /** SSE 事件里的对话部分:delta 拼接、终态 Report 落消息(非对话工单不管)。 */
   function applyEvent(event: AgentEvent): void {
+    if (agent.sendBotChat) return;
     if (event.type === "delta") {
       chatTicketsRef.current.add(event.ticketId);
       setMessages((prev) => mergeDelta(prev, event.ticketId, event.text, nextMessageKey));
@@ -177,8 +216,42 @@ export function useChatSession({
   }
 
   function clearHistory(): void {
+    if (agent.sendBotChat) {
+      generation.current += 1;
+      pendingRef.current = 0;
+      setPending(0);
+      setChatEmotion(null);
+      setActiveSteps({});
+    }
     setMessages([]);
     setChatDot(false);
+  }
+
+  function saveNote(message: PetChatMessage): boolean {
+    if (!message.bot || !message.text.trim()) return false;
+    if (notes.some((note) => note.text === message.text)) return true;
+    const next = [...notes, {
+      id: globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${nextMessageKey()}`,
+      text: message.text.slice(0, 4800),
+      evidence: message.bot.evidence,
+    }].slice(-BOT_NOTES_LIMIT);
+    try {
+      window.localStorage.setItem(BOT_NOTES_KEY, JSON.stringify(next));
+      setNotes(next);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  function deleteNote(id: string): void {
+    const next = notes.filter((note) => note.id !== id);
+    try {
+      window.localStorage.setItem(BOT_NOTES_KEY, JSON.stringify(next));
+      setNotes(next);
+    } catch {
+      // Keep the visible notebook consistent with the saved copy.
+    }
   }
 
   // 对话历史落本地:序列化在纯模块,串没变不重复写盘(审查 R1)。
@@ -195,6 +268,10 @@ export function useChatSession({
 
   return {
     messages,
+    notes,
+    saveNote,
+    deleteNote,
+    activeStep: Object.values(activeSteps).at(-1),
     awaitingReply: pending > 0,
     chatEmotion,
     chatDot,

@@ -5,6 +5,25 @@ import {
 } from "./prompts";
 import { errorMessage, maskModelSecrets } from "./model-errors";
 import type { ToolCallShape, ToolCompletionShape } from "./failover-model-adapter";
+
+type CompletionMessage = {
+  role: string;
+  content: string;
+  toolCalls?: ToolCallShape[];
+  toolCallId?: string;
+  name?: string;
+};
+
+function toWireMessages(messages: CompletionMessage[]) {
+  return messages.map(({ role, content, toolCalls, toolCallId }) => ({
+    role,
+    content,
+    ...(toolCalls ? { tool_calls: toolCalls.map(({ id, name, arguments: args }) => ({
+      id, type: "function", function: { name, arguments: args },
+    })) } : {}),
+    ...(role === "tool" && toolCallId ? { tool_call_id: toolCallId } : {}),
+  }));
+}
 import { cleanReplyText, sanitizeCustomerText } from "../domain/reply-text";
 import { DEFAULT_ROLE_CARD, roleDemoMessages, roleTailReminder } from "../domain/role-card";
 import { PROMPT_TUNING_ENV, tuningDisabled, tuningEnabled } from "../domain/prompt-tuning";
@@ -194,7 +213,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
    * (server/agent/workers.ts)自行处理表情前缀等协议。
    */
   async completeStream(
-    messages: Array<{ role: string; content: string }>,
+    messages: CompletionMessage[],
     onDelta?: (delta: string) => void,
   ): Promise<string> {
     const { content } = await this.chatStream(messages, onDelta);
@@ -207,23 +226,9 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
    * 非流式——工具调用没有"半截增量"顾虑,失败可由链上层直接切备用。
    */
   async completeWithTools(
-    messages: Array<{ role: string; content: string; toolCalls?: ToolCallShape[]; toolCallId?: string; name?: string }>,
+    messages: CompletionMessage[],
     tools: Array<{ type: "function"; function: { name: string; description: string; parameters: Record<string, unknown> } }>,
   ): Promise<ToolCompletionShape> {
-    const wireMessages = messages.map((message) => ({
-      role: message.role,
-      content: message.content,
-      ...(message.toolCalls
-        ? {
-            tool_calls: message.toolCalls.map((call) => ({
-              id: call.id,
-              type: "function",
-              function: { name: call.name, arguments: call.arguments },
-            })),
-          }
-        : {}),
-      ...(message.role === "tool" && message.toolCallId ? { tool_call_id: message.toolCallId } : {}),
-    }));
     let response: Response;
     try {
       response = await fetch(`${this.config.baseUrl}/chat/completions`, {
@@ -235,7 +240,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
         signal: AbortSignal.timeout(120_000),
         body: JSON.stringify({
           model: this.config.model,
-          messages: wireMessages,
+          messages: toWireMessages(messages),
           temperature: 0.7,
           max_tokens: 16384,
           frequency_penalty: 0,
@@ -283,7 +288,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
    * (思维链绝不能当话术播出),content 增量逐段交给 onReplyDelta。
    */
   private async chatStream(
-    messages: Array<{ role: string; content: string }>,
+    messages: CompletionMessage[],
     onReplyDelta?: (delta: string) => void,
   ): Promise<{ content: string; reasoning: string }> {
     let response: Response;
@@ -297,7 +302,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
         signal: AbortSignal.timeout(120_000),
         body: JSON.stringify({
           model: this.config.model,
-          messages,
+          messages: toWireMessages(messages),
           temperature: 0.7,
           max_tokens: 16384,
           // 显式关掉重复惩罚:垫字与口癖要的就是反复出现(p13)。

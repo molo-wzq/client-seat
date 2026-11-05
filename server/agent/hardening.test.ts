@@ -147,9 +147,7 @@ describe("Agent 状态加固", () => {
     expect(runs).toBe(3);
   });
 
-  it("生产组合(createModelWorkers)下审批与批注仍然可达：同意/驳回能唤醒 waiting，批注能改草稿", async () => {
-    // B1 回归：368029e 把审批依据挪进 WorkerContext(账本视图)，路由若丢掉 context，
-    // 生产下一切审批都变成「没有待办」。必须钉住生产组合，而不是裸 DemoWorker。
+  it("共享写入未开放时保留待审投研，批注仍能找到既有素材工单", async () => {
     const core = createAgentCore({
       storage: new InMemoryLedgerStorage(),
       worker: createModelWorkers({ demoSleep: async () => undefined, demoChatSleep: async () => undefined }),
@@ -158,8 +156,9 @@ describe("Agent 状态加固", () => {
     const research = await core.emitTrigger({ source: "research", kind: "research-due", data: { weekId: "w-1" } });
     expect(research.report?.status).toBe("waiting");
 
-    await core.emitTrigger(command(`同意 ${research.ticket!.id}`));
-    expect((await core.tickets()).find((t) => t.ticketId === research.ticket!.id)?.status).toBe("ready");
+    const outcome = await core.emitTrigger(command(`同意 ${research.ticket!.id}`));
+    expect(outcome.report).toMatchObject({ status: "failed", text: expect.stringContaining("共享档案写入未开放") });
+    expect((await core.tickets()).find((t) => t.ticketId === research.ticket!.id)?.status).toBe("waiting");
 
     const dropped = await core.emitTrigger({
       source: "materials",

@@ -11,8 +11,8 @@ import { createRequestListener } from "./app-server";
 import { createAgentCore } from "./agent/core";
 import { createModelWorkers } from "./agent/workers";
 import { createWatchdog } from "./agent/watchdog";
-import { loadCurrentResearchReport, appendAgentObjection } from "./report-parser";
-import { appendBlindspotDraft } from "./agent/review-queue";
+import { createBotArchive, loadBotReports } from "./agent/bot-archive";
+import { createPetBot } from "./agent/pet-bot";
 import { loadEnvFile, readConversationRetention } from "./env";
 import { FileStorage } from "./file-store";
 import {
@@ -106,51 +106,20 @@ const draftChain = registry.roles["agent.worker"];
 const agent = createAgentCore({
   storage,
   worker: createModelWorkers({
-    routerModel: chatChain.length > 0 ? buildChain(chatChain) : undefined,
     workerModel: draftChain.length > 0 ? buildChain(draftChain) : undefined,
-    toolSources: {
-      weeklyResearch: async () => {
-        const report = loadCurrentResearchReport(ROOT);
-        const risk = report.sections.risk;
-        return [
-          `${report.title}(${report.period})`,
-          `宏观:${report.sections.macro.headline}`,
-          `行业:${report.sections.sector.summary}`,
-          risk.objections[0] ? `高频异议:${risk.objections[0].question}` : "",
-        ]
-          .filter(Boolean)
-          .join("\n");
-      },
-      searchCards: async (keyword) => {
-        const query = keyword.trim();
-        if (!query) return "请给一个关键词。";
-        const hits = (await core.listMaterials())
-          .flatMap((material) => material.cards.filter((card) => card.status === "published").map((card) => ({ card, material })))
-          .filter(({ card }) =>
-            [card.name, ...card.triggerSignals, ...card.referenceScripts].some((text) => text.includes(query)),
-          )
-          .slice(0, 5);
-        if (hits.length === 0) return `没有找到与「${query}」相关的已发布策略卡。`;
-        return hits
-          .map(({ card, material }) => `${card.name}:目的「${card.currentPurpose}」;出处:${material.title} ${card.sourceExcerpt.turnRange}`)
-          .join("\n");
-      },
-      lastReview: async () => {
-        const ended = (await core.listConversations()).find((item) => item.status === "ended");
-        if (!ended) return "还没有打过一局。";
-        return `上一局结局:${ended.outcomeSummary ?? "未知"};收口原因:${ended.endReason ?? "未知"}。`;
-      },
-    },
-    // 审批闭环(工单 16):同意投研写异议包,同意盲区进人审队列;都不直接上桌。
-    approvals: {
-      fileResearch: (draft) => {
-        appendAgentObjection(ROOT, { question: "本周要点(桌宠整理)", reply: draft });
-      },
-      queueBlindspot: (draft) => {
-        appendBlindspotDraft(ROOT, draft);
-      },
-    },
   }),
+});
+const chatModel = chatChain.length ? buildChain(chatChain) : undefined;
+const toolsChain = chatChain.filter((entry) =>
+  registry.providers.find((provider) => provider.id === entry.providerId)?.capabilities.tools,
+);
+const toolModel = toolsChain.length ? buildChain(toolsChain) : undefined;
+const petBot = createPetBot({
+  archive: createBotArchive(core, () => loadBotReports(path.join(ROOT, "data", "reports"))),
+  model: chatModel && {
+    completeStream: chatModel.completeStream.bind(chatModel),
+    completeWithTools: toolModel?.completeWithTools.bind(toolModel),
+  },
 });
 if (chatChain.length === 0 && draftChain.length === 0) {
   console.warn("[phone-coach] 桌宠 Agent 未配置任何模型角色(AGENT_*/MIMO_*/models.config.json),对话与草稿走 demo 演示");
@@ -171,7 +140,7 @@ if (purgedIds.length > 0) {
 }
 
 const server = http.createServer(
-  createRequestListener({ core, staticRoot: path.join(ROOT, "dist"), agent }),
+  createRequestListener({ core, staticRoot: path.join(ROOT, "dist"), agent, petBot }),
 );
 server.listen(PORT, HOST, () => {
   console.log(`[phone-coach] API 服务已启动:http://${HOST}:${PORT}(数据文件:${DATA_FILE})`);

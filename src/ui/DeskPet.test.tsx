@@ -69,6 +69,36 @@ function openPanelByHotkey() {
   fireEvent.keyDown(window, { key: "k", ctrlKey: true });
 }
 
+it("小贝把有出处的回复存成笔记，重新打开后可带着笔记发起练习", async () => {
+  const user = userEvent.setup();
+  const sendBotChat = vi.fn<NonNullable<AgentClient["sendBotChat"]>>(async (_input, onEvent) => {
+    onEvent({ type: "step", text: "查了历史对局" });
+    onEvent({
+      type: "done", text: "先问清客户哪天会用钱。",
+      steps: ["查了历史对局"],
+      evidence: [{ id: "game:one:2", title: "旧局 · 第 2 轮", excerpt: "客户：下个月要用。" }],
+    });
+  });
+  const agent = fakeAgent({ sendBotChat });
+  const first = render(<DeskPet agent={agent} />);
+  openPanelByHotkey();
+  await user.type(screen.getByRole("textbox", { name: "对话输入" }), "帮我找以前对局的证据{Enter}");
+  await user.click(await screen.findByText("查到的资料（1）"));
+  expect(screen.getByText("客户：下个月要用。")).toBeVisible();
+  await user.click(screen.getByRole("button", { name: "存为练习笔记" }));
+  expect(screen.getByText("已保存到练习笔记。")).toBeVisible();
+  first.unmount();
+  render(<DeskPet agent={agent} />);
+  openPanelByHotkey();
+  await user.click(screen.getByText("练习笔记（1）"));
+  await user.click(screen.getByRole("button", { name: "用这条练" }));
+  expect(sendBotChat.mock.lastCall?.[0]).toMatchObject({
+    text: expect.stringContaining("先问清客户哪天会用钱"),
+    notes: [{ text: "先问清客户哪天会用钱。", evidence: [{ id: "game:one:2" }] }],
+  });
+  expect(agent.sendTrigger).not.toHaveBeenCalled();
+});
+
 /** 渲染桌宠并拿到命令接口(App 的驱动缝,工单 15)。 */
 function renderWithHandle(props: Parameters<typeof DeskPet>[0] = {}) {
   let handle: DeskPetHandle | null = null;
