@@ -11,7 +11,8 @@ import { createRequestListener } from "./app-server";
 import { createAgentCore } from "./agent/core";
 import { createModelWorkers } from "./agent/workers";
 import { createWatchdog } from "./agent/watchdog";
-import { loadCurrentResearchReport } from "./report-parser";
+import { loadCurrentResearchReport, appendAgentObjection } from "./report-parser";
+import { appendBlindspotDraft } from "./agent/review-queue";
 import { loadEnvFile, readConversationRetention } from "./env";
 import { FileStorage } from "./file-store";
 import {
@@ -138,6 +139,15 @@ const agent = createAgentCore({
         const ended = (await core.listConversations()).find((item) => item.status === "ended");
         if (!ended) return "还没有打过一局。";
         return `上一局结局:${ended.outcomeSummary ?? "未知"};收口原因:${ended.endReason ?? "未知"}。`;
+      },
+    },
+    // 审批闭环(工单 16):同意投研写异议包,同意盲区进人审队列;都不直接上桌。
+    approvals: {
+      fileResearch: (draft) => {
+        appendAgentObjection(ROOT, { question: "本周要点(桌宠整理)", reply: draft });
+      },
+      queueBlindspot: (draft) => {
+        appendBlindspotDraft(ROOT, draft);
       },
     },
   }),

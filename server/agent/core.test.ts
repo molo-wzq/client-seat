@@ -630,7 +630,8 @@ describe("DemoWorker 分步演示(工单 05)", () => {
       context: { tickets: async () => [{ ticketId: "t-week", status: "waiting", text: "待决定" }] },
     });
 
-    expect(midReports).toEqual([{ ticketId: "t-week", status: "dropped", text: "收到，这条不做了。" }]);
+    // 工单 16:驳回即归档;没写理由标「未说明」,不空着。
+    expect(midReports).toEqual([{ ticketId: "t-week", status: "dropped", text: "草稿已归档。理由:未说明" }]);
     expect(final).toMatchObject({ ticketId: "t-reject", status: "ready", text: "好，已驳回。" });
   });
 

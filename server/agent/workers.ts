@@ -588,6 +588,79 @@ const PET_TOOLS_PROMPT = [
   "涉及这些内容先查工具再回答;工具查不到就直说没有,不接外网、不编造实时数据。",
 ].join("\n");
 
+/**
+ * 审批落地缝(工单 16):玩家同意草稿后写进哪个数据源;组合根注入真实实现
+ * (report-parser 的异议包、agent/review-queue 的人审队列)。缺省空实现:
+ * 状态照常流转,只是没落地(纯测试/未接线环境)。
+ */
+export interface ApprovalSinks {
+  /** 同意投研草稿:写入本周投研的异议包(情报档案夹可见)。 */
+  fileResearch(draft: string): void | Promise<void>;
+  /** 同意盲区草稿:进策略卡人审队列(不直接上牌库,ADR 0007 闸门不变)。 */
+  queueBlindspot(draft: string): void | Promise<void>;
+}
+
+const noApprovals: ApprovalSinks = {
+  fileResearch: () => undefined,
+  queueBlindspot: () => undefined,
+};
+
+/** 决议命令(工单 15→16):「同意/驳回 [工单号] [理由]」,理由可选。 */
+const DECISION_COMMAND = /^(同意|驳回)\s*(\S+)?(?:\s+(.+))?$/;
+
+/** 是否决议命令:createModelWorkers 据此把命令路由给审批 Worker。 */
+export function isDecisionCommand(text: string): boolean {
+  return DECISION_COMMAND.test(text.trim());
+}
+
+/**
+ * 审批 Worker(工单 16):把「同意/驳回」闭环到真实数据源——
+ * 同意投研 → 异议包;同意盲区 → 人审队列;驳回 → 归档附理由。
+ * 每个动作都先落目标工单的 Report(落账),决定工单自己再回玩家一句。
+ * 找目标与失效保护沿用 demo 决议的口径(显式 ID 失效不误审另一张)。
+ */
+class DecisionWorker implements AgentWorker {
+  constructor(private readonly deps: { approvals: ApprovalSinks }) {}
+
+  async run(ticket: AgentTicket, trigger: AgentTrigger, options: WorkerRunOptions): Promise<AgentReport> {
+    const { onReport, context = { tickets: async () => [] } } = options;
+    const text = asText(trigger.data.text).trim();
+    const match = DECISION_COMMAND.exec(text);
+    if (!match) return { ticketId: ticket.id, status: "ready", text: "收到，马上办" };
+    const [, verb, ticketId, reason] = match;
+    const waiting = (await context.tickets()).filter((view) => view.status === "waiting");
+    // 显式 ID 失效时不可审批另一张工单;只有省略 ID 才取最近待办。
+    const target =
+      ticketId === undefined
+        ? waiting.at(-1)
+        : waiting.find((view) => view.ticketId === ticketId);
+    if (target === undefined) {
+      return { ticketId: ticket.id, status: "ready", text: "现在没有等你拍板的工单。" };
+    }
+    if (verb === "驳回") {
+      await onReport({
+        ticketId: target.ticketId,
+        status: "dropped",
+        text: `草稿已归档。理由:${reason ?? "未说明"}`,
+      });
+      return { ticketId: ticket.id, status: "ready", text: "已驳回，草稿归档。" };
+    }
+    // 同意:按目标来源闭环(工单视图的 worker 名,来源=触发类型)。
+    if (target.worker === "投研") {
+      await this.deps.approvals.fileResearch(target.text);
+      await onReport({ ticketId: target.ticketId, status: "ready", text: "已放进本周档案夹（桌宠起草·已审）。" });
+      return { ticketId: ticket.id, status: "ready", text: "已放进本周档案夹，随时能查。" };
+    }
+    if (target.worker === "盲区") {
+      await this.deps.approvals.queueBlindspot(target.text);
+      await onReport({ ticketId: target.ticketId, status: "ready", text: "已进策略卡人审队列，上不上牌仍由人定。" });
+      return { ticketId: ticket.id, status: "ready", text: "已进人审队列，过了人工这关才上牌。" };
+    }
+    await onReport({ ticketId: target.ticketId, status: "ready", text: "收到，按你拍板的出结果。" });
+    return { ticketId: ticket.id, status: "ready", text: "好，已照办。" };
+  }
+}
+
 /** 投研草稿系统提示:产出的只是草稿,上不上桌由人审决定。 */
 const RESEARCH_DRAFT_SYSTEM =
   "你是投研助理。把到期的周报整理成本周要点草稿:三个要点、一条风险提示。这只是草稿,等待人工审核,不会直接发布。";
@@ -612,9 +685,12 @@ export function createModelWorkers(deps: {
   demoChatSleep?: (ms: number) => Promise<void>;
   /** 只读工具数据源(工单 16):组合根注入真实实现(投研 JSON/素材库/历史);缺省空实现。 */
   toolSources?: PetToolSources;
+  /** 审批落地缝(工单 16):组合根注入真实数据源写入;缺省空实现(状态照常流转)。 */
+  approvals?: ApprovalSinks;
 }): AgentWorker {
   const demo = new DemoWorker(deps.demoSleep ? { sleep: deps.demoSleep } : undefined);
   const persona = deps.persona ?? DEFAULT_PET_PERSONA;
+  const decision = new DecisionWorker({ approvals: deps.approvals ?? noApprovals });
   const chat = new ChatWorker({
     model: deps.routerModel,
     persona,
@@ -642,6 +718,10 @@ export function createModelWorkers(deps: {
     // 兜底分支少了 context,审批/批注在生产组合下会全部「查不到待办」。
     async run(ticket, trigger, options) {
       if (trigger.kind === "chat") return chat.run(ticket, trigger, options);
+      // 决议命令走审批 Worker(工单 16):同意/驳回闭环到真实数据源,不再只是改状态。
+      if (trigger.kind === "command" && isDecisionCommand(asText(trigger.data.text))) {
+        return decision.run(ticket, trigger, options);
+      }
       if (trigger.kind === "research-due") return research.run(ticket, trigger, options);
       if (trigger.kind === "cards-published") return blindspot.run(ticket, trigger, options);
       return demo.run(ticket, trigger, options);

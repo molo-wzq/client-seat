@@ -128,7 +128,8 @@ export function createAgentCore(deps: {
       }
     };
     const text = typeof trigger.data.text === "string" ? trigger.data.text.trim() : "";
-    const mutatesWaiting = trigger.kind === "annotate" || (trigger.kind === "command" && /^(同意|驳回)\s*(\S+)?$/.test(text));
+    // 决议命令(工单 15)允许带可选理由(工单 16 驳回附理由),都走审批串行队列。
+    const mutatesWaiting = trigger.kind === "annotate" || (trigger.kind === "command" && /^(同意|驳回)\s*(\S+)?(?:\s+.+)?$/.test(text));
     const execute = () => attempts.get(ticket.id)?.token === attempt ? Promise.race([run(), stopped]) : Promise.resolve(superseded);
     const pending = mutatesWaiting ? reviewChain.then(execute) : execute();
     if (mutatesWaiting) reviewChain = pending.then(() => undefined, () => undefined);

@@ -146,3 +146,19 @@ export function loadCurrentResearchReport(baseDir: string): CurrentResearchRepor
   }
   return defaultReport;
 }
+
+/**
+ * 追加一条桌宠起草的异议(工单 16 审批闭环):玩家同意投研草稿后,
+ * 写入本周投研的异议包(risk 段的 objections,情报档案夹可见),
+ * 问题行标注「桌宠起草·已审」——人一眼能分清哪些是投研技能写的。
+ */
+export function appendAgentObjection(baseDir: string, entry: { question: string; reply: string }): void {
+  const report = loadCurrentResearchReport(baseDir);
+  report.sections.risk.objections.push({
+    question: `【桌宠起草·已审】${entry.question}`,
+    reply: entry.reply,
+  });
+  const jsonPath = path.join(baseDir, "data", "reports", "current-sections.json");
+  fs.mkdirSync(path.dirname(jsonPath), { recursive: true });
+  fs.writeFileSync(jsonPath, JSON.stringify(report, null, 2), "utf-8");
+}

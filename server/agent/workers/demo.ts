@@ -44,9 +44,10 @@ export class DemoWorker implements AgentWorker {
     if (trigger?.kind === "annotate") return this.runAnnotate(ticket, trigger, onReport, context);
     if (trigger?.kind === "model-error") return this.runModelError(ticket, onReport);
     const text = typeof trigger?.data?.text === "string" ? trigger.data.text.trim() : "";
-    // 待人决定的决议命令:「同意」「驳回」,可带工单号(待办面板按钮就这么发)。
-    const decision = /^(同意|驳回)\s*(\S+)?$/.exec(text);
-    if (decision) return this.runDecision(ticket, decision[1], decision[2], onReport, context);
+    // 待人决定的决议命令:「同意」「驳回」,可带工单号与理由(工单 16;生产路径
+    // 由 createModelWorkers 的审批 Worker 接管,这里是纯 demo 兜底的同一口径)。
+    const decision = /^(同意|驳回)\s*(\S+)?(?:\s+(.+))?$/.exec(text);
+    if (decision) return this.runDecision(ticket, decision[1], decision[2], decision[3], onReport, context);
     if (text === "本周投研" || text.includes("并行")) return this.runStepwiseDemo(ticket, text, onReport);
     return { ticketId: ticket.id, status: "ready", text: SCRIPTED_REPLIES[text] ?? "收到，马上办" };
   }
@@ -93,11 +94,12 @@ export class DemoWorker implements AgentWorker {
     return { ticketId: ticket.id, status: "blocked", text: "重试一次仍卡住，先标受阻，等你在待办里处理。" };
   }
 
-  /** 决议:唤醒等待工单落 ready/dropped;找不到等待工单就直说,不误落账。 */
+  /** 决议:唤醒等待工单落 ready/dropped;找不到等待工单就直说,不误落账。驳回理由进归档文案。 */
   private async runDecision(
     ticket: AgentTicket,
     verb: string,
     ticketId: string | undefined,
+    reason: string | undefined,
     onReport: (report: AgentReport) => Promise<void>,
     context: WorkerContext,
   ): Promise<AgentReport> {
@@ -113,7 +115,7 @@ export class DemoWorker implements AgentWorker {
     await onReport({
       ticketId: target,
       status: agree ? "ready" : "dropped",
-      text: agree ? "收到，按你拍板的出结果。" : "收到，这条不做了。",
+      text: agree ? "收到，按你拍板的出结果。" : `草稿已归档。理由:${reason ?? "未说明"}`,
     });
     return { ticketId: ticket.id, status: "ready", text: agree ? "好，已照办。" : "好，已驳回。" };
   }
