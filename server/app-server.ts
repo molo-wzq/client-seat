@@ -85,7 +85,8 @@ export function createRequestListener(deps: {
   }
 
   /**
-   * Agent 事件流(工单 02):SSE 两类事件——`report` {report} 与 `channel` {channel}。
+   * Agent 事件流(工单 02):SSE 事件——`report` {report}、`channel` {channel},
+   * 以及工单 11 的流式对话增量 `delta` {delta:{ticketId,text}}。
    * 长连接:先刷响应头(客户端拿到头即代表订阅已建立),断开即退订。
    */
   function respondAgentEvents(req: http.IncomingMessage, res: http.ServerResponse): void {
@@ -99,7 +100,12 @@ export function createRequestListener(deps: {
     const unsubscribe = agent.subscribe((event) => {
       // 客户端断开后继续写只会堆积异常;静默放弃,退订由 close 钩子完成。
       if (res.destroyed || res.writableEnded) return;
-      const payload = event.type === "report" ? { report: event.report } : { channel: event.channel };
+      const payload =
+        event.type === "report"
+          ? { report: event.report }
+          : event.type === "channel"
+            ? { channel: event.channel }
+            : { delta: { ticketId: event.ticketId, text: event.text } };
       res.write(`event: ${event.type}\ndata: ${JSON.stringify(payload)}\n\n`);
     });
     req.on("close", unsubscribe);

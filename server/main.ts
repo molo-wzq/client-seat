@@ -8,11 +8,12 @@ import type { CopywritingPort, DialoguePort } from "../src/domain/ports";
 import { createProductCore } from "../src/domain/product-core";
 import { purgeExpiredConversations } from "../src/domain/conversation-retention";
 import { createRequestListener } from "./app-server";
-import { createAgentCore, DemoWorker } from "./agent/core";
+import { createAgentCore } from "./agent/core";
+import { createModelWorkers, type AgentModelPort } from "./agent/workers";
 import { createWatchdog } from "./agent/watchdog";
 import { loadEnvFile, readConversationRetention } from "./env";
 import { FileStorage } from "./file-store";
-import { readLlmConfig, readLlmFallbackConfig } from "./model-config";
+import { readAgentRouterConfig, readAgentWorkerConfig, readLlmConfig, readLlmFallbackConfig } from "./model-config";
 
 /** 组合根:读配置 → 建核心 → 起服务;路由与错误映射在 app-server.ts。 */
 
@@ -71,8 +72,27 @@ const core = createProductCore({
   retention,
 });
 
-// 桌宠 Agent(ADR 0007):账本与产品数据同库;demo Worker 为确定性脚本,不调模型。
-const agent = createAgentCore({ storage, worker: new DemoWorker() });
+// 桌宠 Agent(ADR 0007,工单 11):账本与产品数据同库。
+// 有 key 走真实模型(对话用 Router 轻量组,投研/盲区用 Worker 强模型组,
+// 两组都回退 LLM 配置);没 key 时 Worker 自身退回 demo 脚本,演示完整可用。
+const agentRouterConfig = readAgentRouterConfig(process.env);
+const agentWorkerConfig = readAgentWorkerConfig(process.env);
+const buildAgentModel = (config: typeof agentRouterConfig): AgentModelPort =>
+  new OpenAICompatibleModelAdapter({ apiKey: config.apiKey!, baseUrl: config.baseUrl, model: config.model });
+const agent = createAgentCore({
+  storage,
+  worker: createModelWorkers({
+    routerModel: agentRouterConfig.apiKey ? buildAgentModel(agentRouterConfig) : undefined,
+    workerModel: agentWorkerConfig.apiKey ? buildAgentModel(agentWorkerConfig) : undefined,
+  }),
+});
+if (agentRouterConfig.apiKey || agentWorkerConfig.apiKey) {
+  console.log(
+    `[phone-coach] 桌宠 Agent 真实模型:Router ${agentRouterConfig.apiKey ? agentRouterConfig.model : "demo"} / Worker ${agentWorkerConfig.apiKey ? agentWorkerConfig.model : "demo"}`,
+  );
+} else {
+  console.warn("[phone-coach] 桌宠 Agent 未配置 AGENT_ROUTER_*/AGENT_WORKER_*(也未配 LLM),对话与草稿走 demo 演示");
+}
 
 // Watchdog(工单 09):工单超时没进展先重试一次,再卡住就标受阻进待办,不发桌宠气泡。
 // 阈值默认 10 分钟;演示可用 WATCHDOG_THRESHOLD_MS 调短,配置不合法回落默认。

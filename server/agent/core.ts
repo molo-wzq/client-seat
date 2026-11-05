@@ -34,7 +34,16 @@ export type ReportSink = (report: AgentReport) => Promise<void>;
 
 /** Worker:领一张工单干活,途中可经 onReport 追加汇报,最终返回一条 Report。 */
 export interface AgentWorker {
-  run(ticket: AgentTicket, trigger: AgentTrigger, onReport: ReportSink): Promise<AgentReport>;
+  /**
+   * onDelta(工单 11):流式正文增量缝——对话 Worker 边生成边上屏;
+   * 只发事件不落账,核心补上 ticketId 后推送订阅者。不支持的 Worker 忽略。
+   */
+  run(
+    ticket: AgentTicket,
+    trigger: AgentTrigger,
+    onReport: ReportSink,
+    onDelta?: (text: string) => void,
+  ): Promise<AgentReport>;
 }
 
 /**
@@ -340,12 +349,10 @@ export function createAgentCore(deps: {
         return { triggerId: trigger.id, admitted: false, ticket: null, report: null };
       }
 
-      // Thread 键按 spec 归并:pet 命令按 commandId(本次触发的 id),
-      // 对局结束事件按 gameId(本局的复盘工作都归到同一局)。
-      const thread: AgentThread =
-        trigger.kind === "game-ended"
-          ? { kind: "gameId", key: typeof trigger.data.gameId === "string" ? trigger.data.gameId : "" }
-          : { kind: "commandId", key: trigger.id };
+      // Thread 键按 spec 归并:pet 命令与对话按 commandId(本次触发的 id),
+      // 对局结束事件按 gameId(本局的复盘工作都归到同一局),
+      // 周报到期按 weekId、策略卡发布按 materialId(工单 11 的投研/盲区线)。
+      const thread: AgentThread = threadOf(trigger);
       const ticket: AgentTicket = {
         id: randomId(),
         triggerId: trigger.id,
@@ -353,7 +360,13 @@ export function createAgentCore(deps: {
       };
       await storage.appendLedgerEntry({ type: "ticket", ticket });
 
-      const report: AgentReport = { ...(await worker.run(ticket, trigger, emitReport)), ticketId: ticket.id };
+      // 流式增量缝(工单 11):Worker 只给正文片段,核心补 ticketId 后发事件,不落账。
+      const report: AgentReport = {
+        ...(await worker.run(ticket, trigger, emitReport, (text) => {
+          publish({ type: "delta", ticketId: ticket.id, text });
+        })),
+        ticketId: ticket.id,
+      };
       await emitReport(report);
 
       return { triggerId: trigger.id, admitted: true, ticket, report };
@@ -398,7 +411,11 @@ export function createAgentCore(deps: {
       )?.trigger;
       if (!trigger) return false;
       // 重启不等结果:卡住的工单本来就可能不返回,新汇报走同一条出口自然落账。
-      void worker.run(ticket, trigger, emitReport).catch(() => undefined);
+      void worker
+        .run(ticket, trigger, emitReport, (text) => {
+          publish({ type: "delta", ticketId, text });
+        })
+        .catch(() => undefined);
       return true;
     },
 
@@ -414,7 +431,7 @@ export function createAgentCore(deps: {
   }
 }
 
-/** Eval 准入:pet 命令须带非空文本,对局结束事件须带对局号与轮次,拖入文件须带文件名与合法类型;研判(放权模式)在 emitTrigger 里接续。 */
+/** Eval 准入:pet 命令/对话须带非空文本,对局结束事件须带对局号与轮次,拖入文件须带文件名与合法类型;研判(放权模式)在 emitTrigger 里接续。 */
 function evaluate(trigger: AgentTrigger): AgentDecision {
   if (trigger.kind === "game-ended") {
     const gameId = trigger.data.gameId;
@@ -443,16 +460,57 @@ function evaluate(trigger: AgentTrigger): AgentDecision {
     // 报错事件本身不用带任何字段(data.error 仅备查);是否立项由放权模式研判(R5)。
     return { triggerId: trigger.id, admitted: true, reason: "模型报错,准予处置立项" };
   }
+  if (trigger.kind === "research-due") {
+    // 周报到期事件无需必填字段(weekId 仅归并线程用);是否立项由放权模式研判(R4)。
+    return { triggerId: trigger.id, admitted: true, reason: "周报到期,准予投研立项" };
+  }
+  if (trigger.kind === "cards-published") {
+    // 发布事件同理(materialId/cardIds 仅起草输入用);是否立项由放权模式研判(R7)。
+    return { triggerId: trigger.id, admitted: true, reason: "策略卡发布,准予盲区分析立项" };
+  }
   const text = typeof trigger.data.text === "string" ? trigger.data.text.trim() : "";
-  if (text === "") return { triggerId: trigger.id, admitted: false, reason: "命令内容为空" };
-  return { triggerId: trigger.id, admitted: true, reason: "pet 命令,准予立项" };
+  if (text === "") {
+    return {
+      triggerId: trigger.id,
+      admitted: false,
+      reason: trigger.kind === "chat" ? "对话内容为空" : "命令内容为空",
+    };
+  }
+  return {
+    triggerId: trigger.id,
+    admitted: true,
+    reason: trigger.kind === "chat" ? "pet 对话,准予立项" : "pet 命令,准予立项",
+  };
+}
+
+/** Thread 键归并(spec):对局按 gameId,周报按 weekId,发布按 materialId,pet 触发按 commandId。 */
+function threadOf(trigger: AgentTrigger): AgentThread {
+  if (trigger.kind === "game-ended") {
+    return { kind: "gameId", key: typeof trigger.data.gameId === "string" ? trigger.data.gameId : "" };
+  }
+  if (trigger.kind === "research-due") {
+    return { kind: "weekId", key: typeof trigger.data.weekId === "string" ? trigger.data.weekId : "" };
+  }
+  if (trigger.kind === "cards-published") {
+    return { kind: "materialId", key: typeof trigger.data.materialId === "string" ? trigger.data.materialId : "" };
+  }
+  return { kind: "commandId", key: trigger.id };
 }
 
 /** spec 的五个触发来源;输入校验在进链路之前完成。 */
 const SOURCES: AgentTrigger["source"][] = ["table", "materials", "research", "pet", "system"];
 
-/** 触发类型白名单:pet 命令 + 对局结束事件 + 拖入文件 + 待审批注(工单 07)+ 模型报错(工单 10)。 */
-const TRIGGER_KINDS: AgentTrigger["kind"][] = ["command", "game-ended", "dropped", "annotate", "model-error"];
+/** 触发类型白名单:pet 命令/对话 + 对局结束事件 + 拖入文件 + 待审批注(工单 07)+ 模型报错(工单 10)+ 周报到期/策略卡发布(工单 11)。 */
+const TRIGGER_KINDS: AgentTrigger["kind"][] = [
+  "command",
+  "game-ended",
+  "dropped",
+  "annotate",
+  "model-error",
+  "chat",
+  "research-due",
+  "cards-published",
+];
 
 /** 拖入文件的类型白名单(工单 07):录音 / 生客画像 JSON / 角色卡。 */
 const FILE_KINDS: unknown[] = ["audio", "persona", "role"];

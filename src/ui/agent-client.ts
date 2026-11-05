@@ -106,17 +106,21 @@ export function createAgentClient(deps: AgentClientDeps = {}): AgentClient {
       const Source = deps.EventSource ?? globalThis.EventSource;
       if (!Source) return () => undefined;
       const source = new Source(`${baseUrl}/api/agent/events`);
-      // 服务端事件格式(server/app-server.ts):event: report|channel,data: {report}|{channel}。
+      // 服务端事件格式(server/app-server.ts):event: report|channel|delta,
+      // data: {report}|{channel}|{delta:{ticketId,text}}(delta 为工单 11 流式对话增量)。
       const dispatch = (event: MessageEvent): void => {
         const payload = JSON.parse((event.data ?? "{}") as string) as {
           report?: Extract<AgentEvent, { type: "report" }>["report"];
           channel?: Extract<AgentEvent, { type: "channel" }>["channel"];
+          delta?: { ticketId: string; text: string };
         };
         if (payload.report) listener({ type: "report", report: payload.report });
         if (payload.channel) listener({ type: "channel", channel: payload.channel });
+        if (payload.delta) listener({ type: "delta", ...payload.delta });
       };
       source.addEventListener("report", dispatch);
       source.addEventListener("channel", dispatch);
+      source.addEventListener("delta", dispatch);
       return () => source.close();
     },
   };

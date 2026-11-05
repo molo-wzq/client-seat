@@ -10,9 +10,19 @@ export type AgentSource = "table" | "materials" | "research" | "pet" | "system";
 /**
  * 触发类型:同一来源下的事件类别——pet 命令条为 "command",对局结束为 "game-ended"(工单 06),
  * 拖文件到桌宠为 "dropped"(data:{fileName,fileKind}),待审批注为 "annotate"(data:{ticketId,note})(工单 07),
- * 模型报错为 "model-error"(工单 10 补上类型,R5 规则自此可命中;data:{error} 可选)。
+ * 模型报错为 "model-error"(工单 10 补上类型,R5 规则自此可命中;data:{error} 可选),
+ * 桌宠对话为 "chat"(工单 11;data:{text,history,view,hidden},见下),
+ * 周报到期为 "research-due"(工单 11;data:{weekId}),策略卡发布为 "cards-published"(工单 11;data:{materialId,cardIds})。
  */
-export type AgentTriggerKind = "command" | "game-ended" | "dropped" | "annotate" | "model-error";
+export type AgentTriggerKind =
+  | "command"
+  | "game-ended"
+  | "dropped"
+  | "annotate"
+  | "model-error"
+  | "chat"
+  | "research-due"
+  | "cards-published";
 
 /** 触发:一次可感知的事件或命令,进入链路的唯一输入。 */
 export interface AgentTrigger {
@@ -99,6 +109,12 @@ export interface AgentTicket {
 export type ReportStatus = "progress" | "waiting" | "ready" | "blocked" | "failed" | "dropped";
 
 /**
+ * 桌宠表情(工单 11):模型回复按约定带 [wave|think|cheer|sleepy|pout] 前缀,
+ * Worker 剥离后落成结构化字段,前端据此切表情,不进正文。
+ */
+export type PetEmotion = "wave" | "think" | "cheer" | "sleepy" | "pout";
+
+/**
  * 工单视图(tickets() 的产物):一张工单折叠到最新一条 Report 后的样子。
  * 还没有 Report 的工单视为刚领走(进展、空文案),UI 自行给占位。
  */
@@ -119,6 +135,16 @@ export interface AgentReport {
    * 目前是复盘一句话;结算页插槽据此渲染轮次与策略卡。
    */
   basis?: PostgameBasis;
+  /**
+   * 桌宠表情(工单 11):对话 Worker 剥离模型回复的表情前缀后携带;
+   * 其余 Worker 缺省。隐藏牌原文永不进 Report 任何字段(工单 11 隔离测试钉住)。
+   */
+  emotion?: PetEmotion;
+  /**
+   * 快捷动作建议(工单 11):对话 Worker 从玩家话里识别出的命令意图,
+   * 转成快捷环同名按钮文案由前端渲染;只是建议,不直接执行。
+   */
+  quickActions?: string[];
 }
 
 /** 复盘一句话的依据(spec 故事 7「展开」):第几轮 + 该轮用的策略卡。 */
@@ -139,10 +165,12 @@ export interface AgentChannel {
   text: string;
 }
 
-/** 对外事件(subscribe 送达):Report 与 Channel,前端只读这两类。 */
+/** 对外事件(subscribe 送达):Report 与 Channel;对话 Worker 另发流式 delta(工单 11)。 */
 export type AgentEvent =
   | { type: "report"; report: AgentReport }
-  | { type: "channel"; channel: AgentChannel };
+  | { type: "channel"; channel: AgentChannel }
+  /** 流式增量(工单 11):正文片段,已剥表情前缀;只走事件不落账,结束时另有 ready Report。 */
+  | { type: "delta"; ticketId: string; text: string };
 
 /** 账本条目公共部分:seq/at 由存储在追加时分配,账本只追加、不可改写。 */
 interface LedgerRecord {

@@ -158,4 +158,23 @@ describe("agent 客户端 onEvent", () => {
     unsubscribe();
     expect(source.closed).toBe(true);
   });
+
+  it("delta SSE 事件(工单 11 流式对话)翻译给监听者:ticketId + 文本片段", () => {
+    FakeEventSource.instances = [];
+    const client = createAgentClient({ EventSource: FakeEventSource as unknown as typeof EventSource });
+    const events: unknown[] = [];
+
+    const unsubscribe = client.onEvent((event) => events.push(event));
+    const source = FakeEventSource.instances[0];
+
+    source.emit("delta", { delta: { ticketId: "t1", text: "来了来" } });
+    source.emit("delta", { delta: { ticketId: "t1", text: "了，我听着呢。" } });
+    expect(events).toEqual([
+      { type: "delta", ticketId: "t1", text: "来了来" },
+      { type: "delta", ticketId: "t1", text: "了，我听着呢。" },
+    ]);
+
+    unsubscribe();
+    expect(source.closed).toBe(true);
+  });
 });

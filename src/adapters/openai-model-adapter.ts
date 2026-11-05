@@ -183,6 +183,19 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
   }
 
   /**
+   * 通用流式补全(工单 11:桌宠 Agent 的模型端口):复用同一条 OpenAI 兼容
+   * SSE 链路,但不带经理话术的首部清洗、称谓剥除与元数据裁判——调用方
+   * (server/agent/workers.ts)自行处理表情前缀等协议。
+   */
+  async completeStream(
+    messages: Array<{ role: string; content: string }>,
+    onDelta?: (delta: string) => void,
+  ): Promise<string> {
+    const { content } = await this.chatStream(messages, onDelta);
+    return content;
+  }
+
+  /**
    * 流式话术调用:stream=true 读 SSE,reasoning_content 增量只累计不回调
    * (思维链绝不能当话术播出),content 增量逐段交给 onReplyDelta。
    */
