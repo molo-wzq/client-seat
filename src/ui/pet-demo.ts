@@ -11,8 +11,8 @@ import type { PetExpression } from "./DeskPet";
 /** 演示舞台场景:控制条旁的小舞台显示什么(隐藏牌/结算由真实组件渲染)。 */
 export type DemoScene = "table" | "hidden-cards" | "settle" | "none";
 
-/** 舞台外焦点:让 App 打开桌宠的哪个面板(对话面板/工单列表/待办面板)。 */
-export type DemoFocusPanel = "chat" | "tickets" | "inbox" | "none";
+/** 舞台外焦点:让 App 经命令接口定位桌宠面板——对话面板 / 对话流待拍板卡 / 工作日志(工单 15)。 */
+export type DemoFocusPanel = "chat" | "todo" | "log" | "none";
 
 /**
  * 一步内要执行的动作(数据,不是函数):控制条按 kind 解释——
@@ -154,27 +154,27 @@ export const DEMO_STEPS: readonly DemoStep[] = [
     { kind: "pet", expression: "cheer" },
     { kind: "trigger", input: demoGameEndedInput() },
   ] },
-  // ⑤ 命令条一句话并行开 3 张工单
-  { act: 5, note: "第⑤幕·一句话并行:三张工单同时开工(工单列表已打开)", holdMs: 3000, actions: [
-    { kind: "focus", panel: "tickets" },
+  // ⑤ 一句话并行开 3 张工单(面板对话已是主入口,推进看工作日志)
+  { act: 5, note: "第⑤幕·一句话并行:三张工单同时开工(工作日志已展开)", holdMs: 3000, actions: [
+    { kind: "focus", panel: "log" },
     { kind: "scene", scene: "none" },
     { kind: "command", text: "并行：整理王姐素材要点" },
     { kind: "command", text: "并行：提炼上局复盘" },
     { kind: "command", text: "并行：总结本周投研" },
   ] },
-  { act: 5, note: "三条线在工单列表里同时推进,桌宠照常回话", holdMs: 2600, actions: [] },
+  { act: 5, note: "三条线在工作日志里同时推进,桌宠照常回话", holdMs: 2600, actions: [] },
   // ⑥ 拖入素材→待审→批注续改
   { act: 6, note: "第⑥幕·拖给它:一段录音拖到桌宠身上,转写→分析→起草", holdMs: 3000, actions: [
     { kind: "trigger", input: { source: "materials", kind: "dropped", data: { fileName: "王姐通话.mp3", fileKind: "audio" } } },
   ] },
   { act: 6, note: "草稿进待审、角标亮了;写句批注,原工单接着改", holdMs: 3000, actions: [
-    { kind: "focus", panel: "inbox" },
+    { kind: "focus", panel: "todo" },
     { kind: "annotate-last-drop", note: "开头一句改得口语一点" },
   ] },
   // ⑦ 放权模式 + 评估记录 + Watchdog 标受阻(开场一直是 auto,这里先切观察做对比)
   { act: 7, note: "第⑦幕·放权:先切到「观察」——只记录,不动手", holdMs: 2400, actions: [
     { kind: "policy", mode: "observe" },
-    { kind: "focus", panel: "inbox" },
+    { kind: "focus", panel: "log" },
   ] },
   { act: 7, note: "评估记录留痕:本来会做什么、为什么;自动时都干了,观察只记着", holdMs: 2600, actions: [] },
   { act: 7, note: "切回「自动」,该干的接着替你干", holdMs: 2400, actions: [

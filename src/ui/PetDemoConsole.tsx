@@ -37,6 +37,7 @@ interface DemoMove {
 interface DemoIO {
   agent: AgentClient;
   onPetExpression?: (expression: PetExpression | null) => void;
+  /** 演示请 App 定位桌宠面板(工单 15:对话面板/对话流待拍板卡/工作日志)。 */
   onFocusPanel?: (panel: DemoFocusPanel) => void;
   /** 对话代发(工单 12):让 App 请桌宠在对话面板替玩家发一句。 */
   onChat?: (text: string) => void;

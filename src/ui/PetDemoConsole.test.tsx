@@ -163,7 +163,7 @@ describe("演示控制条(工单 10)", () => {
     expect(screen.getByRole("region", { name: "演示舞台" })).toHaveTextContent("先接住话头再往下谈，这招值得学");
   });
 
-  it("第⑤幕:三张并行命令同时发出,并请 App 打开工单列表", async () => {
+  it("第⑤幕:三张并行命令同时发出,并请 App 展开工作日志看推进", async () => {
     const agent = fakeAgent();
     const onFocusPanel = vi.fn();
     render(<PetDemoConsole agent={agent} onFocusPanel={onFocusPanel} />);
@@ -173,7 +173,7 @@ describe("演示控制条(工单 10)", () => {
     expect(agent.sendCommand).toHaveBeenCalledWith("并行：整理王姐素材要点");
     expect(agent.sendCommand).toHaveBeenCalledWith("并行：提炼上局复盘");
     expect(agent.sendCommand).toHaveBeenCalledWith("并行：总结本周投研");
-    expect(onFocusPanel).toHaveBeenCalledWith("tickets");
+    expect(onFocusPanel).toHaveBeenCalledWith("log");
   });
 
   it("第⑥幕:拖入录音发 dropped 触发,批注带着真实工单号唤醒原工单", async () => {
@@ -194,22 +194,25 @@ describe("演示控制条(工单 10)", () => {
       kind: "annotate",
       data: { ticketId: "t-drop", note: "开头一句改得口语一点" },
     });
-    expect(onFocusPanel).toHaveBeenCalledWith("inbox");
+    // 待审草稿改为定位对话流里的待拍板卡(工单 15)。
+    expect(onFocusPanel).toHaveBeenCalledWith("todo");
   });
 
   it("开场即切自动放权;第⑦幕先观察再切回自动,每次切换上报同步信号", async () => {
     const agent = fakeAgent();
     const onPolicyChange = vi.fn();
-    render(<PetDemoConsole agent={agent} onPolicyChange={onPolicyChange} />);
+    const onFocusPanel = vi.fn();
+    render(<PetDemoConsole agent={agent} onPolicyChange={onPolicyChange} onFocusPanel={onFocusPanel} />);
 
     // 第①幕第一步挂载即执行:放权切「自动」,后面的复盘/起草才真的执行。
     expect(agent.setAcceptMode).toHaveBeenCalledWith("auto");
     await act(async () => {});
     expect(onPolicyChange).toHaveBeenCalledWith("auto");
 
-    // 第⑦幕:先切「观察」(只记录不动手),再切回「自动」。
+    // 第⑦幕:先切「观察」(只记录不动手),再切回「自动」;评估记录聚焦到工作日志。
     await stepTo(POLICY_OBSERVE_INDEX);
     expect(agent.setAcceptMode).toHaveBeenCalledWith("observe");
+    expect(onFocusPanel).toHaveBeenCalledWith("log");
     await stepForward(POLICY_AUTO_INDEX - POLICY_OBSERVE_INDEX);
     expect(agent.setAcceptMode).toHaveBeenLastCalledWith("auto");
     expect(onPolicyChange).toHaveBeenLastCalledWith("auto");

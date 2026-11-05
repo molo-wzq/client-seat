@@ -397,7 +397,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
         )}
       </main>
       {/* 一键演示控制条(工单 10):右上角,按脚本驱动 7 幕;桌宠表情与面板由演示经命令接口接管。
-          焦点语义(工单 15):chat 开面板;tickets 展开工作日志;inbox 定位最早待拍板卡;none 收起。 */}
+          焦点语义(工单 15):chat 开对话面板;todo 定位最早待拍板卡;log 展开工作日志;none 收起。 */}
       {demoOpen && (
         <PetDemoConsole
           agent={agent}
@@ -407,7 +407,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
             if (!pet) return;
             if (panel === "none") pet.closePanel();
             else if (panel === "chat") pet.openPanel();
-            else pet.openPanel({ locate: panel === "tickets" ? "log" : "todo" });
+            else pet.openPanel({ locate: panel });
           }}
           onChat={(text) => petRef.current?.sendAsUser(text)}
           onPolicyChange={() => petRef.current?.refreshPolicy()}
