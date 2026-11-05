@@ -137,6 +137,18 @@ export function useChatSession({
     settle(report.ticketId, report);
   }
 
+  /** 拖入的文件进对话(工单 15):一个文件一条附件消息,与 dropped 触发并行。 */
+  function attachFiles(names: string[]): void {
+    if (names.length === 0) return;
+    setMessages((prev) => {
+      let next = prev;
+      for (const name of names) {
+        next = appendCapped(next, { key: nextMessageKey(), speaker: "player", text: `📎 ${name}` });
+      }
+      return next;
+    });
+  }
+
   /** 面板开合同步(用户或演示):打开清红点。 */
   function markVisible(open: boolean): void {
     panelVisibleRef.current = open;
@@ -182,6 +194,7 @@ export function useChatSession({
     annotating,
     send,
     sendQuickAction: (action: QuickRingAction) => send(action, action),
+    attachFiles,
     applyEvent,
     markVisible,
     resetEmotion,

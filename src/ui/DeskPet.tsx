@@ -346,7 +346,10 @@ export function DeskPet({
       onDrop={(e) => {
         e.preventDefault();
         setDropHover(false);
-        agentView.sendDroppedFiles(e.dataTransfer?.files ?? []);
+        const files = Array.from(e.dataTransfer?.files ?? []);
+        agentView.sendDroppedFiles(files);
+        // 文件同时作为附件消息进对话(工单 15):看得见「给了它什么」。
+        session.attachFiles(files.map((file) => file.name));
       }}
     >
       <div className="desk-pet-avatar-wrap">

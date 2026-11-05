@@ -821,6 +821,29 @@ describe("拖给它:素材入草稿(工单 07)", () => {
       });
     }
   });
+
+  it("拖入的文件同时作为附件消息进对话流:一个文件一条(工单 15)", () => {
+    const agent = fakeAgent();
+    render(<DeskPet agent={agent} />);
+    openPanelByHotkey();
+    const pet = screen.getByRole("complementary", { name: "桌宠" });
+    const files = [
+      new File(["(音频)"], "王姐通话.mp3", { type: "audio/mpeg" }),
+      new File(["{}"], "李姐画像.json", { type: "application/json" }),
+    ];
+
+    fireEvent.drop(pet, { dataTransfer: { files } });
+
+    const list = within(screen.getByRole("log", { name: "对话记录" }));
+    expect(list.getByText("📎 王姐通话.mp3")).toBeInTheDocument();
+    expect(list.getByText("📎 李姐画像.json")).toBeInTheDocument();
+    // 触发照发(素材入草稿链路不变)。
+    expect(agent.sendTrigger).toHaveBeenCalledWith({
+      source: "materials",
+      kind: "dropped",
+      data: { fileName: "王姐通话.mp3", fileKind: "audio" },
+    });
+  });
 });
 
 describe("命令接口:App 驱动桌宠(工单 15)", () => {
