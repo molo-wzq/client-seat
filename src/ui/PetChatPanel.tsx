@@ -1,40 +1,83 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { DEMO_COMMAND, QUICK_RING } from "./pet-reactions";
+import { QUICK_RING } from "./pet-reactions";
 import type { PetChatMessage } from "./chat-history";
+import type { AcceptMode, AgentPolicy, AgentTicketView } from "../shared/agent-contract";
+import type { WorkLogItem } from "./agent-trace";
+import { AgentStatusBar } from "./AgentStatusBar";
+import { WorkLog } from "./WorkLog";
+import { PetMenu } from "./PetMenu";
+import { TicketCard } from "./TicketCard";
+import type { PetVariant } from "./DeskPet";
 
 /** 消息形状迁去纯模块(工单 15),这里转发导出兼容既有引用。 */
 export type { PetChatMessage } from "./chat-history";
 
 /**
- * 桌宠对话面板(工单 12 起,工单 15 通话中解锁):卡纸底、黄铜描边,
- * 顶部快捷芯片(原快捷环收进来),中间消息记录,底部 Enter 发送的多行输入。
- * 面板只管渲染与输入,消息状态、流式拼接与表情都在 DeskPet。
- * 桌宠站在客户一侧(工单 15):通话中照样能跟它打字,消息不进经理上下文——
- * 面板不再感知 inCall,出口只有 onSubmit 一条。
+ * 桌宠唯一面板(工单 15):以对话为主体——顶部 Agent 状态条(两档放权、点开工作日志),
+ * 右上「⋯」菜单(切换男女/勿扰/观察档),中间消息流(待拍板卡插进来),底部输入。
+ * 待拍板卡被「改一改」选中时,输入框上方出现引用条,发出的话就是该工单的批注。
+ * 面板只管渲染与输入;消息状态、流式拼接与表情在 useChatSession,互动感在 usePetMood。
+ * 通话中照样能聊(工单 15:桌宠站客户一侧,消息不进经理上下文)。
  */
 export function PetChatPanel({
   messages,
   awaitingReply,
+  tickets,
+  annotating,
+  policy,
+  runningCount,
+  variant,
+  menuOpen,
+  logOpen,
+  workLog,
   onSend,
   onClose,
   onClear,
   onQuickAction,
-  onOpenDemo,
+  onApprove,
+  onReject,
+  onRevise,
+  onSetMode,
+  onToggleMenu,
+  onSwitchVariant,
+  onDnd,
+  onToggleLog,
 }: {
-  /** 对话记录(最近 50 条由 DeskPet 截断持久化)。 */
+  /** 对话记录(最近 50 条由 useChatSession 截断持久化)。 */
   messages: PetChatMessage[];
   /** 已发出还没见到回音:显示「…」打字指示。 */
   awaitingReply: boolean;
+  /** waiting/blocked 工单:以待拍板卡/只读卡插进对话流(工单 15)。 */
+  tickets: AgentTicketView[];
+  /** 引用态的工单号:输入框上方显示引用条,发的话就是批注。 */
+  annotating: string | null;
+  policy: AgentPolicy | null;
+  /** 进行中工单数(状态条「在跑 N 件事」)。 */
+  runningCount: number;
+  variant: PetVariant;
+  menuOpen: boolean;
+  logOpen: boolean;
+  workLog: WorkLogItem[];
   onSend: (text: string) => void;
   onClose: () => void;
   onClear: () => void;
   /** 快捷芯片与回复建议共用出口:发命令 + 跳转。 */
   onQuickAction: (label: string) => void;
-  onOpenDemo: () => void;
+  onApprove: (ticketId: string) => void;
+  onReject: (ticketId: string) => void;
+  onRevise: (ticketId: string) => void;
+  /** 放权出口(两档 off/auto 走状态条,observe 走 ⋯ 菜单)。 */
+  onSetMode: (mode: AcceptMode) => void;
+  onToggleMenu: () => void;
+  onSwitchVariant: () => void;
+  onDnd: () => void;
+  onToggleLog: () => void;
 }) {
   const [draft, setDraft] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  /** 引用条对应的草稿文案,展示「正在改哪一版」。 */
+  const quotingTicket = tickets.find((ticket) => ticket.ticketId === annotating) ?? null;
 
   // 打开即聚焦,直接打字(工单 12:单击头像优先进入对话)。
   useEffect(() => {
@@ -45,37 +88,45 @@ export function PetChatPanel({
   useEffect(() => {
     const list = listRef.current;
     if (list) list.scrollTop = list.scrollHeight;
-  }, [messages, awaitingReply]);
+  }, [messages, awaitingReply, tickets]);
 
   function submit() {
     const text = draft.trim();
     if (!text) return;
-    if (text === DEMO_COMMAND) {
-      // 「演示」是给汇报人的入口(工单 10),不作为对话发给 Agent。
-      onOpenDemo();
-      setDraft("");
-      return;
-    }
     onSend(text);
     setDraft("");
   }
 
-  function onKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
-    // 中文输入法组字期(审查 B2):Chrome 派发 isComposing=true 的 keydown,
-    // 老版本以 keyCode 229 标识——一律放行给输入法,回车不发送、Esc 不关面板。
+  /** Esc 挂在面板根上(审查 S7):焦点在芯片、按钮上也能关;组字期放行给输入法(审查 B2)。 */
+  function onRootKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key !== "Escape") return;
+    if (e.nativeEvent.isComposing || e.keyCode === 229) return;
+    onClose();
+  }
+
+  /** 输入框的按键:Enter 发送、Shift+Enter 换行;组字期放行(审查 B2)。 */
+  function onInputKeyDown(e: KeyboardEvent<HTMLTextAreaElement>) {
     if (e.nativeEvent.isComposing || e.keyCode === 229) return;
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault(); // Enter 发送,Shift+Enter 留给换行
       submit();
-    } else if (e.key === "Escape") {
-      onClose();
     }
   }
 
   return (
-    <div className="desk-pet-chat" role="region" aria-label="对话面板">
+    // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- 对话面板要能 Esc 收起(审查 S7)
+    <div className="desk-pet-chat" role="region" aria-label="对话面板" onKeyDown={onRootKeyDown}>
       <div className="desk-pet-chat-head">
         <span className="desk-pet-chat-title">跟桌宠聊</span>
+        <button
+          type="button"
+          className="desk-pet-chat-menu-toggle"
+          aria-label="更多设置"
+          aria-expanded={menuOpen || undefined}
+          onClick={onToggleMenu}
+        >
+          ⋯
+        </button>
         <button type="button" className="desk-pet-chat-clear" aria-label="清空对话" onClick={onClear}>
           清空
         </button>
@@ -83,18 +134,31 @@ export function PetChatPanel({
           ×
         </button>
       </div>
-      <div className="desk-pet-chat-chips" role="group" aria-label="快捷芯片">
-        {QUICK_RING.map((label) => (
-          <button key={label} type="button" className="desk-pet-chip" onClick={() => onQuickAction(label)}>
-            {label}
-          </button>
-        ))}
-      </div>
+      {menuOpen && (
+        <PetMenu
+          variant={variant}
+          policy={policy}
+          onSwitchVariant={onSwitchVariant}
+          onDnd={onDnd}
+          onSetMode={onSetMode}
+        />
+      )}
+      <AgentStatusBar
+        awaitingReply={awaitingReply}
+        runningCount={runningCount}
+        policy={policy}
+        onSetMode={onSetMode}
+        onToggleLog={onToggleLog}
+        logOpen={logOpen}
+      />
+      {logOpen && <WorkLog items={workLog} />}
       <div className="desk-pet-chat-list" ref={listRef} role="log" aria-label="对话记录">
-        {messages.length === 0 && !awaitingReply && <p className="desk-pet-chat-empty">点头像或按 Ctrl+K,随时叫我。</p>}
+        {messages.length === 0 && !awaitingReply && tickets.length === 0 && (
+          <p className="desk-pet-chat-empty">点头像或按 Ctrl+K,随时叫我。</p>
+        )}
         {messages.map((message) => (
           <div className="desk-pet-chat-msg" data-speaker={message.speaker} key={message.key}>
-            <p className="desk-pet-chat-bubble" data-streaming={message.streaming || undefined}>
+            <p className="desk-pet-chat-bubble" data-streaming={message.streaming || undefined} aria-busy={message.streaming || undefined}>
               {message.text}
             </p>
             {message.quickActions?.map((label) => (
@@ -104,13 +168,39 @@ export function PetChatPanel({
             ))}
           </div>
         ))}
-        {awaitingReply && (
+        {tickets.map((ticket) => (
+          <TicketCard
+            key={ticket.ticketId}
+            ticket={ticket}
+            onApprove={onApprove}
+            onReject={onReject}
+            onRevise={onRevise}
+            quoting={ticket.ticketId === annotating}
+          />
+        ))}
+        {awaitingReply && !messages.some((message) => message.streaming) && (
           <div className="desk-pet-chat-msg" data-speaker="pet">
-            <p className="desk-pet-chat-bubble desk-pet-typing" aria-label="正在输入">
+            <p className="desk-pet-chat-bubble desk-pet-typing" role="status" aria-label="正在输入">
               …
             </p>
           </div>
         )}
+      </div>
+      {quotingTicket && (
+        <div className="desk-pet-quote" role="status">
+          <span className="desk-pet-quote-label">批注</span>
+          <span className="desk-pet-quote-text">{quotingTicket.text || "这张待拍板的草稿"}</span>
+          <button type="button" aria-label="取消批注" onClick={() => onRevise(quotingTicket.ticketId)}>
+            ×
+          </button>
+        </div>
+      )}
+      <div className="desk-pet-chat-chips" role="group" aria-label="快捷芯片">
+        {QUICK_RING.map((label) => (
+          <button key={label} type="button" className="desk-pet-chip" onClick={() => onQuickAction(label)}>
+            {label}
+          </button>
+        ))}
       </div>
       <form
         className="desk-pet-chat-input"
@@ -123,14 +213,14 @@ export function PetChatPanel({
           ref={inputRef}
           aria-label="对话输入"
           rows={2}
-          placeholder="跟桌宠说点什么…(Enter 发送)"
+          placeholder={quotingTicket ? "说一句,这条工单就按它改" : "跟桌宠说点什么…(Enter 发送)"}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={onKeyDown}
+          onKeyDown={onInputKeyDown}
         />
         <div className="desk-pet-chat-input-actions">
           <button type="submit" className="desk-pet-chat-send">
-            发送
+            {quotingTicket ? "发批注" : "发送"}
           </button>
           {/* 按住说话(ASR)本工单只留占位:语音识别后续接入,先不实现。 */}
           <button type="button" className="desk-pet-hold-speak" disabled title="按住说话(语音识别后续接入)">

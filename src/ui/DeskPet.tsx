@@ -1,37 +1,15 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
 import { reducedMotion } from "./game-feel";
 import { createAgentClient, type AgentClient } from "./agent-client";
 import { PetChatPanel } from "./PetChatPanel";
-import { loadChatHistory, serializeChat, type PetChatMessage } from "./chat-history";
-import { appendCapped, applyChatReport as reportToMessages, mergeDelta } from "./chat-stream";
-import {
-  IDLE_SLEEP_MS,
-  REACTION_HOLD_MS,
-  pokeLine,
-  reactionExpression,
-  resolveExpression,
-  type PetReactionEvent,
-  type QuickRingAction,
-} from "./pet-reactions";
-import type {
-  AcceptMode,
-  AgentEvalRecord,
-  AgentPolicy,
-  AgentReport,
-  AgentTicketView,
-  PetEmotion,
-  ReportStatus,
-} from "../shared/agent-contract";
-import fCheer from "../assets/desk-pet/f-cheer.webp";
-import fPout from "../assets/desk-pet/f-pout.webp";
-import fSleepy from "../assets/desk-pet/f-sleepy.webp";
-import fThink from "../assets/desk-pet/f-think.webp";
-import fWave from "../assets/desk-pet/f-wave.webp";
-import mCheer from "../assets/desk-pet/m-cheer.webp";
-import mPout from "../assets/desk-pet/m-pout.webp";
-import mSleepy from "../assets/desk-pet/m-sleepy.webp";
-import mThink from "../assets/desk-pet/m-think.webp";
-import mWave from "../assets/desk-pet/m-wave.webp";
+import { resolveExpression, type PetReactionEvent, type QuickRingAction } from "./pet-reactions";
+import { expressionLabel, petImg, variantLabel } from "./pet-assets";
+import { useChatSession } from "./use-chat-session";
+import { usePetMood } from "./use-pet-mood";
+import { usePetPosition } from "./use-pet-position";
+import { useAgentView } from "./use-agent-view";
+import { mergeWorkLog } from "./agent-trace";
+import type { PetEmotion } from "../shared/agent-contract";
 import "./desk-pet.css";
 
 /** 桌宠版式:女版 / 男版。 */
@@ -43,124 +21,42 @@ export type PetVariant = "f" | "m";
  */
 export type PetExpression = PetEmotion;
 
-/** 快捷芯片动作(工单 10→12):面板芯片与回复建议共用,App 按动作决定去哪个视图。 */
+/** 快捷芯片动作(工单 10→15):面板芯片与回复建议共用,App 按动作决定去哪个视图。 */
 export type { QuickRingAction, PetReactionEvent } from "./pet-reactions";
 
-type PetPos = { left: number; top: number };
+/**
+ * App 驱动桌宠的窄接口(工单 15):命令接口取代 nonce/计数器式 props,
+ * App 只发命令,不再知道桌宠内部状态的名字。
+ */
+export interface DeskPetHandle {
+  /** 打开面板;locate 指定到位点——todo 滚到最早一张待拍板卡,log 展开工作日志。 */
+  openPanel(options?: { locate?: "todo" | "log" }): void;
+  closePanel(): void;
+  /** 演示代发一句对话(工单 15):如同玩家亲手输入,不写面板开合。 */
+  sendAsUser(text: string): void;
+  /** 事件反应:翻牌/举牌/挂断换表情(短时)。 */
+  react(event: PetReactionEvent): void;
+  /** 放权被外部(演示脚本)切过:开着的面板重拉,开关立即同步。 */
+  refreshPolicy(): void;
+}
 
 const VARIANT_KEY = "desk-pet-variant";
-const POS_KEY = "desk-pet-pos";
-/** 对话历史(工单 12):本地存最近 50 条,可清空。 */
-const CHAT_KEY = "desk-pet-chat";
-/** 进模型的对话历史轮数(spec:history 最近 N 轮;一轮 = 玩家 + 桌宠各一句)。 */
-const CHAT_HISTORY_MESSAGES = 16;
-
-/** 工单状态徽标文案(spec 故事 10:进展、等待、就绪、受阻、失败;放弃补全)。 */
-const STATUS_LABEL: Record<ReportStatus, string> = {
-  progress: "进展",
-  waiting: "等待",
-  ready: "就绪",
-  blocked: "受阻",
-  failed: "失败",
-  dropped: "已放弃",
-};
-
-/** 刚领走还没汇报的工单给的占位文案。 */
-const NO_REPORT_TEXT = "刚领走，还没汇报";
-
-/** 放权模式三段开关(工单 08):off 关 / observe 观察 / auto 自动,文案与按钮一一对应。 */
-const ACCEPT_MODE_OPTIONS: ReadonlyArray<{ mode: AcceptMode; label: string }> = [
-  { mode: "off", label: "关" },
-  { mode: "observe", label: "观察" },
-  { mode: "auto", label: "自动" },
-];
-
-/** 评估记录的处置标签:observe 只记录未执行,auto 已立项执行。 */
-const EVAL_OUTCOME_LABEL: Record<AgentEvalRecord["outcome"], string> = {
-  observed: "只记录",
-  executed: "已执行",
-};
-
-/** 评估记录时间只显时分(账本 at 是 ISO 串,按本地时区取 HH:MM)。 */
-function formatEvalTime(at: string): string {
-  const date = new Date(at);
-  const pad = (value: number) => String(value).padStart(2, "0");
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-/** 拖入文件的类型(demo,工单 07):按 MIME 与文件名推断——音频 / 生客画像 / 角色卡。 */
-function inferFileKind(file: { name: string; type: string }): "audio" | "persona" | "role" {
-  if (file.type.startsWith("audio/")) return "audio";
-  return /角色|role/i.test(file.name) ? "role" : "persona";
-}
-
-/**
- * 一条 Report 落到工单视图上:按工单号原位更新,没有则追加(与 foldTickets 同一规则)。
- * UI 只读账本视图:report 事件到达即刷新,SSE 断流时以 tickets() 拉取为底。
- */
-function upsertTicket(prev: AgentTicketView[], report: AgentReport): AgentTicketView[] {
-  const next: AgentTicketView = { ticketId: report.ticketId, status: report.status, text: report.text };
-  return prev.some((ticket) => ticket.ticketId === report.ticketId)
-    ? prev.map((ticket) => (ticket.ticketId === report.ticketId ? next : ticket))
-    : [...prev, next];
-}
-
-/** 桌宠气泡硬上限 40 字(spec):服务端已截一道,前端展示再兜底。 */
-function clampBubble(text: string): string {
-  return [...text].slice(0, 40).join("");
-}
-
-/** 本地对话历史(工单 15):读盘包 try(存储被禁用不崩,审查 R10),校验截断在纯模块。 */
-function loadChat(): PetChatMessage[] {
-  try {
-    return loadChatHistory(window.localStorage.getItem(CHAT_KEY));
-  } catch {
-    return [];
-  }
-}
-
-/** 缺省 agent 客户端:浏览器全局 fetch/EventSource;测试注入假实现。 */
 const defaultAgent = createAgentClient();
 
-const petImg: Record<PetVariant, Record<PetExpression, string>> = {
-  f: { wave: fWave, think: fThink, cheer: fCheer, sleepy: fSleepy, pout: fPout },
-  m: { wave: mWave, think: mThink, cheer: mCheer, sleepy: mSleepy, pout: mPout },
-};
-const variantLabel: Record<PetVariant, string> = { f: "女版", m: "男版" };
-const expressionLabel: Record<PetExpression, string> = {
-  wave: "挥手笑",
-  think: "拿笔想",
-  cheer: "欢呼",
-  sleepy: "打瞌睡",
-  pout: "鼓腮",
-};
-
-function loadPos(): PetPos | null {
+function loadVariant(): PetVariant {
   try {
-    const raw = window.localStorage.getItem(POS_KEY);
-    if (!raw) return null;
-    const parsed = JSON.parse(raw) as PetPos;
-    return typeof parsed.left === "number" && typeof parsed.top === "number" ? parsed : null;
+    return window.localStorage.getItem(VARIANT_KEY) === "m" ? "m" : "f";
   } catch {
-    return null;
-  }
-}
-
-function savePos(pos: PetPos) {
-  try {
-    window.localStorage.setItem(POS_KEY, JSON.stringify(pos));
-  } catch {
-    // 隐私模式写不进就算了,本次会话内拖动仍生效。
+    return "f"; // 存储被禁用也不崩(审查 R10)
   }
 }
 
 /**
- * 桌宠在牌桌一角陪客户看局(工单 01 外壳 + 工单 12 互动):
- * 单击头像优先进入对话(快捷环收进面板顶部成芯片),Ctrl+K 唤同一个面板;
- * 悬停探头、双击戳一下、拖动鼓腮、闲置 3 分钟打瞌睡、事件反应换表情。
- * 不说话评价玩家;通话中照样能聊(工单 15:桌宠站客户一侧,消息不进经理上下文)。
- * 工单 07:文件拖到桌宠上高亮「交给我」,松手交 Worker 起草进待审。
- * 工单 08:待办面板顶部放权模式三段开关(off/observe/auto)与评估记录列表。
+ * 桌宠在牌桌一角陪客户看局(工单 15):只留头像和角标,一个面板以对话为主体——
+ * 顶部 Agent 状态条(两档放权+工作日志),待拍板卡插进对话流,⋯ 菜单收编常驻按钮。
+ * 消息状态在 useChatSession,互动感在 usePetMood,位置在 usePetPosition,
+ * 工单/放权数据在 useAgentView,App 经 DeskPetHandle 发命令。
+ * 通话中照样能聊(桌宠站客户一侧,消息不进经理上下文),但不主动弹面板/气泡。
  */
 export function DeskPet({
   expression = "wave",
@@ -168,13 +64,9 @@ export function DeskPet({
   agent = defaultAgent,
   onQuickAction,
   onOpenDemo,
-  focusPanel = null,
   view,
-  reaction = null,
-  demoChatCue = null,
-  onDemoChatDone,
   demoExpression = null,
-  policySignal = 0
+  ref,
 }: {
   expression?: PetExpression;
   inCall?: boolean;
@@ -183,547 +75,72 @@ export function DeskPet({
   onQuickAction?: (action: QuickRingAction) => void;
   /** 对话输入「演示」时唤出一键演示(工单 10);URL ?demo=pet 同效。 */
   onOpenDemo?: () => void;
-  /** 演示要看的面板(工单 10→12):直接展开工单列表/待办面板/对话面板,演示结束还回去。 */
-  focusPanel?: "tickets" | "inbox" | "chat" | null;
   /** 当前页面名(工单 11 view):进对话上下文,桌宠回话结合所在页。 */
   view?: string;
-  /** 事件反应(工单 12):翻牌/举牌/挂断换表情,待审只晃角标;App 每次传新对象。 */
-  reaction?: PetReactionEvent | null;
-  /** 演示代发一句对话(工单 12):如同玩家亲手输入;面板开合只跟 focusPanel(审查 B1),nonce 保证只发一次。 */
-  demoChatCue?: { nonce: number; text: string } | null;
-  onDemoChatDone?: () => void;
   /** 演示接管的表情(审查 B1):非空时压过一切内部状态;null 表示还回去。 */
   demoExpression?: PetExpression | null;
-  /** 放权被动过的信号(工单 10):演示脚本每切一次放权就 +1,开着的面板据此重拉,开关立即同步。 */
-  policySignal?: number;
+  ref?: Ref<DeskPetHandle>;
 }) {
-  const [variant, setVariant] = useState<PetVariant>(
-    () => (window.localStorage.getItem(VARIANT_KEY) === "m" ? "m" : "f"),
-  );
+  const [variant, setVariant] = useState<PetVariant>(loadVariant);
   const [dnd, setDnd] = useState(false);
-  const [pos, setPos] = useState<PetPos | null>(loadPos);
-  const [dragging, setDragging] = useState(false);
-  const [bubble, setBubble] = useState<string | null>(null);
-  const [tickets, setTickets] = useState<AgentTicketView[]>([]);
-  /** 待审卡的批注草稿(工单 07):按工单号各存一份,发送即清空。 */
-  const [notes, setNotes] = useState<Record<string, string>>({});
   const [dropHover, setDropHover] = useState(false);
-  const [inboxOpen, setInboxOpen] = useState(false);
-  const [listOpen, setListOpen] = useState(false);
-  /** 放权模式与评估记录(工单 08):待办面板打开时拉取,null 表示策略还没到。 */
-  const [policy, setPolicy] = useState<AgentPolicy | null>(null);
-  const [evals, setEvals] = useState<AgentEvalRecord[]>([]);
+  /* 单面板(工单 15):开合、⋯ 菜单、工作日志。 */
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [logOpen, setLogOpen] = useState(false);
   const rootRef = useRef<HTMLElement>(null);
-  // 拖动基线:按下时的指针与桌宠位置,移动按差值换算,jsdom 里 rect 为 0 也能算对差值。
-  const dragRef = useRef<{ startX: number; startY: number; baseLeft: number; baseTop: number } | null>(null);
-  // 按下后是否真的拖动过:拖完松手浏览器仍会补发 click,别让它误开对话面板。
-  const draggedRef = useRef(false);
-
-  /* ---- 对话(工单 12) ---- */
-  const [chatOpen, setChatOpen] = useState(false);
-  /** 事件回调里读最新开合状态,避免订阅 effect 的旧闭包。 */
-  const chatOpenRef = useRef(false);
-  /** 面板此刻可见(用户开着或演示焦点在 chat,审查 B1):气泡/红点据此让位。 */
+  const avatarRef = useRef<HTMLButtonElement>(null);
   const panelOpenRef = useRef(false);
-  const [messages, setMessages] = useState<PetChatMessage[]>(loadChat);
-  /** 上次写盘的串(R1):相同就不写,流式期间不再逐字刷 localStorage。 */
-  const lastChatSavedRef = useRef<string | null>(null);
-  /** 已发出还没见到回音:面板里显示「…」打字指示。 */
-  const [awaitingReply, setAwaitingReply] = useState(false);
-  /** 面板关闭时收到新回复:头像亮红点,打开面板即清。 */
-  const [chatDot, setChatDot] = useState(false);
-  /** 对话期间的表情覆盖:发送→think,回复到达→表情标签;面板收起即还回去。 */
-  const [chatEmotion, setChatEmotion] = useState<PetExpression | null>(null);
-  /** 已认定的对话工单号:发送回执与 delta 都会登记,Report 据此路由进对话。 */
-  const chatTicketsRef = useRef<Set<string>>(new Set());
-  const messageKeyRef = useRef(0);
 
-  /* ---- 互动感(工单 12) ---- */
-  const [pokeCount, setPokeCount] = useState(0);
-  const [pokeExpression, setPokeExpression] = useState<PetExpression | null>(null);
-  const pokeTimerRef = useRef<number | null>(null);
-  const [reactionExpr, setReactionExpr] = useState<PetExpression | null>(null);
-  const [sleepy, setSleepy] = useState(false);
-  const [activityAt, setActivityAt] = useState(() => Date.now());
-  /** 待审到达的节拍:驱动角标重挂载,重放「晃一下」动画。 */
-  const [todoShake, setTodoShake] = useState(0);
-  /** 演示代发只发一次:按 nonce 去重(StrictMode 重放 effect 也不重发)。 */
-  const demoChatSentRef = useRef(-1);
-
-  function nextMessageKey(): string {
-    messageKeyRef.current += 1;
-    return `m${messageKeyRef.current}`;
-  }
-
-  /** 任何与桌宠的互动都算活动:醒来并把闲置计时重置 3 分钟。 */
-  function wake() {
-    setSleepy(false);
-    setActivityAt(Date.now());
-  }
-
-  function openChat() {
-    chatOpenRef.current = true;
-    setChatOpen(true);
-    setChatDot(false);
-    wake();
-  }
-
-  function closeChat() {
-    chatOpenRef.current = false;
-    setChatOpen(false);
-    setChatEmotion(null); // 表情还给正常神态
-  }
-
-  /** 发一句对话(工单 11→12):带最近历史与所在页,回复从 delta/Report 流回来。 */
-  function sendChat(text: string) {
-    wake();
-    setChatEmotion("think"); // 回复期间表情切 think(工单 12)
-    setAwaitingReply(true);
-    const history = messages
-      .filter((message) => !message.streaming)
-      .slice(-CHAT_HISTORY_MESSAGES)
-      .map(({ speaker, text: messageText }) => ({ speaker, text: messageText }));
-    setMessages((prev) => appendCapped(prev, { key: nextMessageKey(), speaker: "player", text }));
-    agent
-      .sendTrigger({ source: "pet", kind: "chat", data: { text, history, ...(view ? { view } : {}) } })
-      .then((outcome) => {
-        // 回执先登记工单号(审查 S1):SSE 断流或正文为空时,靠回执里的最终 Report 落消息。
-        if (outcome.ticket) chatTicketsRef.current.add(outcome.ticket.id);
-        if (outcome.report) applyChatReport(outcome.report);
-      })
-      .catch(() => {
-        setAwaitingReply(false);
-        setChatEmotion(null);
-        setMessages((prev) =>
-          appendCapped(prev, { key: nextMessageKey(), speaker: "pet", text: "网络不顺，刚那句没发出去，再说一遍？" }),
-        );
-      });
-  }
-
-  /** 流式增量:按工单号拼接(纯函数),首次到达创建流式条目(演示代发也走这里)。 */
-  function applyDelta(ticketId: string, text: string) {
-    chatTicketsRef.current.add(ticketId);
-    setMessages((prev) => mergeDelta(prev, ticketId, text, nextMessageKey));
-    setAwaitingReply(false); // 正文开始上屏,「…」让位
-    if (!panelOpenRef.current) setChatDot(true);
-  }
-
-  /**
-   * 对话 Report:只认对话工单号;终态(ready/failed/dropped)落消息——
-   * ready 取服务端权威全文,failed/dropped 也结束等待(审查 S2),消息变迁在纯模块。
-   */
-  function applyChatReport(report: AgentReport) {
-    if (!chatTicketsRef.current.has(report.ticketId)) return;
-    if (report.status !== "ready" && report.status !== "failed" && report.status !== "dropped") return;
-    setMessages((prev) => reportToMessages(prev, report, nextMessageKey));
-    if (report.status === "ready" && report.emotion) setChatEmotion(report.emotion); // 回复到达按表情标签切(工单 12)
-    setAwaitingReply(false);
-    if (!panelOpenRef.current) setChatDot(true);
-  }
-
-  function clearChat() {
-    setMessages([]);
-    setChatDot(false);
-  }
-
-  /** 指令出口:面板芯片、待办按钮共用。发送失败不上气泡,由账本/后续待办兜底。 */
-  function sendCommandNow(text: string) {
-    void agent.sendCommand(text).catch(() => undefined);
-  }
-
-  /** 快捷芯片与回复建议(工单 11→12):回话照发、跳转照跳,点完收起面板。 */
-  function runQuickAction(label: string) {
-    sendCommandNow(label);
-    onQuickAction?.(label as QuickRingAction); // 建议文案即快捷芯片文案(服务端意图表同一份)
-    closeChat();
-  }
-
-  /** 拖放出口(工单 07):每个文件一张 dropped 触发,只带文件名与类型,demo 不读内容、不上传。 */
-  function sendDroppedFiles(files: FileList | File[]) {
-    for (const file of Array.from(files)) {
-      void agent
-        .sendTrigger({
-          source: "materials",
-          kind: "dropped",
-          data: { fileName: file.name, fileKind: inferFileKind(file) },
-        })
-        .catch(() => undefined);
-    }
-  }
-
-  /** 批注出口(工单 07):待审卡上的批注唤醒原工单按批注改草稿;空批注不发。 */
-  function submitNote(ticketId: string) {
-    const note = (notes[ticketId] ?? "").trim();
-    if (!note) return;
-    void agent.sendTrigger({ source: "pet", kind: "annotate", data: { ticketId, note } }).catch(() => undefined);
-    setNotes((prev) => ({ ...prev, [ticketId]: "" }));
-  }
-
-  /** 放权模式出口(工单 08):切换以服务端返回为准,失败保持原样不打扰。 */
-  function switchAcceptMode(mode: AcceptMode) {
-    agent
-      .setAcceptMode(mode)
-      .then((next) => {
-        setPolicy(next);
-        return agent.evals();
-      })
-      .then((next) => setEvals(next))
-      .catch(() => undefined);
-  }
-
-  /** 戳一下(工单 12):固定台词轮换 + 切表情,不调模型;台词即气泡(≤40 字)。 */
-  function poke() {
-    wake();
-    const line = pokeLine(pokeCount);
-    setPokeCount((count) => count + 1);
-    setBubble(clampBubble(line.text));
-    setPokeExpression(line.expression);
-    if (pokeTimerRef.current !== null) window.clearTimeout(pokeTimerRef.current);
-    pokeTimerRef.current = window.setTimeout(() => setPokeExpression(null), REACTION_HOLD_MS);
-  }
-
-  // Ctrl+K 全局唤出对话面板(工单 12,与单击头像同一个面板)。
+  const session = useChatSession({ agent, view, onOpenDemo });
+  const mood = usePetMood({ onSingleClick: () => (panelOpenRef.current ? closePanel() : openPanel()) });
+  const position = usePetPosition({ rootRef, onInteract: mood.wake });
+  const agentView = useAgentView(agent);
+  // 事件回调经 ref 取最新实现(会话/情绪/视图每次渲染都是新对象),订阅 effect 才能只依赖 agent。
+  const sessionRef = useRef(session);
+  const sayRef = useRef(mood.say);
+  const inCallRef = useRef(inCall);
+  const upsertReportRef = useRef(agentView.upsertReport);
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        chatOpenRef.current = true;
-        setChatOpen(true);
-        setChatDot(false);
-        setSleepy(false);
-        setActivityAt(Date.now());
-      }
-    }
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, []);
-
-  // 工单视图底座(工单 05):进场先拉一次只读账本视图;失败静默,SSE 仍会驱动。
-  useEffect(() => {
-    let alive = true;
-    agent
-      .tickets()
-      .then((next) => {
-        if (alive) setTickets(next);
-      })
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [agent]);
-
-  // 订阅 agent 事件流:report 原位刷新工单视图(待审顺带晃一下角标),
-  // delta 逐字进对话,pet-bubble 出气泡(超长兜底截 40 字;面板开着不弹)。
-  useEffect(() => {
-    return agent.onEvent((event) => {
-      if (event.type === "report") {
-        setTickets((prev) => upsertTicket(prev, event.report));
-        if (event.report.status === "waiting" || event.report.status === "blocked") {
-          setTodoShake((count) => count + 1); // 收到待审:角标晃一下(工单 12)
-        }
-        // 有新汇报就可能伴随新的评估记录(工单 08),顺手刷新,面板开着就能看到。
-        agent.evals().then(setEvals).catch(() => undefined);
-        applyChatReport(event.report);
-      } else if (event.type === "channel" && event.channel.target === "pet-bubble") {
-        // 面板开着(用户开着或演示焦点在 chat)时回复就在面板里看,不再弹气泡(工单 12,审查 B1)。
-        if (!panelOpenRef.current) setBubble(clampBubble(event.channel.text));
-      } else if (event.type === "delta") {
-        applyDelta(event.ticketId, event.text);
-      }
-    });
-  }, [agent]);
-
-  // 待办面板打开时拉取放权模式与评估记录(工单 08);演示经 focusPanel 强开时同样要拉
-  // (工单 10 第⑦幕直接展示放权开关与评估记录)。失败静默,开关与列表先给空态。
-  // policySignal 变化(演示脚本切过放权)时重拉:面板开着,开关也要立即显示当前模式。
-  useEffect(() => {
-    if (!inboxOpen && focusPanel !== "inbox") return;
-    let alive = true;
-    agent
-      .policy()
-      .then((next) => {
-        if (alive) setPolicy(next);
-      })
-      .catch(() => undefined);
-    agent
-      .evals()
-      .then((next) => {
-        if (alive) setEvals(next);
-      })
-      .catch(() => undefined);
-    return () => {
-      alive = false;
-    };
-  }, [agent, inboxOpen, focusPanel, policySignal]);
-
-  // 对话历史落本地(工单 12→15):序列化在纯模块,串没变不重复写盘——
-  // 流式期间逐字到达但定稿内容未变,localStorage 不被逐字刷写(审查 R1)。
-  useEffect(() => {
-    try {
-      const payload = serializeChat(messages);
-      if (payload === lastChatSavedRef.current) return;
-      lastChatSavedRef.current = payload;
-      window.localStorage.setItem(CHAT_KEY, payload);
-    } catch {
-      // 隐私模式写不进就算了,本次会话内对话仍可用。
-    }
-  }, [messages]);
-
-  // 事件反应(工单 12):换表情并停一下就还回去;待审不换表情(只晃角标)。
-  useEffect(() => {
-    if (!reaction) return;
-    const next = reactionExpression(reaction);
-    if (next) setReactionExpr(next);
-    const timer = window.setTimeout(() => setReactionExpr(null), REACTION_HOLD_MS);
-    return () => window.clearTimeout(timer);
-  }, [reaction]);
-
-  // 面板彻底关上(用户关的或演示焦点挪走)时,把对话表情还给正常神态。
-  useEffect(() => {
-    if (!chatOpen && focusPanel !== "chat") setChatEmotion(null);
-  }, [chatOpen, focusPanel]);
-
-  // 闲置入睡(工单 12):3 分钟没动静变 sleepy,再点一下醒来(只是表情,不推送)。
-  useEffect(() => {
-    const timer = window.setTimeout(() => setSleepy(true), IDLE_SLEEP_MS);
-    return () => window.clearTimeout(timer);
-  }, [activityAt]);
-
-  // 演示代发对话(工单 12):如同玩家亲手输入;nonce 去重,StrictMode 重放也不重发。
-  // 面板开合不在这里写(审查 B1):演示只管发话,面板跟 focusPanel 走,焦点挪开即收起。
-  useEffect(() => {
-    if (!demoChatCue || demoChatCue.nonce === demoChatSentRef.current) return;
-    demoChatSentRef.current = demoChatCue.nonce;
-    wake();
-    sendChat(demoChatCue.text);
-    onDemoChatDone?.();
-    // 依赖按约定逐字面列出(见 PetDemoConsole 同款):cue 变更才执行。
-  }, [demoChatCue]);
-
-  // 面板可见性同步进 ref(用户开着或演示焦点在 chat,审查 B1):事件回调据此决定气泡/红点。
-  useEffect(() => {
-    panelOpenRef.current = chatOpen || focusPanel === "chat";
-  }, [chatOpen, focusPanel]);
-
-  useEffect(() => {
-    return () => {
-      if (pokeTimerRef.current !== null) window.clearTimeout(pokeTimerRef.current);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!dragging) return;
-    function onMove(e: PointerEvent) {
-      const base = dragRef.current;
-      if (!base) return;
-      draggedRef.current = true;
-      const next = { left: base.baseLeft + (e.clientX - base.startX), top: base.baseTop + (e.clientY - base.startY) };
-      // 重定基线:onUp 时基线就是最新位置,直接落盘。
-      dragRef.current = { startX: e.clientX, startY: e.clientY, baseLeft: next.left, baseTop: next.top };
-      setPos(next);
-    }
-    function onUp() {
-      setDragging(false);
-      const root = rootRef.current;
-      const base = dragRef.current;
-      if (root && base) savePos({ left: base.baseLeft, top: base.baseTop });
-      dragRef.current = null;
-    }
-    window.addEventListener("pointermove", onMove);
-    window.addEventListener("pointerup", onUp);
-    return () => {
-      window.removeEventListener("pointermove", onMove);
-      window.removeEventListener("pointerup", onUp);
-    };
-  }, [dragging]);
-
-  function onPointerDown(e: React.PointerEvent) {
-    if ((e.target as HTMLElement).closest("button")) return;
-    const root = rootRef.current;
-    if (!root) return;
-    wake(); // 摸它一下也算活动(工单 12)
-    const rect = root.getBoundingClientRect();
-    draggedRef.current = false;
-    dragRef.current = {
-      startX: e.clientX,
-      startY: e.clientY,
-      baseLeft: pos?.left ?? rect.left,
-      baseTop: pos?.top ?? rect.top,
-    };
-    setDragging(true);
-  }
-
-  /** 单击头像(工单 12):优先进入对话;拖完松手的补偿 click 不算。 */
-  function onAvatarClick() {
-    if (draggedRef.current) {
-      draggedRef.current = false;
-      return;
-    }
-    if (chatOpenRef.current) closeChat();
-    else openChat();
-  }
-
-  // 有效表情(工单 15 互动感):优先级归并进 pet-reactions 纯函数,单独可测——
-  // 被拎起 > 事件反应 > 戳一下 > 对话情绪 > 困了 > 外部神态(审查 S5:反应不再被盖)。
-  const shownExpression: PetExpression = resolveExpression({
-    demo: demoExpression,
-    dragging,
-    reaction: reactionExpr,
-    poke: pokeExpression,
-    chat: chatEmotion,
-    sleepy,
-    base: expression,
+    sessionRef.current = session;
+    sayRef.current = mood.say;
+    inCallRef.current = inCall;
+    upsertReportRef.current = agentView.upsertReport;
   });
 
-  // 待人决定与受阻的工单(spec 故事 11/16):角标数量、待办面板都由它驱动。
-  // 受阻卡(Watchdog 标的)只说明原因;同意/驳回与批注只属于等待中的待审卡。
-  const todoTickets = tickets.filter((ticket) => ticket.status === "waiting" || ticket.status === "blocked");
+  function openPanel(locate?: "todo" | "log"): void {
+    mood.wake(); // 开面板也是互动:顺便叫醒(审查 S5)
+    setPanelOpen(true);
+    setMenuOpen(false);
+    if (locate === "log") setLogOpen(true);
+    // todo 定位:面板挂上后滚到最早一张待拍板卡(微任务后查 DOM)。
+    if (locate === "todo") {
+      window.setTimeout(() => {
+        rootRef.current?.querySelector(".desk-pet-card[data-status='waiting']")?.scrollIntoView({ block: "nearest" });
+      }, 0);
+    }
+  }
 
-  // 头顶角标:待办数(等待+受阻),点击开关待办面板;数量或待审节拍变化时重挂载,
-  // 重放「晃一下」动画(工单 12:收到待审晃一下);勿扰时不打扰。
-  const badge =
-    todoTickets.length > 0 && !dnd ? (
-      <button
-        type="button"
-        className="desk-pet-badge"
-        key={`badge-${todoTickets.length}-${todoShake}`}
-        aria-label={`待办 ${todoTickets.length}`}
-        onClick={(e) => {
-          e.stopPropagation(); // 点角标只开关待办面板,不触发头像的对话面板
-          setInboxOpen((open) => !open);
-        }}
-      >
-        {todoTickets.length}
-      </button>
-    ) : null;
+  function closePanel(): void {
+    setPanelOpen(false);
+    setMenuOpen(false);
+    setLogOpen(false);
+    session.resetEmotion();
+    avatarRef.current?.focus(); // 焦点还给头像(审查 S7)
+  }
 
-  // 待办面板:顶部放权模式三段开关与评估记录(工单 08,spec 故事 14),
-  // 下面列出等待工单,「同意」「驳回」把决定作为 Trigger 发回 Router(spec 故事 11);
-  // 待审卡可写批注唤醒原工单(工单 07,spec 故事 13)。
-  const inbox =
-    (inboxOpen || focusPanel === "inbox") && !dnd ? (
-      <div className="desk-pet-inbox" role="region" aria-label="待办面板">
-        <div className="desk-pet-policy" role="group" aria-label="放权模式">
-          <span className="desk-pet-policy-label">放权模式</span>
-          <div className="desk-pet-policy-switch">
-            {ACCEPT_MODE_OPTIONS.map(({ mode, label }) => (
-              <button
-                key={mode}
-                type="button"
-                aria-pressed={policy?.acceptMode === mode ? "true" : "false"}
-                onClick={() => switchAcceptMode(mode)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        {todoTickets.length === 0 && <p className="desk-pet-inbox-empty">没有等你拍板的事</p>}
-        {todoTickets.map((ticket) =>
-          ticket.status === "blocked" ? (
-            <div className="desk-pet-inbox-item" key={ticket.ticketId}>
-              <p className="desk-pet-inbox-text">
-                <span className="desk-pet-status" data-status="blocked">
-                  {STATUS_LABEL.blocked}
-                </span>
-                {ticket.text || NO_REPORT_TEXT}
-              </p>
-            </div>
-          ) : (
-            <div className="desk-pet-inbox-item" key={ticket.ticketId}>
-              <p className="desk-pet-inbox-text">{ticket.text || NO_REPORT_TEXT}</p>
-            <div className="desk-pet-inbox-actions">
-              <button type="button" onClick={() => sendCommandNow(`同意 ${ticket.ticketId}`)}>
-                同意
-              </button>
-              <button type="button" onClick={() => sendCommandNow(`驳回 ${ticket.ticketId}`)}>
-                驳回
-              </button>
-            </div>
-            <form
-              className="desk-pet-note"
-              onSubmit={(e) => {
-                e.preventDefault();
-                submitNote(ticket.ticketId);
-              }}
-            >
-              <input
-                className="desk-pet-note-input"
-                aria-label="批注"
-                placeholder="写句批注，让草稿再改一版"
-                value={notes[ticket.ticketId] ?? ""}
-                onChange={(e) => setNotes((prev) => ({ ...prev, [ticket.ticketId]: e.target.value }))}
-              />
-              <button type="submit">发批注</button>
-            </form>
-          </div>
-          ),
-        )}
-        <div className="desk-pet-evals" role="region" aria-label="评估记录">
-          <p className="desk-pet-evals-title">评估记录</p>
-          {evals.length === 0 && <p className="desk-pet-eval">还没有评估记录</p>}
-          {evals.map((record) => (
-            <p className="desk-pet-eval" key={`${record.triggerId}-${record.ruleId}`}>
-              <span className="desk-pet-eval-meta">
-                {formatEvalTime(record.at)} · {record.ruleId} · {EVAL_OUTCOME_LABEL[record.outcome]}
-              </span>
-              <br />
-              {record.wouldDo}——{record.why}
-            </p>
-          ))}
-        </div>
-      </div>
-    ) : null;
+  /** 快捷芯片与回复建议:回话照发、跳转照跳,点完收起面板。 */
+  function runQuickAction(label: string) {
+    mood.wake();
+    agentView.sendCommand(label);
+    onQuickAction?.(label as QuickRingAction); // 建议文案即芯片文案(服务端意图表同一份)
+    closePanel();
+  }
 
-  // 工单列表:桌宠旁展开,每张工单带状态徽标(spec 故事 10)。
-  const ticketList =
-    (listOpen || focusPanel === "tickets") && !dnd ? (
-      <div className="desk-pet-tickets" role="region" aria-label="工单列表">
-        {tickets.length === 0 && <p className="desk-pet-ticket">还没有工单</p>}
-        {tickets.map((ticket) => (
-          <p className="desk-pet-ticket" key={ticket.ticketId}>
-            <span className="desk-pet-status" data-status={ticket.status}>
-              {STATUS_LABEL[ticket.status]}
-            </span>
-            {ticket.text || NO_REPORT_TEXT}
-          </p>
-        ))}
-      </div>
-    ) : null;
-
-  // 对话面板(工单 12):单击头像/Ctrl+K/演示焦点都能打开。
-  const chatPanel =
-    (chatOpen || focusPanel === "chat") && !dnd ? (
-      <PetChatPanel
-        messages={messages}
-        awaitingReply={awaitingReply}
-        onSend={sendChat}
-        onClose={closeChat}
-        onClear={clearChat}
-        onQuickAction={runQuickAction}
-        onOpenDemo={() => {
-          onOpenDemo?.();
-          closeChat(); // 舞台交给演示控制条
-        }}
-      />
-    ) : null;
-
-  // 头顶悬浮栈:气泡在上、待办/工单居中、对话面板贴身,避免浮层互相遮挡。
-  const popovers = (
-    <div className="desk-pet-popovers">
-      {dropHover && !dnd && <p className="desk-pet-drop-hint">交给我</p>}
-      {bubble !== null && !dnd && !inCall && (
-        <p className="desk-pet-bubble" role="status" aria-label="桌宠气泡">
-          {bubble}
-        </p>
-      )}
-      {inbox}
-      {ticketList}
-      {chatPanel}
-    </div>
-  );
-
-  const anchored = pos ? { left: pos.left, top: pos.top, right: "auto", bottom: "auto" } : undefined;
+  /** 拍板(工单 15 待拍板卡):决定作为命令发回 Router,工单随后自己变状态。 */
+  function decide(ticketId: string, verb: "同意" | "驳回") {
+    agentView.sendCommand(`${verb} ${ticketId}`);
+  }
 
   function switchVariant() {
     const next: PetVariant = variant === "f" ? "m" : "f";
@@ -735,23 +152,130 @@ export function DeskPet({
     }
   }
 
+  // Ctrl+K 全局唤出面板(工单 12;审查 R3 的勿扰忽略与不抢 ⌘K 在工单 15 后续收口)。
+  // 面板开合只碰 panelOpenRef 与稳定 setter,依赖空数组不会读到旧状态。
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (panelOpenRef.current) closePanel();
+        else openPanel();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- openPanel/closePanel 只用稳定 setter/ref
+  }, []);
+
+  // 面板开合同步:红点让位/清掉(会话),拉取放权与评估(失败给空态)。
+  useEffect(() => {
+    panelOpenRef.current = panelOpen;
+    sessionRef.current.markVisible(panelOpen);
+    if (panelOpen) agentView.refreshPolicy();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- refreshPolicy 只读 agent 与稳定 setter
+  }, [panelOpen, agent]);
+
+  // 订阅 agent 事件流:report 刷新工单视图与评估,对话部分交给 useChatSession,
+  // pet-bubble 出气泡(面板开着或通话中不弹)。
+  useEffect(() => {
+    return agent.onEvent((event) => {
+      if (event.type === "report") upsertReportRef.current(event.report);
+      sessionRef.current.applyEvent(event);
+      if (event.type === "channel" && event.channel.target === "pet-bubble") {
+        if (!panelOpenRef.current && !inCallRef.current) sayRef.current(event.channel.text);
+      }
+    });
+  }, [agent]);
+
+  // App 的命令接口(工单 15):openPanel/closePanel/sendAsUser/react/refreshPolicy。
+  useImperativeHandle(ref, () => ({
+    openPanel: (options) => openPanel(options?.locate),
+    closePanel,
+    sendAsUser: (text) => {
+      mood.wake();
+      session.send(text);
+    },
+    react: (event) => mood.reactTo(event),
+    refreshPolicy: agentView.refreshPolicy,
+  }));
+
+  function onAvatarClick(e: React.MouseEvent) {
+    if (position.draggedRef.current) {
+      position.draggedRef.current = false;
+      return; // 拖完松手的补偿 click 不算
+    }
+    mood.handleAvatarClick(e.detail);
+  }
+
+  // 有效表情(工单 15):优先级归并在 pet-reactions(演示接管最高,审查 B1/S5)。
+  const shownExpression: PetExpression = resolveExpression({
+    demo: demoExpression,
+    dragging: position.dragging,
+    reaction: mood.reactionExpr,
+    poke: mood.pokeExpression,
+    chat: session.chatEmotion,
+    sleepy: mood.sleepy,
+    base: expression,
+  });
+
+  // 待人决定与受阻的工单(spec 故事 11/16):角标数量、待拍板卡都由它驱动。
+  const pendingTickets = agentView.tickets.filter((ticket) => ticket.status === "waiting" || ticket.status === "blocked");
+  const runningCount = agentView.tickets.filter((ticket) => ticket.status === "progress").length;
+
+  const anchored = position.pos ? { left: position.pos.left, top: position.pos.top, right: "auto", bottom: "auto" } : undefined;
+  const avatarAlt = `桌宠·${variantLabel[variant]}·${expressionLabel[shownExpression]}`;
+
+  // 头顶悬浮栈:气泡在上、面板贴身,右对齐不遮主内容。
+  const popovers = (
+    <div className="desk-pet-popovers">
+      {dropHover && !dnd && <p className="desk-pet-drop-hint">交给我</p>}
+      {mood.bubble !== null && !dnd && !inCall && (
+        <p className="desk-pet-bubble" role="status" aria-label="桌宠气泡">
+          {mood.bubble}
+        </p>
+      )}
+      {panelOpen && !dnd && (
+        <PetChatPanel
+          messages={session.messages}
+          awaitingReply={session.awaitingReply}
+          tickets={pendingTickets}
+          annotating={session.annotating}
+          policy={agentView.policy}
+          runningCount={runningCount}
+          variant={variant}
+          menuOpen={menuOpen}
+          logOpen={logOpen}
+          workLog={mergeWorkLog(agentView.tickets, agentView.evals)}
+          onSend={(text) => {
+            mood.wake();
+            session.send(text);
+          }}
+          onClose={closePanel}
+          onClear={session.clearHistory}
+          onQuickAction={runQuickAction}
+          onApprove={(ticketId) => decide(ticketId, "同意")}
+          onReject={(ticketId) => decide(ticketId, "驳回")}
+          onRevise={session.quote}
+          onSetMode={agentView.setMode}
+          onToggleMenu={() => setMenuOpen((open) => !open)}
+          onSwitchVariant={switchVariant}
+          onDnd={() => setDnd(true)}
+          onToggleLog={() => setLogOpen((open) => !open)}
+        />
+      )}
+    </div>
+  );
+
   if (dnd) {
     return (
-      <aside
-        ref={rootRef}
-        className="desk-pet desk-pet-collapsed"
-        aria-label="桌宠"
-        data-variant={variant}
-        data-dnd="true"
-        style={anchored}
-      >
+      <aside ref={rootRef} className="desk-pet desk-pet-collapsed" aria-label="桌宠" data-variant={variant} data-dnd="true" style={anchored}>
         <button
           type="button"
           className="desk-pet-restore"
           aria-label="桌宠勿扰中,点击恢复"
           onClick={() => {
             setDnd(false);
-            wake();
+            mood.wake();
           }}
         >
           <img src={petImg[variant][shownExpression]} alt="" draggable={false} />
@@ -768,11 +292,10 @@ export function DeskPet({
       aria-label="桌宠"
       data-variant={variant}
       data-expression={shownExpression}
-      data-dragging={dragging || undefined}
+      data-dragging={position.dragging || undefined}
       data-drop-hover={dropHover || undefined}
       data-reduced-motion={reducedMotion() || undefined}
       style={anchored}
-      onPointerDown={onPointerDown}
       onDragOver={(e) => {
         e.preventDefault(); // 允许松手
         setDropHover(true);
@@ -781,43 +304,43 @@ export function DeskPet({
       onDrop={(e) => {
         e.preventDefault();
         setDropHover(false);
-        sendDroppedFiles(e.dataTransfer?.files ?? []);
+        agentView.sendDroppedFiles(e.dataTransfer?.files ?? []);
       }}
     >
-      <div className="desk-pet-avatar" onClick={onAvatarClick} onDoubleClick={poke}>
-        <img
-          src={petImg[variant][shownExpression]}
-          alt={`桌宠·${variantLabel[variant]}·${expressionLabel[shownExpression]}`}
-          draggable={false}
-        />
-        {badge}
-        {chatDot && <span className="desk-pet-dot" aria-label="有新回复" />}
+      <div className="desk-pet-avatar-wrap">
+        <button
+          ref={avatarRef}
+          type="button"
+          className="desk-pet-avatar"
+          aria-haspopup="dialog"
+          aria-expanded={panelOpen}
+          onPointerDown={position.onAvatarPointerDown}
+          onClick={onAvatarClick}
+          onContextMenu={(e) => {
+            e.preventDefault(); // 右键头像同样能打开 ⋯ 菜单(工单 15)
+            setPanelOpen(true);
+            setMenuOpen(true);
+          }}
+        >
+          <img src={petImg[variant][shownExpression]} alt={avatarAlt} draggable={false} />
+        </button>
+        {pendingTickets.length > 0 && (
+          <button
+            type="button"
+            className="desk-pet-badge"
+            key={`badge-${pendingTickets.length}-${agentView.todoShake}`}
+            aria-label={`待办 ${pendingTickets.length}`}
+            onClick={(e) => {
+              e.stopPropagation(); // 点角标开面板并定位待拍板卡,不触发头像的单击判定
+              openPanel("todo");
+            }}
+          >
+            {pendingTickets.length}
+          </button>
+        )}
+        {session.chatDot && <span className="desk-pet-dot" role="status" aria-label="有新回复" />}
       </div>
       {popovers}
-      <div className="desk-pet-actions">
-        <button type="button" className="desk-pet-action" onClick={switchVariant}>
-          切换{variant === "f" ? "男版" : "女版"}
-        </button>
-        <button
-          type="button"
-          className="desk-pet-action"
-          aria-expanded={inboxOpen || undefined}
-          onClick={() => setInboxOpen((open) => !open)}
-        >
-          待办
-        </button>
-        <button
-          type="button"
-          className="desk-pet-action"
-          aria-expanded={listOpen || undefined}
-          onClick={() => setListOpen((open) => !open)}
-        >
-          工单
-        </button>
-        <button type="button" className="desk-pet-action" onClick={() => setDnd(true)}>
-          勿扰
-        </button>
-      </div>
     </aside>
   );
 }

@@ -5,7 +5,7 @@ import type { RoleCard } from "./domain/role-card";
 import type { PostgameBasis } from "./shared/agent-contract";
 import { BusyHint } from "./ui/BusyHint";
 import { CardsView, HistoryView, MaterialsView, ResearchReportView, RolesView } from "./ui/CatalogViews";
-import { DeskPet, type PetExpression, type PetReactionEvent, type QuickRingAction } from "./ui/DeskPet";
+import { DeskPet, type DeskPetHandle, type PetExpression, type QuickRingAction } from "./ui/DeskPet";
 import { PetDemoConsole } from "./ui/PetDemoConsole";
 import { settleHiddenCards, type HiddenCardChoice } from "./ui/HiddenCards";
 import { LeftRail, type AppView } from "./ui/LeftRail";
@@ -40,17 +40,12 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
   // ref 缓存避免同一局来回进出结算时重复触发。
   const [petReview, setPetReview] = useState<PetReviewView | null>(null);
   const petReviewRef = useRef<PetReviewView | null>(null);
-  // 一键演示(工单 10):控制条开关、演示期间的桌宠表情接管与面板焦点。
+  // 一键演示(工单 10):控制条开关与演示期间的桌宠表情接管。
   const [demoOpen, setDemoOpen] = useState(false);
   const [demoExpression, setDemoExpression] = useState<PetExpression | null>(null);
-  const [petFocus, setPetFocus] = useState<"tickets" | "inbox" | "chat" | null>(null);
-  // 演示代发对话(工单 12):App 转交给桌宠在对话面板替玩家发一句;nonce 保证只发一次。
-  const [demoChat, setDemoChat] = useState<{ nonce: number; text: string } | null>(null);
-  const demoChatNonce = useRef(0);
-  // 事件反应(工单 12):翻牌/举牌/挂断换表情;每次都传新对象,桌宠按事件反应。
-  const [petReaction, setPetReaction] = useState<PetReactionEvent | null>(null);
-  // 演示切过放权的信号(工单 10):每切一次 +1,DeskPet 开着的待办面板据此重拉,开关立即同步。
-  const [petPolicySignal, setPetPolicySignal] = useState(0);
+  // 桌宠命令接口(工单 15):App 只发命令(openPanel/sendAsUser/react/refreshPolicy),
+  // 不再拼 nonce/计数器,也不需要知道桌宠内部状态的名字。
+  const petRef = useRef<DeskPetHandle>(null);
   const [error, setError] = useState<string | null>(null);
   const [catalogBusy, setCatalogBusy] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -98,7 +93,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
 
   // 举牌即事件(工单 12):有牌举着待决定,桌宠换「拿笔想」。
   useEffect(() => {
-    if (raisePending) setPetReaction({ kind: "hidden-raised" });
+    if (raisePending) petRef.current?.react({ kind: "hidden-raised" });
   }, [raisePending]);
 
   const publishedCards = useMemo(
@@ -213,11 +208,11 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
     });
   }
 
-  /** 关演示:表情与面板焦点一并还给正常交互。 */
+  /** 关演示:表情与面板一并还给正常交互。 */
   function closeDemo() {
     setDemoOpen(false);
     setDemoExpression(null);
-    setPetFocus(null);
+    petRef.current?.closePanel();
   }
 
   /**
@@ -357,7 +352,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
                     [conversation.id]: { ...(current[conversation.id] ?? {}), [item]: choice },
                   }));
                   // 亲手翻开隐藏牌→桌宠欢呼(工单 12 事件反应)。
-                  if (choice === "flip") setPetReaction({ kind: "hidden-revealed" });
+                  if (choice === "flip") petRef.current?.react({ kind: "hidden-revealed" });
                 }}
                 onRaisePendingChange={setRaisePending}
                 onConversationChange={(next) => {
@@ -369,7 +364,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
                   setResult(finished);
                   setConversation((current) => (current ? { ...current, status: "ended" } : current));
                   setView((current) => (current === "table" ? "postgame" : current));
-                  setPetReaction({ kind: "call-ended" }); // 挂断→桌宠挥手(工单 12)
+                  petRef.current?.react({ kind: "call-ended" }); // 挂断→桌宠挥手(工单 12)
                   requestPetReview(finished);
                   void refreshCatalog().catch(() => undefined);
                 }}
@@ -401,36 +396,35 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
           </>
         )}
       </main>
-      {/* 一键演示控制条(工单 10):右上角,按脚本驱动 7 幕;桌宠表情与面板焦点由演示接管。 */}
+      {/* 一键演示控制条(工单 10):右上角,按脚本驱动 7 幕;桌宠表情与面板由演示经命令接口接管。
+          焦点语义(工单 15):chat 开面板;tickets 展开工作日志;inbox 定位最早待拍板卡;none 收起。 */}
       {demoOpen && (
         <PetDemoConsole
           agent={agent}
           onPetExpression={setDemoExpression}
-          onFocusPanel={(panel) => setPetFocus(panel === "none" ? null : panel)}
-          onChat={(text) => {
-            demoChatNonce.current += 1;
-            setDemoChat({ nonce: demoChatNonce.current, text });
+          onFocusPanel={(panel) => {
+            const pet = petRef.current;
+            if (!pet) return;
+            if (panel === "none") pet.closePanel();
+            else if (panel === "chat") pet.openPanel();
+            else pet.openPanel({ locate: panel === "tickets" ? "log" : "todo" });
           }}
-          onPolicyChange={() => setPetPolicySignal((current) => current + 1)}
+          onChat={(text) => petRef.current?.sendAsUser(text)}
+          onPolicyChange={() => petRef.current?.refreshPolicy()}
           onClose={closeDemo}
         />
       )}
-      {/* 桌宠固定在牌桌右下角,不参与布局,也不遮挡主内容。
-          单击头像优先进入对话面板(工单 12);
-          对局进行中(主幕 + ongoing)输入框锁住(工单 12);
-          举牌/翻牌/挂断经 reaction 换表情,进结算后变「欢呼」陪着看复盘(工单 06→12);
+      {/* 桌宠固定在牌桌右下角,不参与布局,也不遮挡主内容(工单 15:单面板,App 只发命令)。
+          单击头像进对话面板;通话中照样能聊(消息不进经理上下文);
+          举牌/翻牌/挂断经命令接口换表情,进结算后变「欢呼」陪着看复盘(工单 06→12);
           演示期间表情由演示脚本接管(工单 10)。 */}
       <DeskPet
+        ref={petRef}
         agent={agent}
         inCall={view === "table" && conversation?.status === "ongoing"}
         onQuickAction={handleQuickAction}
         onOpenDemo={() => setDemoOpen(true)}
-        focusPanel={petFocus}
         view={view}
-        reaction={petReaction}
-        demoChatCue={demoChat}
-        onDemoChatDone={() => setDemoChat(null)}
-        policySignal={petPolicySignal}
         demoExpression={demoExpression}
         expression={
           view === "postgame"

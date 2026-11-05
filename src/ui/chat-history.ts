@@ -8,6 +8,9 @@ import { QUICK_RING } from "./pet-reactions";
 /** 本地对话历史上限:渲染与存储同一口径(最近 50 条)。 */
 export const CHAT_HISTORY_MAX = 50;
 
+/** localStorage 键(读写共用,useChatSession 与测试按它落盘/清场)。 */
+export const CHAT_KEY = "desk-pet-chat";
+
 /**
  * 对话面板的一条消息(工单 12 起):ticketId 只在本次会话内有值,
  * 落 localStorage 时只存说话人与正文。streaming 表示正文还在逐字到达。

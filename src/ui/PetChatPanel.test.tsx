@@ -1,12 +1,14 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { PetChatPanel, type PetChatMessage } from "./PetChatPanel";
+import { PetChatPanel } from "./PetChatPanel";
+import type { PetChatMessage } from "./chat-history";
+import type { AgentPolicy, AgentTicketView } from "../shared/agent-contract";
 
 /**
- * 工单 12 测试缝:对话面板的渲染与交互——
- * 焦点、Enter/Shift+Enter/Esc、锁定、打字指示、快捷芯片与快捷动作建议、清空。
- * 流式拼接与红点在 DeskPet 层测(见 DeskPet.test.tsx)。
+ * 工单 12/15 测试缝:桌宠唯一面板的渲染与交互——
+ * 焦点、Enter/Shift+Enter/Esc、输入法组字、待拍板卡、引用条批注、⋯ 菜单、工作日志。
+ * 流式拼接与红点在 DeskPet 层测(见 DeskPet.test.tsx);状态条细节见 AgentStatusBar.test。
  */
 
 /** 一条消息的速记工厂。 */
@@ -14,28 +16,54 @@ function msg(speaker: PetChatMessage["speaker"], text: string, extra: Partial<Pe
   return { key: `${speaker}-${text}`, speaker, text, ...extra };
 }
 
-function renderPanel(overrides: Partial<Parameters<typeof PetChatPanel>[0]> = {}) {
-  const props = {
+/** 一张工单的速记工厂。 */
+function tv(ticketId: string, status: AgentTicketView["status"], text: string): AgentTicketView {
+  return { ticketId, status, text };
+}
+
+const noop = () => undefined;
+
+function baseProps(overrides: Partial<Parameters<typeof PetChatPanel>[0]> = {}) {
+  return {
     messages: [] as PetChatMessage[],
     awaitingReply: false,
+    tickets: [] as AgentTicketView[],
+    annotating: null as string | null,
+    policy: { version: 1, acceptMode: "off", rules: [] } as AgentPolicy,
+    runningCount: 0,
+    variant: "f" as const,
+    menuOpen: false,
+    logOpen: false,
+    workLog: [],
     onSend: vi.fn(),
     onClose: vi.fn(),
     onClear: vi.fn(),
     onQuickAction: vi.fn(),
-    onOpenDemo: vi.fn(),
+    onApprove: vi.fn(),
+    onReject: vi.fn(),
+    onRevise: vi.fn(),
+    onSetMode: vi.fn(),
+    onToggleMenu: vi.fn(),
+    onSwitchVariant: vi.fn(),
+    onDnd: vi.fn(),
+    onToggleLog: vi.fn(),
     ...overrides,
   };
+}
+
+function renderPanel(overrides: Partial<Parameters<typeof PetChatPanel>[0]> = {}) {
+  const props = baseProps(overrides);
   render(<PetChatPanel {...props} />);
   return props;
 }
 
-describe("对话面板(工单 12)", () => {
+describe("对话面板(工单 12/15)", () => {
   it("打开即自动聚焦输入框", () => {
     renderPanel();
     expect(screen.getByRole("textbox", { name: "对话输入" })).toHaveFocus();
   });
 
-  it("Enter 发送并清空输入;Shift+Enter 只换行不发送", async () => {
+  it("Enter 发送并清空输入;Shift+Enter 只换行不发送;空输入不发送", async () => {
     const user = userEvent.setup();
     const props = renderPanel();
     const input = screen.getByRole("textbox", { name: "对话输入" });
@@ -47,24 +75,29 @@ describe("对话面板(工单 12)", () => {
     await user.type(input, "第一行{Shift>}{Enter}{/Shift}第二行");
     expect(props.onSend).toHaveBeenCalledTimes(1);
     expect(input).toHaveValue("第一行\n第二行");
+
+    // 清空后:纯空白与完全空都不发送。
+    await user.clear(input);
+    await user.type(input, "  {Enter}");
+    fireEvent.submit(input.closest("form")!);
+    expect(props.onSend).toHaveBeenCalledTimes(1);
   });
 
-  it("Esc 关闭面板", () => {
+  it("Esc 挂在面板根上:焦点在按钮上也能关;组字期放行给输入法(审查 B2/S7)", () => {
     const props = renderPanel();
-    fireEvent.keyDown(screen.getByRole("textbox", { name: "对话输入" }), { key: "Escape" });
+    fireEvent.keyDown(screen.getByRole("region", { name: "对话面板" }), { key: "Escape" });
     expect(props.onClose).toHaveBeenCalledTimes(1);
-    expect(props.onSend).not.toHaveBeenCalled();
+
+    fireEvent.keyDown(screen.getByRole("region", { name: "对话面板" }), { key: "Escape", isComposing: true });
+    expect(props.onClose).toHaveBeenCalledTimes(1); // 组字期不关
   });
 
-  it("中文输入法组字时按 Enter 不发送、Esc 不关面板(审查 B2,工单 15 验收)", () => {
+  it("中文输入法组字时按 Enter 不发送(审查 B2,工单 15 验收)", () => {
     const props = renderPanel();
     const input = screen.getByRole("textbox", { name: "对话输入" });
-    // Chrome 在组字期派发 isComposing=true 的 keydown;老版本以 keyCode 229 标识。
     fireEvent.keyDown(input, { key: "Enter", isComposing: true });
     fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
     expect(props.onSend).not.toHaveBeenCalled();
-    fireEvent.keyDown(input, { key: "Escape", isComposing: true });
-    expect(props.onClose).not.toHaveBeenCalled();
   });
 
   it("顶部一排快捷芯片:点了才执行(发命令 + 跳转回调)", async () => {
@@ -90,73 +123,94 @@ describe("对话面板(工单 12)", () => {
     const list = screen.getByRole("log", { name: "对话记录" });
     expect(list).toHaveTextContent("换个客户试试");
     expect(list).toHaveTextContent("好，这就去安排。");
-    // 建议只是建议:点之前没执行过(顶部芯片同名,只在记录里找)。
     expect(props.onQuickAction).not.toHaveBeenCalled();
-    const record = screen.getByRole("log", { name: "对话记录" });
-    await user.click(within(record).getByRole("button", { name: "换个客户" }));
+    await user.click(within(list).getByRole("button", { name: "换个客户" }));
     expect(props.onQuickAction).toHaveBeenCalledWith("换个客户");
-    // 第二个建议也各点各的。
-    await user.click(within(record).getByRole("button", { name: "再来一局" }));
+    await user.click(within(list).getByRole("button", { name: "再来一局" }));
     expect(props.onQuickAction).toHaveBeenCalledWith("再来一局");
   });
 
-  it("等待回复时显示「…」打字指示;流式正文到达后逐字显示", () => {
-    const { rerender } = render(<PetChatPanel
-      messages={[msg("player", "在吗")]}
-      awaitingReply
-      onSend={vi.fn()}
-      onClose={vi.fn()}
-      onClear={vi.fn()}
-      onQuickAction={vi.fn()}
-      onOpenDemo={vi.fn()}
-    />);
+  it("等待回复时显示「…」;流式正文开始上屏后「…」让位", () => {
+    const streaming = { key: "s", speaker: "pet" as const, text: "我在", streaming: true };
+    const { rerender } = render(<PetChatPanel {...baseProps({ messages: [msg("player", "在吗")], awaitingReply: true })} />);
     expect(screen.getByLabelText("正在输入")).toHaveTextContent("…");
 
-    rerender(<PetChatPanel
-      messages={[msg("player", "在吗"), { key: "s", speaker: "pet", text: "我在", streaming: true }]}
-      awaitingReply={false}
-      onSend={vi.fn()}
-      onClose={vi.fn()}
-      onClear={vi.fn()}
-      onQuickAction={vi.fn()}
-      onOpenDemo={vi.fn()}
-    />);
-    expect(screen.getByRole("log", { name: "对话记录" })).toHaveTextContent("我在");
+    rerender(<PetChatPanel {...baseProps({ messages: [msg("player", "在吗"), streaming], awaitingReply: true })} />);
     expect(screen.queryByLabelText("正在输入")).not.toBeInTheDocument();
+    expect(screen.getByRole("log", { name: "对话记录" })).toHaveTextContent("我在");
   });
 
-  it("通话中不再锁定输入(工单 15):面板不感知通话,输入随时可打可发", async () => {
+  it("waiting 工单以待拍板卡插进对话流:同意/驳回/改一改各走各的出口(工单 15)", async () => {
     const user = userEvent.setup();
-    const props = renderPanel();
+    const props = renderPanel({ tickets: [tv("t-w", "waiting", "本周投研先押 AI 还是消费？")] });
+    const list = screen.getByRole("log", { name: "对话记录" });
+    expect(list).toHaveTextContent("本周投研先押 AI 还是消费？");
+
+    await user.click(within(list).getByRole("button", { name: "同意" }));
+    expect(props.onApprove).toHaveBeenCalledWith("t-w");
+    await user.click(within(list).getByRole("button", { name: "驳回" }));
+    expect(props.onReject).toHaveBeenCalledWith("t-w");
+    await user.click(within(list).getByRole("button", { name: "改一改" }));
+    expect(props.onRevise).toHaveBeenCalledWith("t-w");
+  });
+
+  it("blocked 工单以只读提示卡显示原因,没有按钮(工单 15)", () => {
+    renderPanel({ tickets: [tv("t-b", "blocked", "缺素材，卡住了。")] });
+    expect(screen.getByRole("article", { name: "受阻：缺素材，卡住了。" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "同意" })).not.toBeInTheDocument();
+  });
+
+  it("引用态:输入框上方出现引用条,发送按钮变「发批注」,取消走 onRevise(工单 15)", async () => {
+    const user = userEvent.setup();
+    const props = renderPanel({ tickets: [tv("t-w", "waiting", "开头一句改得口语一点?")], annotating: "t-w" });
+    // 草稿文案出现两处:待拍板卡 + 引用条。
+    expect(screen.getAllByText("开头一句改得口语一点?")).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "取消批注" })).toBeInTheDocument();
+
     const input = screen.getByRole("textbox", { name: "对话输入" });
-    expect(input).toBeEnabled();
-    expect(input).toHaveAttribute("placeholder", "跟桌宠说点什么…(Enter 发送)");
+    expect(input).toHaveAttribute("placeholder", "说一句,这条工单就按它改");
+    expect(screen.getByRole("button", { name: "发批注" })).toBeInTheDocument();
+    // 发出的话照常走 onSend(上层当作批注路由),面板不识别命令词(工单 15)。
+    await user.type(input, "就按这个改{Enter}");
+    expect(props.onSend).toHaveBeenCalledWith("就按这个改");
 
-    await user.type(input, "经理刚才那句什么意思{Enter}");
-    expect(props.onSend).toHaveBeenCalledWith("经理刚才那句什么意思");
-    // 芯片照旧能按(快捷环「再来一局」对局中还得能按,工单 03 约定沿用)。
-    await user.click(screen.getByRole("button", { name: "再来一局" }));
-    expect(props.onQuickAction).toHaveBeenCalledWith("再来一局");
+    await user.click(screen.getByRole("button", { name: "取消批注" }));
+    expect(props.onRevise).toHaveBeenCalledWith("t-w");
   });
 
-  it("输入「演示」唤出一键演示,不作为对话发送", async () => {
+  it("⋯ 菜单与工作日志:菜单打开时能切换男女/勿扰/观察档,日志区按 logOpen 显隐", async () => {
     const user = userEvent.setup();
-    const props = renderPanel();
-    await user.type(screen.getByRole("textbox", { name: "对话输入" }), "演示{Enter}");
-    expect(props.onOpenDemo).toHaveBeenCalledTimes(1);
-    expect(props.onSend).not.toHaveBeenCalled();
+    const props = renderPanel({ menuOpen: true, logOpen: true });
+    const menu = screen.getByRole("menu", { name: "桌宠设置" });
+    expect(menu).toHaveTextContent("切换男版");
+
+    await user.click(screen.getByRole("menuitem", { name: "切换男版" }));
+    expect(props.onSwitchVariant).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("menuitem", { name: "勿扰" }));
+    expect(props.onDnd).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByRole("menuitemcheckbox", { name: /观察模式/ }));
+    expect(props.onSetMode).toHaveBeenCalledWith("observe");
+
+    expect(screen.getByRole("log", { name: "工作日志" })).toBeInTheDocument();
+    expect(screen.getByText("还没有动静")).toBeInTheDocument();
   });
 
-  it("空输入不发送;「清空」与「关闭」各有按钮", async () => {
+  it("状态条:在想时状态区显示「在想」(细节见 AgentStatusBar.test)", () => {
+    renderPanel({ awaitingReply: true, runningCount: 2 });
+    expect(screen.getByText("在想")).toBeInTheDocument();
+  });
+
+  it("「清空」与「关闭」各有按钮", async () => {
     const user = userEvent.setup();
     const props = renderPanel({ messages: [msg("player", "在吗"), msg("pet", "我在呢")] });
-    const input = screen.getByRole("textbox", { name: "对话输入" });
-    await user.type(input, "  {Enter}");
-    expect(props.onSend).not.toHaveBeenCalled();
-
     await user.click(screen.getByRole("button", { name: "清空对话" }));
     expect(props.onClear).toHaveBeenCalledTimes(1);
     await user.click(screen.getByRole("button", { name: "关闭对话" }));
     expect(props.onClose).toHaveBeenCalledTimes(1);
+  });
+
+  it("空对话给开场文案", () => {
+    renderPanel();
+    expect(screen.getByRole("log", { name: "对话记录" })).toHaveTextContent(/随时叫我/);
   });
 });
