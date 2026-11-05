@@ -238,18 +238,23 @@ describe("点击优先对话:对话面板(工单 12)", () => {
     expect(screen.getByRole("status", { name: "桌宠气泡" }).textContent).toBe("很".repeat(40));
   });
 
-  it("通话中输入框锁住,提示「通话中，挂断后再聊」,提交也不发送;表情反应照常", () => {
+  it("通话中可跟桌宠打字:消息只走 pet 源对话触发,不进经理上下文;表情反应照常(工单 15)", async () => {
+    const user = userEvent.setup();
     const agent = fakeAgent();
     render(<DeskPet agent={agent} inCall reaction={{ kind: "hidden-revealed" }} />);
 
     fireEvent.click(screen.getByRole("img", { name: /欢呼/ }));
     const input = screen.getByRole("textbox", { name: "对话输入" });
-    expect(input).toBeDisabled();
-    expect(input).toHaveAttribute("placeholder", "通话中，挂断后再聊");
+    expect(input).toBeEnabled();
 
-    fireEvent.submit(input.closest("form")!);
-    expect(agent.sendTrigger).not.toHaveBeenCalled();
-    // 锁的是输入,表情反应不受影响(工单 12)。
+    await user.type(input, "经理刚才那句什么意思{Enter}");
+    // 出口只有一条:pet 源的 chat 触发给桌宠 Agent——经理会话碰不到这句话。
+    expect(agent.sendTrigger).toHaveBeenCalledWith({
+      source: "pet",
+      kind: "chat",
+      data: expect.objectContaining({ text: "经理刚才那句什么意思" }),
+    });
+    // 通话中的表情反应不受影响(工单 12 约定沿用)。
     expect(screen.getByRole("img", { name: /欢呼/ })).toBeInTheDocument();
   });
 
@@ -732,12 +737,13 @@ describe("快捷芯片跳转与演示入口(工单 10→12)", () => {
     expect(screen.getByRole("region", { name: "对话面板" })).toBeInTheDocument();
   });
 
-  it("演示代发对话(demoChatCue):打开面板并发送,如同玩家亲手输入", async () => {
+  it("演示代发对话(demoChatCue):如同玩家亲手输入;面板只跟 focusPanel,焦点挪走即收起(审查 B1)", async () => {
     const agent = fakeAgent();
-    render(
+    const { rerender } = render(
       <DeskPet
         agent={agent}
         demoChatCue={{ nonce: 1, text: "小贝，跟观众打个招呼" }}
+        focusPanel="chat"
         onDemoChatDone={() => undefined}
       />,
     );
@@ -749,5 +755,41 @@ describe("快捷芯片跳转与演示入口(工单 10→12)", () => {
       data: expect.objectContaining({ text: "小贝，跟观众打个招呼" }),
     });
     expect(screen.getByRole("log", { name: "对话记录" })).toHaveTextContent("小贝，跟观众打个招呼");
+
+    // 演示不再写死 chatOpen:焦点一离开 chat,面板自动收起,还回舞台。
+    rerender(
+      <DeskPet
+        agent={agent}
+        demoChatCue={{ nonce: 1, text: "小贝，跟观众打个招呼" }}
+        focusPanel={null}
+        onDemoChatDone={() => undefined}
+      />,
+    );
+    expect(screen.queryByRole("region", { name: "对话面板" })).not.toBeInTheDocument();
+  });
+
+  it("演示表情优先级最高:盖过对话回复自带的表情标签;清掉后回到外部神态(审查 B1)", async () => {
+    const user = userEvent.setup();
+    const { agent, listeners } = eventCapturingAgent("t-demo");
+    const { rerender } = render(
+      <DeskPet agent={agent} focusPanel="chat" demoExpression="pout" />,
+    );
+
+    await user.type(screen.getByRole("textbox", { name: "对话输入" }), "在吗{Enter}");
+    await act(async () => {});
+    act(() => {
+      listeners.forEach((listener) =>
+        listener({
+          type: "report",
+          report: { ticketId: "t-demo", status: "ready", text: "我在呢，你说。", emotion: "cheer" },
+        }),
+      );
+    });
+    // 回复带了 cheer 标签,但演示接管的 pout 优先(审查 B1:第②幕表情不再被盖)。
+    expect(screen.getByRole("img", { name: /鼓腮/ })).toBeInTheDocument();
+
+    // 演示把表情还回去后,才轮到对话情绪/外部神态。
+    rerender(<DeskPet agent={agent} focusPanel="chat" demoExpression={null} />);
+    expect(screen.getByRole("img", { name: /欢呼/ })).toBeInTheDocument();
   });
 });

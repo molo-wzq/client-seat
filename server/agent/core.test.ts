@@ -243,13 +243,23 @@ describe("Agent 核心:多 Report 与 tickets()(工单 05)", () => {
     let tickets = await core.tickets();
     // 只读:查询本身不追加账本。
     expect((await core.ledger()).filter((entry) => entry.type === "report")).toHaveLength(2);
-    expect(tickets).toEqual([{ ticketId: waitingTicketId, status: "waiting", text: "等你拍板" }]);
+    // 工单 15:视图带 triggerId/worker/at,轨迹行与工作日志据此归并。
+    expect(tickets).toEqual([
+      {
+        ticketId: waitingTicketId,
+        status: "waiting",
+        text: "等你拍板",
+        triggerId: expect.any(String),
+        worker: "命令",
+        at: expect.any(String),
+      },
+    ]);
 
     const decision = await core.emitTrigger(petCommand("决议"));
     tickets = await core.tickets();
     expect(tickets).toEqual([
-      { ticketId: waitingTicketId, status: "ready", text: "拍板后办妥" },
-      { ticketId: decision.ticket?.id, status: "ready", text: "已转达" },
+      { ticketId: waitingTicketId, status: "ready", text: "拍板后办妥", triggerId: expect.any(String), worker: "命令", at: expect.any(String) },
+      { ticketId: decision.ticket?.id, status: "ready", text: "已转达", triggerId: expect.any(String), worker: "命令", at: expect.any(String) },
     ]);
   });
 });
@@ -407,9 +417,16 @@ describe("拖给它:素材入草稿(工单 07)", () => {
     expect(reports[2]?.text).toMatch(/起草/);
     expect(clock.slept).toHaveLength(3);
 
-    // 工单视图折叠到 waiting,即待办面板里那张待审卡。
+    // 工单视图折叠到 waiting,即待办面板里那张待审卡;拖入文件归素材 Worker(工单 15)。
     expect(await core.tickets()).toEqual([
-      { ticketId: outcome.ticket?.id, status: "waiting", text: outcome.report?.text },
+      {
+        ticketId: outcome.ticket?.id,
+        status: "waiting",
+        text: outcome.report?.text,
+        triggerId: expect.any(String),
+        worker: "素材",
+        at: expect.any(String),
+      },
     ]);
   });
 
@@ -464,12 +481,13 @@ describe("拖给它:素材入草稿(工单 07)", () => {
       "progress",
       "waiting",
     ]);
-    // 新 waiting 是按批注改过的草稿,仍待人决定(工单视图原位覆盖,不新增工单)。
+    // 新 waiting 是按批注改过的草稿,仍待人决定(工单视图原位覆盖,不新增工单;
+    // 归并字段保持立项时的值,工单 15)。
     const waiting = reports.at(-1);
     expect(waiting?.text).toMatch(/批注/);
     expect([...waiting?.text ?? ""].length).toBeLessThanOrEqual(40);
     expect((await core.tickets()).filter((view) => view.ticketId === ticketId)).toEqual([
-      { ticketId, status: "waiting", text: waiting?.text },
+      { ticketId, status: "waiting", text: waiting?.text, triggerId: expect.any(String), worker: "素材", at: expect.any(String) },
     ]);
     // 批注自身像决议一样是一张小工单,转达完就绪。
     expect(annotate.report).toMatchObject({ ticketId: annotate.ticket?.id, status: "ready" });

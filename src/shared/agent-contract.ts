@@ -118,11 +118,18 @@ export type PetEmotion = "wave" | "think" | "cheer" | "sleepy" | "pout";
 /**
  * 工单视图(tickets() 的产物):一张工单折叠到最新一条 Report 后的样子。
  * 还没有 Report 的工单视为刚领走(进展、空文案),UI 自行给占位。
+ * triggerId/worker/at(工单 15)供轨迹行与工作日志归并用,由账本补齐;旧数据可缺省。
  */
 export interface AgentTicketView {
   ticketId: string;
   status: ReportStatus;
   text: string;
+  /** 关联触发 id:轨迹行/工作日志按它与评估记录归并。 */
+  triggerId?: string;
+  /** 干活的 Worker 名(如「对话」「投研」),按触发类型推知。 */
+  worker?: string;
+  /** 立项时间(ISO 串):工作日志时间线排序。 */
+  at?: string;
 }
 
 /** 汇报:Worker 对一张工单的一次产出;ready 即最终结果。 */

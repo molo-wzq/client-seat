@@ -5,9 +5,10 @@ import {
   QUICK_RING,
   pokeLine,
   reactionExpression,
+  resolveExpression,
 } from "./pet-reactions";
 
-/** 工单 12 测试缝(纯函数):戳台词轮换、事件→表情映射。 */
+/** 工单 12/15 测试缝(纯函数):戳台词轮换、事件→表情映射、表情优先级。 */
 
 describe("戳一下台词轮换(工单 12)", () => {
   it("按戳的次数轮换:到头循环回第一句", () => {
@@ -45,6 +46,36 @@ describe("事件→表情映射(工单 12)", () => {
 
   it("收到待审不换表情(只晃角标),返回 null", () => {
     expect(reactionExpression({ kind: "todo-arrived" })).toBeNull();
+  });
+});
+
+describe("表情优先级(工单 15,resolveExpression)", () => {
+  /** 只填 base 的速记:全空时就是正常神态。 */
+  const inputs = (overrides: Partial<Parameters<typeof resolveExpression>[0]> = {}) => ({
+    base: "wave" as const,
+    ...overrides,
+  });
+
+  it("演示接管最高:压过拖动、事件反应、对话情绪与困倦(审查 B1)", () => {
+    expect(
+      resolveExpression(inputs({ demo: "cheer", dragging: true, reaction: "think", chat: "pout", sleepy: true })),
+    ).toBe("cheer");
+  });
+
+  it("被拎起来 > 事件反应/对话情绪/困倦:拖动中一律鼓腮", () => {
+    expect(resolveExpression(inputs({ dragging: true, reaction: "think", chat: "cheer", sleepy: true }))).toBe("pout");
+  });
+
+  it("事件反应盖过对话情绪与困倦(审查 S5:通话中表情反应照常)", () => {
+    expect(resolveExpression(inputs({ reaction: "cheer", chat: "think", sleepy: true }))).toBe("cheer");
+    expect(resolveExpression(inputs({ reaction: "think", sleepy: true }))).toBe("think");
+  });
+
+  it("戳一下 > 对话情绪;对话情绪 > 困倦;都没有才看 base", () => {
+    expect(resolveExpression(inputs({ poke: "pout", chat: "think" }))).toBe("pout");
+    expect(resolveExpression(inputs({ chat: "think", sleepy: true }))).toBe("think");
+    expect(resolveExpression(inputs({ sleepy: true }))).toBe("sleepy");
+    expect(resolveExpression(inputs())).toBe("wave");
   });
 });
 

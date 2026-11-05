@@ -1,12 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { reducedMotion } from "./game-feel";
 import { createAgentClient, type AgentClient } from "./agent-client";
-import { PetChatPanel, type PetChatMessage } from "./PetChatPanel";
+import { PetChatPanel } from "./PetChatPanel";
+import { loadChatHistory, serializeChat, type PetChatMessage } from "./chat-history";
+import { appendCapped, applyChatReport as reportToMessages, mergeDelta } from "./chat-stream";
 import {
   IDLE_SLEEP_MS,
   REACTION_HOLD_MS,
   pokeLine,
   reactionExpression,
+  resolveExpression,
   type PetReactionEvent,
   type QuickRingAction,
 } from "./pet-reactions";
@@ -16,6 +19,7 @@ import type {
   AgentPolicy,
   AgentReport,
   AgentTicketView,
+  PetEmotion,
   ReportStatus,
 } from "../shared/agent-contract";
 import fCheer from "../assets/desk-pet/f-cheer.webp";
@@ -33,8 +37,11 @@ import "./desk-pet.css";
 /** 桌宠版式:女版 / 男版。 */
 export type PetVariant = "f" | "m";
 
-/** 桌宠表情:挥手笑 / 拿笔想 / 欢呼 / 打瞌睡 / 鼓腮。 */
-export type PetExpression = "wave" | "think" | "cheer" | "sleepy" | "pout";
+/**
+ * 桌宠表情:挥手笑 / 拿笔想 / 欢呼 / 打瞌睡 / 鼓腮。
+ * 类型统一用契约里的 PetEmotion(工单 15),这里只留别名兼容既有引用。
+ */
+export type PetExpression = PetEmotion;
 
 /** 快捷芯片动作(工单 10→12):面板芯片与回复建议共用,App 按动作决定去哪个视图。 */
 export type { QuickRingAction, PetReactionEvent } from "./pet-reactions";
@@ -45,7 +52,6 @@ const VARIANT_KEY = "desk-pet-variant";
 const POS_KEY = "desk-pet-pos";
 /** 对话历史(工单 12):本地存最近 50 条,可清空。 */
 const CHAT_KEY = "desk-pet-chat";
-const CHAT_HISTORY_MAX = 50;
 /** 进模型的对话历史轮数(spec:history 最近 N 轮;一轮 = 玩家 + 桌宠各一句)。 */
 const CHAT_HISTORY_MESSAGES = 16;
 
@@ -104,23 +110,10 @@ function clampBubble(text: string): string {
   return [...text].slice(0, 40).join("");
 }
 
-/** 本地对话历史(工单 12):只认 {speaker,text[,quickActions]},坏数据当空。 */
+/** 本地对话历史(工单 15):读盘包 try(存储被禁用不崩,审查 R10),校验截断在纯模块。 */
 function loadChat(): PetChatMessage[] {
   try {
-    const raw = window.localStorage.getItem(CHAT_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed
-      .filter(
-        (item): item is { speaker: "player" | "pet"; text: string; quickActions?: string[] } =>
-          typeof item === "object" &&
-          item !== null &&
-          ((item as { speaker?: unknown }).speaker === "player" || (item as { speaker?: unknown }).speaker === "pet") &&
-          typeof (item as { text?: unknown }).text === "string",
-      )
-      .slice(-CHAT_HISTORY_MAX)
-      .map((item, index) => ({ key: `h${index}`, ...item }));
+    return loadChatHistory(window.localStorage.getItem(CHAT_KEY));
   } catch {
     return [];
   }
@@ -165,7 +158,7 @@ function savePos(pos: PetPos) {
  * 桌宠在牌桌一角陪客户看局(工单 01 外壳 + 工单 12 互动):
  * 单击头像优先进入对话(快捷环收进面板顶部成芯片),Ctrl+K 唤同一个面板;
  * 悬停探头、双击戳一下、拖动鼓腮、闲置 3 分钟打瞌睡、事件反应换表情。
- * 不说话评价玩家;inCall(对局中)只锁输入——芯片「再来一局」还得能按。
+ * 不说话评价玩家;通话中照样能聊(工单 15:桌宠站客户一侧,消息不进经理上下文)。
  * 工单 07:文件拖到桌宠上高亮「交给我」,松手交 Worker 起草进待审。
  * 工单 08:待办面板顶部放权模式三段开关(off/observe/auto)与评估记录列表。
  */
@@ -180,7 +173,8 @@ export function DeskPet({
   reaction = null,
   demoChatCue = null,
   onDemoChatDone,
-  policySignal = 0,
+  demoExpression = null,
+  policySignal = 0
 }: {
   expression?: PetExpression;
   inCall?: boolean;
@@ -195,9 +189,11 @@ export function DeskPet({
   view?: string;
   /** 事件反应(工单 12):翻牌/举牌/挂断换表情,待审只晃角标;App 每次传新对象。 */
   reaction?: PetReactionEvent | null;
-  /** 演示代发一句对话(工单 12):打开面板并发送,如同玩家亲手输入;nonce 保证只发一次。 */
+  /** 演示代发一句对话(工单 12):如同玩家亲手输入;面板开合只跟 focusPanel(审查 B1),nonce 保证只发一次。 */
   demoChatCue?: { nonce: number; text: string } | null;
   onDemoChatDone?: () => void;
+  /** 演示接管的表情(审查 B1):非空时压过一切内部状态;null 表示还回去。 */
+  demoExpression?: PetExpression | null;
   /** 放权被动过的信号(工单 10):演示脚本每切一次放权就 +1,开着的面板据此重拉,开关立即同步。 */
   policySignal?: number;
 }) {
@@ -227,7 +223,11 @@ export function DeskPet({
   const [chatOpen, setChatOpen] = useState(false);
   /** 事件回调里读最新开合状态,避免订阅 effect 的旧闭包。 */
   const chatOpenRef = useRef(false);
+  /** 面板此刻可见(用户开着或演示焦点在 chat,审查 B1):气泡/红点据此让位。 */
+  const panelOpenRef = useRef(false);
   const [messages, setMessages] = useState<PetChatMessage[]>(loadChat);
+  /** 上次写盘的串(R1):相同就不写,流式期间不再逐字刷 localStorage。 */
+  const lastChatSavedRef = useRef<string | null>(null);
   /** 已发出还没见到回音:面板里显示「…」打字指示。 */
   const [awaitingReply, setAwaitingReply] = useState(false);
   /** 面板关闭时收到新回复:头像亮红点,打开面板即清。 */
@@ -253,11 +253,6 @@ export function DeskPet({
   function nextMessageKey(): string {
     messageKeyRef.current += 1;
     return `m${messageKeyRef.current}`;
-  }
-
-  /** 追加并截到最近 50 条(工单 12):渲染与本地存储同一上限。 */
-  function appendCapped(prev: PetChatMessage[], message: PetChatMessage): PetChatMessage[] {
-    return [...prev, message].slice(-CHAT_HISTORY_MAX);
   }
 
   /** 任何与桌宠的互动都算活动:醒来并把闲置计时重置 3 分钟。 */
@@ -292,7 +287,9 @@ export function DeskPet({
     agent
       .sendTrigger({ source: "pet", kind: "chat", data: { text, history, ...(view ? { view } : {}) } })
       .then((outcome) => {
+        // 回执先登记工单号(审查 S1):SSE 断流或正文为空时,靠回执里的最终 Report 落消息。
         if (outcome.ticket) chatTicketsRef.current.add(outcome.ticket.id);
+        if (outcome.report) applyChatReport(outcome.report);
       })
       .catch(() => {
         setAwaitingReply(false);
@@ -303,42 +300,25 @@ export function DeskPet({
       });
   }
 
-  /** 流式增量:按工单号拼接;首次到达创建流式条目(演示代发也走这里)。 */
+  /** 流式增量:按工单号拼接(纯函数),首次到达创建流式条目(演示代发也走这里)。 */
   function applyDelta(ticketId: string, text: string) {
     chatTicketsRef.current.add(ticketId);
-    setMessages((prev) => {
-      const index = prev.findIndex((message) => message.ticketId === ticketId && message.streaming);
-      if (index >= 0) {
-        const next = [...prev];
-        const current = next[index]!;
-        next[index] = { ...current, text: current.text + text };
-        return next;
-      }
-      return appendCapped(prev, { key: nextMessageKey(), ticketId, speaker: "pet", text, streaming: true });
-    });
+    setMessages((prev) => mergeDelta(prev, ticketId, text, nextMessageKey));
     setAwaitingReply(false); // 正文开始上屏,「…」让位
-    if (!chatOpenRef.current) setChatDot(true);
+    if (!panelOpenRef.current) setChatDot(true);
   }
 
-  /** 对话 Report:只认对话工单号;ready 才定稿(取服务端权威全文),failed 等回退路径的最终稿。 */
+  /**
+   * 对话 Report:只认对话工单号;终态(ready/failed/dropped)落消息——
+   * ready 取服务端权威全文,failed/dropped 也结束等待(审查 S2),消息变迁在纯模块。
+   */
   function applyChatReport(report: AgentReport) {
     if (!chatTicketsRef.current.has(report.ticketId)) return;
-    if (report.status !== "ready") return;
-    setMessages((prev) => {
-      const index = prev.findIndex((message) => message.ticketId === report.ticketId);
-      const quickActions = report.quickActions && report.quickActions.length > 0 ? { quickActions: report.quickActions } : {};
-      if (index < 0) {
-        return appendCapped(prev, { key: nextMessageKey(), ticketId: report.ticketId, speaker: "pet", text: report.text, ...quickActions });
-      }
-      const existing = prev[index]!;
-      if (!existing.streaming) return prev; // 已定稿的重复 ready 不动
-      const next = [...prev];
-      next[index] = { ...existing, text: report.text, streaming: undefined, ...quickActions };
-      return next;
-    });
-    if (report.emotion) setChatEmotion(report.emotion); // 结束后按表情标签切表情(工单 12)
+    if (report.status !== "ready" && report.status !== "failed" && report.status !== "dropped") return;
+    setMessages((prev) => reportToMessages(prev, report, nextMessageKey));
+    if (report.status === "ready" && report.emotion) setChatEmotion(report.emotion); // 回复到达按表情标签切(工单 12)
     setAwaitingReply(false);
-    if (!chatOpenRef.current) setChatDot(true);
+    if (!panelOpenRef.current) setChatDot(true);
   }
 
   function clearChat() {
@@ -445,8 +425,8 @@ export function DeskPet({
         agent.evals().then(setEvals).catch(() => undefined);
         applyChatReport(event.report);
       } else if (event.type === "channel" && event.channel.target === "pet-bubble") {
-        // 面板开着时回复就在面板里看,不再弹气泡;关着才出气泡(工单 12)。
-        if (!chatOpenRef.current) setBubble(clampBubble(event.channel.text));
+        // 面板开着(用户开着或演示焦点在 chat)时回复就在面板里看,不再弹气泡(工单 12,审查 B1)。
+        if (!panelOpenRef.current) setBubble(clampBubble(event.channel.text));
       } else if (event.type === "delta") {
         applyDelta(event.ticketId, event.text);
       }
@@ -476,19 +456,14 @@ export function DeskPet({
     };
   }, [agent, inboxOpen, focusPanel, policySignal]);
 
-  // 对话历史落本地(工单 12):只存最近 50 条,流式标记不落。
+  // 对话历史落本地(工单 12→15):序列化在纯模块,串没变不重复写盘——
+  // 流式期间逐字到达但定稿内容未变,localStorage 不被逐字刷写(审查 R1)。
   useEffect(() => {
     try {
-      window.localStorage.setItem(
-        CHAT_KEY,
-        JSON.stringify(
-          messages.slice(-CHAT_HISTORY_MAX).map(({ speaker, text, quickActions }) => ({
-            speaker,
-            text,
-            ...(quickActions && quickActions.length > 0 ? { quickActions } : {}),
-          })),
-        ),
-      );
+      const payload = serializeChat(messages);
+      if (payload === lastChatSavedRef.current) return;
+      lastChatSavedRef.current = payload;
+      window.localStorage.setItem(CHAT_KEY, payload);
     } catch {
       // 隐私模式写不进就算了,本次会话内对话仍可用。
     }
@@ -515,17 +490,20 @@ export function DeskPet({
   }, [activityAt]);
 
   // 演示代发对话(工单 12):如同玩家亲手输入;nonce 去重,StrictMode 重放也不重发。
+  // 面板开合不在这里写(审查 B1):演示只管发话,面板跟 focusPanel 走,焦点挪开即收起。
   useEffect(() => {
     if (!demoChatCue || demoChatCue.nonce === demoChatSentRef.current) return;
     demoChatSentRef.current = demoChatCue.nonce;
-    chatOpenRef.current = true;
-    setChatOpen(true);
-    setChatDot(false);
     wake();
     sendChat(demoChatCue.text);
     onDemoChatDone?.();
     // 依赖按约定逐字面列出(见 PetDemoConsole 同款):cue 变更才执行。
   }, [demoChatCue]);
+
+  // 面板可见性同步进 ref(用户开着或演示焦点在 chat,审查 B1):事件回调据此决定气泡/红点。
+  useEffect(() => {
+    panelOpenRef.current = chatOpen || focusPanel === "chat";
+  }, [chatOpen, focusPanel]);
 
   useEffect(() => {
     return () => {
@@ -585,12 +563,17 @@ export function DeskPet({
     else openChat();
   }
 
-  // 有效表情(工单 12 互动感):被拎起来 > 睡着 > 戳一下 > 对话情绪 > 事件反应 > 外部神态。
-  const shownExpression: PetExpression = dragging
-    ? "pout"
-    : sleepy
-      ? "sleepy"
-      : (pokeExpression ?? chatEmotion ?? reactionExpr ?? expression);
+  // 有效表情(工单 15 互动感):优先级归并进 pet-reactions 纯函数,单独可测——
+  // 被拎起 > 事件反应 > 戳一下 > 对话情绪 > 困了 > 外部神态(审查 S5:反应不再被盖)。
+  const shownExpression: PetExpression = resolveExpression({
+    demo: demoExpression,
+    dragging,
+    reaction: reactionExpr,
+    poke: pokeExpression,
+    chat: chatEmotion,
+    sleepy,
+    base: expression,
+  });
 
   // 待人决定与受阻的工单(spec 故事 11/16):角标数量、待办面板都由它驱动。
   // 受阻卡(Watchdog 标的)只说明原因;同意/驳回与批注只属于等待中的待审卡。
@@ -714,7 +697,6 @@ export function DeskPet({
       <PetChatPanel
         messages={messages}
         awaitingReply={awaitingReply}
-        inCall={inCall}
         onSend={sendChat}
         onClose={closeChat}
         onClear={clearChat}

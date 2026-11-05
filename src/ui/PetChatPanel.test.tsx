@@ -18,7 +18,6 @@ function renderPanel(overrides: Partial<Parameters<typeof PetChatPanel>[0]> = {}
   const props = {
     messages: [] as PetChatMessage[],
     awaitingReply: false,
-    inCall: false,
     onSend: vi.fn(),
     onClose: vi.fn(),
     onClear: vi.fn(),
@@ -55,6 +54,17 @@ describe("对话面板(工单 12)", () => {
     fireEvent.keyDown(screen.getByRole("textbox", { name: "对话输入" }), { key: "Escape" });
     expect(props.onClose).toHaveBeenCalledTimes(1);
     expect(props.onSend).not.toHaveBeenCalled();
+  });
+
+  it("中文输入法组字时按 Enter 不发送、Esc 不关面板(审查 B2,工单 15 验收)", () => {
+    const props = renderPanel();
+    const input = screen.getByRole("textbox", { name: "对话输入" });
+    // Chrome 在组字期派发 isComposing=true 的 keydown;老版本以 keyCode 229 标识。
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true });
+    fireEvent.keyDown(input, { key: "Enter", keyCode: 229 });
+    expect(props.onSend).not.toHaveBeenCalled();
+    fireEvent.keyDown(input, { key: "Escape", isComposing: true });
+    expect(props.onClose).not.toHaveBeenCalled();
   });
 
   it("顶部一排快捷芯片:点了才执行(发命令 + 跳转回调)", async () => {
@@ -94,7 +104,6 @@ describe("对话面板(工单 12)", () => {
     const { rerender } = render(<PetChatPanel
       messages={[msg("player", "在吗")]}
       awaitingReply
-      inCall={false}
       onSend={vi.fn()}
       onClose={vi.fn()}
       onClear={vi.fn()}
@@ -106,7 +115,6 @@ describe("对话面板(工单 12)", () => {
     rerender(<PetChatPanel
       messages={[msg("player", "在吗"), { key: "s", speaker: "pet", text: "我在", streaming: true }]}
       awaitingReply={false}
-      inCall={false}
       onSend={vi.fn()}
       onClose={vi.fn()}
       onClear={vi.fn()}
@@ -117,19 +125,18 @@ describe("对话面板(工单 12)", () => {
     expect(screen.queryByLabelText("正在输入")).not.toBeInTheDocument();
   });
 
-  it("通话中输入框锁住,提示「通话中，挂断后再聊」,提交也不发送", async () => {
+  it("通话中不再锁定输入(工单 15):面板不感知通话,输入随时可打可发", async () => {
     const user = userEvent.setup();
-    const props = renderPanel({ inCall: true });
+    const props = renderPanel();
     const input = screen.getByRole("textbox", { name: "对话输入" });
-    expect(input).toBeDisabled();
-    expect(input).toHaveAttribute("placeholder", "通话中，挂断后再聊");
+    expect(input).toBeEnabled();
+    expect(input).toHaveAttribute("placeholder", "跟桌宠说点什么…(Enter 发送)");
 
-    // 芯片不锁(「再来一局」对局中还得能按),但输入框禁用。
+    await user.type(input, "经理刚才那句什么意思{Enter}");
+    expect(props.onSend).toHaveBeenCalledWith("经理刚才那句什么意思");
+    // 芯片照旧能按(快捷环「再来一局」对局中还得能按,工单 03 约定沿用)。
     await user.click(screen.getByRole("button", { name: "再来一局" }));
     expect(props.onQuickAction).toHaveBeenCalledWith("再来一局");
-
-    fireEvent.submit(input.closest("form")!);
-    expect(props.onSend).not.toHaveBeenCalled();
   });
 
   it("输入「演示」唤出一键演示,不作为对话发送", async () => {

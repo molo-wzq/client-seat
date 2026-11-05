@@ -431,13 +431,13 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
         demoChatCue={demoChat}
         onDemoChatDone={() => setDemoChat(null)}
         policySignal={petPolicySignal}
+        demoExpression={demoExpression}
         expression={
-          demoExpression
-            ?? (view === "postgame"
-              ? "cheer"
-              : raisePending && view === "table" && conversation?.status === "ongoing"
-                ? "think"
-                : "wave")
+          view === "postgame"
+            ? "cheer"
+            : raisePending && view === "table" && conversation?.status === "ongoing"
+              ? "think"
+              : "wave"
         }
       />
     </div>
