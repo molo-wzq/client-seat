@@ -1,6 +1,6 @@
 # 16 · 桌宠接入牌局上下文、工具调用与审批闭环
 
-Status: ready-for-agent
+Status: done
 Blocked by: 15
 
 ## 背景
@@ -45,3 +45,14 @@ Blocked by: 15
 - 相关单测通过，typecheck 通过，build 通过。
 - demo 模式（无 key）下，7 幕和通话中问桌宠都能演示。
 - 有隔离测试、工具调用测试、审批闭环测试。
+
+## Comments
+
+- 2026-11-05（ZCode）六步全部完成，分六笔提交（2b65793→3e9f4ae）：
+  1. ChatContext 契约（agent-contract，牌局/非牌局两态 + 长度上限）；落账前整个剔除（core 复用 S4 机制，账本无 context/隐藏牌原文）；隔离测试 server/agent/game-context.test.ts 钉住「只进桌宠提示词」。
+  2. 前端纯模块 pet-game-context 组装快照（最近 6 轮、用卡出处、x/N 揭示数、非牌局换幕+摘要），App→DeskPet→useChatSession 随 chat 发送。
+  3. 只读工具 ×4（get_weekly_research / search_cards / get_last_review / get_customer_card，后三者数据源由 main.ts 注入本地数据）；AgentModelPort 新增非流式 completeWithTools，OpenAI 适配器实现线格式映射、Failover 链整链切换；工具最多 3 轮、每轮一条 progress（工具名+中文）；无 key demo 脚本模拟一次工具调用（tools.test.ts）。真实路径去掉伪进度，仅 DemoWorker 保留节拍。
+  4. 动态建议：回复尾行「【建议】a|b|c」由流式闸门扣住不上屏，剥成 quickActions（≤3）替换静态意图表；demo 按回合给固定 2 个；面板建议按钮改为点击即作为对话发出。
+  5. 审批闭环（approval.test.ts）：同意投研→写入 current-sections.json 异议包（标注「桌宠起草·已审」，情报档案夹可见）；同意盲区→data/agent/card-review-queue.json 人审队列（无发布接口，ADR 0007 闸门不变）；驳回→归档附理由（决议命令支持可选理由并进审批串行队列）。
+  6. 表情事件驱动：新增 table 触发 card-played/hidden-raised/hidden-revealed → Worker 落 dropped+emotion（think/pout/cheer，不出气泡）；复盘 ready Report 带 cheer；App 撤销 expression prop 切换，DeskPet 经 SSE 对非对话工单 Report.emotion 做短时微反应。
+- 验证：相关单测全绿；npm run typecheck 0 错误；全量 npx vitest run server src 69 文件 656 测试通过（2 个既有 smoke 门跳过）。未跑 build 与 code-review（按约定由用户验收）。demo 模式链路全程无 key 可演示（demo 对话含模拟工具调用与固定建议）。
