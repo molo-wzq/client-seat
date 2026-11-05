@@ -9,11 +9,17 @@ import { createProductCore } from "../src/domain/product-core";
 import { purgeExpiredConversations } from "../src/domain/conversation-retention";
 import { createRequestListener } from "./app-server";
 import { createAgentCore } from "./agent/core";
-import { createModelWorkers, type AgentModelPort } from "./agent/workers";
+import { createModelWorkers } from "./agent/workers";
 import { createWatchdog } from "./agent/watchdog";
 import { loadEnvFile, readConversationRetention } from "./env";
 import { FileStorage } from "./file-store";
-import { readAgentRouterConfig, readAgentWorkerConfig, readLlmConfig, readLlmFallbackConfig } from "./model-config";
+import {
+  formatRegistrySummary,
+  readModelsConfigFile,
+  resolveModelRegistry,
+  type ResolvedModelRegistry,
+  type RoleModelEntry,
+} from "./model-registry";
 
 /** 组合根:读配置 → 建核心 → 起服务;路由与错误映射在 app-server.ts。 */
 
@@ -38,60 +44,70 @@ try {
   process.exit(1);
 }
 
-// 对话/文案分析共用 LLM 配置;转写走独立 CLI(server/audio-intake.ts),不在此组合根。
-// 主备双供应商:主网关失败且话术未流出时由 FailoverModelAdapter 自动切到备用。
-const llm = readLlmConfig(process.env);
-const llmFallback = readLlmFallbackConfig(process.env);
-const adapter: CopywritingPort & DialoguePort = (() => {
-  const build = (cfg: typeof llm): OpenAICompatibleModelAdapter =>
-    new OpenAICompatibleModelAdapter({ apiKey: cfg.apiKey!, baseUrl: cfg.baseUrl, model: cfg.model });
-  if (llm.apiKey && llmFallback.apiKey) {
-    console.log(
-      `[phone-coach] LLM 双供应商:主 ${llm.model}(${llm.baseUrl}) → 备 ${llmFallback.model}(${llmFallback.baseUrl})`,
-    );
-    return new FailoverModelAdapter(build(llm), build(llmFallback));
-  }
-  if (llm.apiKey) return build(llm);
-  if (llmFallback.apiKey) {
-    console.warn("[phone-coach] 只配置了 LLM_FALLBACK_*,未配置主模型,备用将作为唯一模型使用");
-    return build(llmFallback);
-  }
-  return new FakeModelAdapter();
-})();
-if (!llm.apiKey && !llmFallback.apiKey) {
-  console.warn(
-    "[phone-coach] 未配置 MIMO_API_KEY,语言模型使用内置伪实现(仅演示);配置见 README.md",
+// 模型注册表(工单 13):models.config.json(可选)+ 旧环境变量 → 按角色的 fallback 链。
+// 配置不合法(能力不匹配、引用未登记 provider、anthropic-messages 未实现)直接终止启动。
+let registry: ResolvedModelRegistry;
+try {
+  registry = resolveModelRegistry({ config: readModelsConfigFile(ROOT), env: process.env });
+} catch (error) {
+  console.error(`[phone-coach] 模型注册表配置不合法:${(error as Error).message}`);
+  process.exit(1);
+}
+// 启动摘要:逐角色打印实际 provider:model(含 fallback 链),绝不打印密钥。
+for (const line of formatRegistrySummary(registry).split("\n")) {
+  console.log(`[phone-coach] 模型 ${line}`);
+}
+
+// 按角色组装适配器:链上每个模型一个 OpenAI 兼容适配器,交给 FailoverModelAdapter
+// 依次切换(工单 13);裁判元数据提取用 judge 角色的链首模型,缺省与主模型同体。
+const buildModel = (entry: RoleModelEntry): OpenAICompatibleModelAdapter =>
+  new OpenAICompatibleModelAdapter({ apiKey: entry.apiKey!, baseUrl: entry.baseUrl, model: entry.model });
+const buildChain = (entries: RoleModelEntry[], judge?: OpenAICompatibleModelAdapter): FailoverModelAdapter =>
+  new FailoverModelAdapter(
+    entries.map(
+      (entry) =>
+        new OpenAICompatibleModelAdapter({ apiKey: entry.apiKey!, baseUrl: entry.baseUrl, model: entry.model }, judge),
+    ),
   );
+
+const judgeEntry = registry.roles.judge[0];
+const judge = judgeEntry ? buildModel(judgeEntry) : undefined;
+const dialogue: DialoguePort =
+  registry.roles.manager.length > 0 ? buildChain(registry.roles.manager, judge) : new FakeModelAdapter();
+const copywriting: CopywritingPort =
+  registry.roles.copywriting.length > 0 ? buildChain(registry.roles.copywriting) : new FakeModelAdapter();
+if (registry.roles.manager.length === 0 && registry.roles.copywriting.length === 0) {
+  console.warn(
+    "[phone-coach] 未配置任何对话模型密钥,语言模型使用内置伪实现(仅演示);配置见 README.md",
+  );
+}
+const onlyFallback = registry.roles.manager;
+if (onlyFallback.length === 1 && onlyFallback[0].providerId === "llm-fallback") {
+  console.warn("[phone-coach] 只配置了 LLM_FALLBACK_*,未配置主模型,备用将作为唯一模型使用");
 }
 
 const storage = new FileStorage(DATA_FILE);
 const core = createProductCore({
-  copywriting: adapter,
-  dialogue: adapter,
+  copywriting,
+  dialogue,
   storage,
   retention,
 });
 
-// 桌宠 Agent(ADR 0007,工单 11):账本与产品数据同库。
-// 有 key 走真实模型(对话用 Router 轻量组,投研/盲区用 Worker 强模型组,
-// 两组都回退 LLM 配置);没 key 时 Worker 自身退回 demo 脚本,演示完整可用。
-const agentRouterConfig = readAgentRouterConfig(process.env);
-const agentWorkerConfig = readAgentWorkerConfig(process.env);
-const buildAgentModel = (config: typeof agentRouterConfig): AgentModelPort =>
-  new OpenAICompatibleModelAdapter({ apiKey: config.apiKey!, baseUrl: config.baseUrl, model: config.model });
+// 桌宠 Agent(ADR 0007,工单 11→13):账本与产品数据同库。
+// 对话走 agent.chat 链(轻量),投研/盲区草稿走 agent.worker 链(强模型),
+// 都由注册表解析(旧变量映射或 models.config.json);链为空即无 key,Worker 退回 demo,演示完整可用。
+const chatChain = registry.roles["agent.chat"];
+const draftChain = registry.roles["agent.worker"];
 const agent = createAgentCore({
   storage,
   worker: createModelWorkers({
-    routerModel: agentRouterConfig.apiKey ? buildAgentModel(agentRouterConfig) : undefined,
-    workerModel: agentWorkerConfig.apiKey ? buildAgentModel(agentWorkerConfig) : undefined,
+    routerModel: chatChain.length > 0 ? buildChain(chatChain) : undefined,
+    workerModel: draftChain.length > 0 ? buildChain(draftChain) : undefined,
   }),
 });
-if (agentRouterConfig.apiKey || agentWorkerConfig.apiKey) {
-  console.log(
-    `[phone-coach] 桌宠 Agent 真实模型:Router ${agentRouterConfig.apiKey ? agentRouterConfig.model : "demo"} / Worker ${agentWorkerConfig.apiKey ? agentWorkerConfig.model : "demo"}`,
-  );
-} else {
-  console.warn("[phone-coach] 桌宠 Agent 未配置 AGENT_ROUTER_*/AGENT_WORKER_*(也未配 LLM),对话与草稿走 demo 演示");
+if (chatChain.length === 0 && draftChain.length === 0) {
+  console.warn("[phone-coach] 桌宠 Agent 未配置任何模型角色(AGENT_*/MIMO_*/models.config.json),对话与草稿走 demo 演示");
 }
 
 // Watchdog(工单 09):工单超时没进展先重试一次,再卡住就标受阻进待办,不发桌宠气泡。

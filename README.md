@@ -107,6 +107,52 @@ MIMO_MODEL=mimo-v2.6-pro
 
 模型按角色分两组配置：**对话组**（`MIMO_*`：理财经理对话、素材文案分析、转写后的说话人整理）与**转写组**（`ASR_*`：录音转文字）。转写组未配置时自动复用对话组的密钥与地址，只换用转写模型；填上 `ASR_*` 三项即可把转写切换到另一家供应商。
 
+## 多模型注册表（models.config.json，可选）
+
+要接多家供应商、或给不同角色配不同模型时，在仓库根目录创建 `models.config.json`：先登记 provider（协议、地址、密钥环境变量名、模型清单与能力），再按角色配 `"providerId:model"` 的有序链。链上主模型失败（网关 5xx、连接失败、超时且话术未流出）时自动切到下一个。**密钥只从环境变量读取，绝不写进这个文件**。下面示例接智谱 GLM 与 DeepSeek 两家：
+
+```json
+{
+  "providers": [
+    {
+      "id": "zhipu",
+      "protocol": "openai-chat",
+      "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+      "apiKeyEnv": "ZHIPU_API_KEY",
+      "models": ["glm-4.6", "glm-4.6-air"],
+      "capabilities": { "stream": true, "tools": true, "json": true, "audio": false }
+    },
+    {
+      "id": "deepseek",
+      "protocol": "openai-chat",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "apiKeyEnv": "DEEPSEEK_API_KEY",
+      "models": ["deepseek-chat", "deepseek-reasoner"],
+      "capabilities": { "stream": true, "tools": true, "json": true, "audio": false }
+    }
+  ],
+  "roles": {
+    "manager": ["zhipu:glm-4.6", "deepseek:deepseek-chat"],
+    "judge": "deepseek:deepseek-chat",
+    "copywriting": "zhipu:glm-4.6",
+    "agent.chat": ["zhipu:glm-4.6-air", "deepseek:deepseek-chat"],
+    "agent.worker": "deepseek:deepseek-reasoner"
+  }
+}
+```
+
+密钥写进 `.env.local`（文件里 `apiKeyEnv` 指向的变量必须已设置，否则启动直接报错，不会静默降级）：
+
+```env
+ZHIPU_API_KEY=你的智谱密钥
+DEEPSEEK_API_KEY=你的 DeepSeek 密钥
+```
+
+- **角色**：`manager`（经理对话）、`judge`（裁判元数据提取）、`copywriting`（素材分析与说话人整理）、`asr`（录音转写）、`agent.router` / `agent.worker` / `agent.chat`（桌宠 Agent）。值可以是单个 `"providerId:model"`，也可以是数组——fallback 链，按序切换。
+- **能力是硬校验**：`agent.*` 要求 `stream`，`judge` 与 `copywriting` 要求 `json`，`asr` 要求 `audio`；声明不满足时启动即报错。`protocol` 本期只实现 `openai-chat`，引用 `anthropic-messages` 的角色会得到明确的「尚未实现」报错（协议字段已预留）。
+- **兼容**：不创建这个文件、或某角色没写在文件里时，沿用 `MIMO_*` / `ASR_*` / `LLM_FALLBACK_*` / `AGENT_*` 环境变量——旧的 `.env.local` 一个字都不用改。
+- 启动时逐角色打印实际使用的 provider:model 链（不打印密钥），形如 `[phone-coach] 模型 manager: zhipu/glm-4.6 → deepseek/deepseek-chat`；未配密钥的角色标 `demo(未配密钥)`，演示模式完整可用。
+
 ## 对话存储上限
 
 对话记录是唯一随使用无限增长的数据，为避免历史无限堆积，系统按保留策略自动清理旧对话（不区分进行中/已结束）：

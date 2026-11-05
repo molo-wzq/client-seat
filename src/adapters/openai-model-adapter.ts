@@ -58,7 +58,11 @@ export const DEFAULT_MODEL_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1";
 export const DEFAULT_MODEL_NAME = "mimo-v2.6-pro";
 
 export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePort {
-  constructor(private readonly config: ModelAdapterConfig) {}
+  constructor(
+    private readonly config: ModelAdapterConfig,
+    /** 裁判元数据提取可换模型(注册表 judge 角色,工单 13);缺省复用本适配器(现状行为)。 */
+    private readonly judge?: OpenAICompatibleModelAdapter,
+  ) {}
 
   async analyzeTranscript(transcript: string): Promise<TranscriptAnalysis> {
     const { content, reasoning } = await this.chat(
@@ -150,7 +154,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
       `客户:${sanitizeCustomerText(input.customerText)}`,
       `经理(刚说):${reply}`,
     ].join("\n");
-    const { content, reasoning } = await this.chat(
+    const { content, reasoning } = await (this.judge ?? this).chat(
       [
         { role: "system", content: assembleManagerMetaPrompt(input) },
         { role: "user", content: `对话记录:\n${dialogue}\n\n请输出元数据 JSON。` },
