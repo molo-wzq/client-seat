@@ -9,7 +9,7 @@ import { usePetMood } from "./use-pet-mood";
 import { usePetPosition } from "./use-pet-position";
 import { useAgentView } from "./use-agent-view";
 import { buildTraceSteps, mergeWorkLog, type TraceStep } from "./agent-trace";
-import type { PetEmotion } from "../shared/agent-contract";
+import type { ChatContext, PetEmotion } from "../shared/agent-contract";
 import "./desk-pet.css";
 
 /** 桌宠版式:女版 / 男版。 */
@@ -70,6 +70,7 @@ export function DeskPet({
   onQuickAction,
   onOpenDemo,
   view,
+  chatContext = null,
   demoExpression = null,
   ref,
 }: {
@@ -82,6 +83,8 @@ export function DeskPet({
   onOpenDemo?: () => void;
   /** 当前页面名(工单 11 view):进对话上下文,桌宠回话结合所在页。 */
   view?: string;
+  /** 牌局快照(工单 16):App 组装,随 chat 触发给桌宠(只进桌宠提示词,落账前剔除)。 */
+  chatContext?: ChatContext | null;
   /** 演示接管的表情(审查 B1):非空时压过一切内部状态;null 表示还回去。 */
   demoExpression?: PetExpression | null;
   ref?: Ref<DeskPetHandle>;
@@ -99,7 +102,7 @@ export function DeskPet({
   const avatarRef = useRef<HTMLButtonElement>(null);
   const panelOpenRef = useRef(false);
 
-  const session = useChatSession({ agent, view, onOpenDemo });
+  const session = useChatSession({ agent, view, chatContext, onOpenDemo });
   const mood = usePetMood({ onSingleClick: () => (panelOpenRef.current ? closePanel() : openPanel()) });
   const position = usePetPosition({ rootRef, onInteract: mood.wake });
   const agentView = useAgentView(agent);

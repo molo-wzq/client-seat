@@ -14,6 +14,7 @@ import { SetupAct } from "./ui/SetupAct";
 import { TableAct } from "./ui/TableAct";
 import { WireframePrototype } from "./ui/wireframe-prototype";
 import { createAgentClient, type AgentClient } from "./ui/agent-client";
+import { buildPetChatContext, lastGameOf } from "./ui/pet-game-context";
 import { playSfx } from "./ui/game-feel";
 
 /** 缺省桌宠 agent 客户端(与 DeskPet 的实例同理,无状态,可各持一个)。 */
@@ -105,6 +106,18 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
     [materials],
   );
   const seatedPersona = personas.find((p) => p.id === conversation?.personaId) ?? null;
+  // 牌局快照(工单 16):App 现成状态折成 ChatContext,随 chat 触发给桌宠;
+  // 只进桌宠提示词,服务端落账前剔除——隐藏牌绝不进经理上下文。
+  const petChatContext = useMemo(
+    () =>
+      buildPetChatContext({
+        view,
+        conversation,
+        hiddenChoices: hiddenChoicesByCall[conversation?.id ?? ""] ?? {},
+        lastGame: lastGameOf(result ? { outcome: result.outcome, endReason: result.endReason } : null, conversations),
+      }),
+    [view, conversation, hiddenChoicesByCall, result, conversations],
+  );
   // 目录按创建时间倒序;取最近一通进行中的通话,用于离开对局后找回。
   const ongoingCall = conversations.find((c) => c.status === "ongoing") ?? null;
   // 快速开始/接通/找回进行中通话都会进入对局,共用一个互斥位:
@@ -425,6 +438,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
         onQuickAction={handleQuickAction}
         onOpenDemo={() => setDemoOpen(true)}
         view={view}
+        chatContext={petChatContext}
         demoExpression={demoExpression}
         expression={
           view === "postgame"

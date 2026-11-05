@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentClient } from "./agent-client";
-import type { AgentEvent, AgentReport, PetEmotion } from "../shared/agent-contract";
+import type { AgentEvent, AgentReport, ChatContext, PetEmotion } from "../shared/agent-contract";
 import { CHAT_KEY, loadChatHistory, serializeChat, type PetChatMessage } from "./chat-history";
 import { appendCapped, applyChatReport as reportToMessages, mergeDelta } from "./chat-stream";
 import { DEMO_COMMAND, type QuickRingAction } from "./pet-reactions";
@@ -19,11 +19,14 @@ const CHAT_HISTORY_MESSAGES = 16;
 export function useChatSession({
   agent,
   view,
+  chatContext,
   onOpenDemo,
 }: {
   agent: AgentClient;
   /** 当前页面名:进对话上下文,桌宠回话结合所在页。 */
   view?: string;
+  /** 牌局快照(工单 16):随 chat 触发附带给桌宠 Worker;不在牌局时为 idle 快照或 null。 */
+  chatContext?: ChatContext | null;
   /** 对话输入「演示」时唤出一键演示(工单 15:分流在上层,面板不识别命令词)。 */
   onOpenDemo?: () => void;
 }) {
@@ -95,7 +98,11 @@ export function useChatSession({
       .map(({ speaker, text: messageText }) => ({ speaker, text: messageText }));
     setMessages((prev) => appendCapped(prev, { key: nextMessageKey(), speaker: "player", text }));
     agent
-      .sendTrigger({ source: "pet", kind: "chat", data: { text, history, ...(view ? { view } : {}) } })
+      .sendTrigger({
+        source: "pet",
+        kind: "chat",
+        data: { text, history, ...(view ? { view } : {}), ...(chatContext ? { context: chatContext } : {}) },
+      })
       .then((outcome) => {
         // 回执先登记(审查 S1):回执自带的最终 Report 直接落消息,不依赖 SSE。
         if (outcome.ticket) chatTicketsRef.current.add(outcome.ticket.id);
