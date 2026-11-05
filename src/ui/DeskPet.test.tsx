@@ -213,6 +213,25 @@ describe("点击与面板开合(工单 15,审查 S3/S7/S8)", () => {
     expect(screen.getByRole("button", { name: /桌宠·女版/ })).toHaveFocus();
   });
 
+  it("Ctrl+K 只认 Ctrl:⌘K 不抢浏览器快捷键;勿扰时忽略(审查 R3)", async () => {
+    const user = userEvent.setup();
+    render(<DeskPet agent={fakeAgent()} />);
+    // ⌘K(meta)留给浏览器自己,桌宠不接管。
+    fireEvent.keyDown(window, { key: "k", metaKey: true });
+    expect(screen.queryByRole("region", { name: "对话面板" })).not.toBeInTheDocument();
+
+    // 开着面板进勿扰(⋯ 菜单):勿扰期间 Ctrl+K 被忽略——若没忽略,这一下会把
+    // 仍为开的 panelOpen 切成关,退出勿扰后面板就没了。
+    openPanelByHotkey();
+    await user.click(screen.getByRole("button", { name: "更多设置" }));
+    await user.click(screen.getByRole("menuitem", { name: "勿扰" }));
+    expect(screen.getByRole("button", { name: "桌宠勿扰中,点击恢复" })).toBeInTheDocument();
+    openPanelByHotkey();
+
+    await user.click(screen.getByRole("button", { name: "桌宠勿扰中,点击恢复" }));
+    expect(screen.getByRole("region", { name: "对话面板" })).toBeInTheDocument();
+  });
+
   it("头像是可聚焦的按钮,带 aria-expanded(审查 S8)", () => {
     render(<DeskPet agent={fakeAgent()} />);
     const avatar = screen.getByRole("button", { name: /桌宠·女版·挥手笑/ });

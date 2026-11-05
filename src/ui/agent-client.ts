@@ -108,12 +108,19 @@ export function createAgentClient(deps: AgentClientDeps = {}): AgentClient {
       const source = new Source(`${baseUrl}/api/agent/events`);
       // 服务端事件格式(server/app-server.ts):event: report|channel|delta,
       // data: {report}|{channel}|{delta:{ticketId,text}}(delta 为工单 11 流式对话增量)。
+      // 载荷形状从契约 AgentEvent 推导(审查 R11),不另手写一份。
+      type SsePayload = {
+        report?: Extract<AgentEvent, { type: "report" }>["report"];
+        channel?: Extract<AgentEvent, { type: "channel" }>["channel"];
+        delta?: Omit<Extract<AgentEvent, { type: "delta" }>, "type">;
+      };
       const dispatch = (event: MessageEvent): void => {
-        const payload = JSON.parse((event.data ?? "{}") as string) as {
-          report?: Extract<AgentEvent, { type: "report" }>["report"];
-          channel?: Extract<AgentEvent, { type: "channel" }>["channel"];
-          delta?: { ticketId: string; text: string };
-        };
+        let payload: SsePayload;
+        try {
+          payload = JSON.parse((event.data ?? "{}") as string) as SsePayload;
+        } catch {
+          return; // 坏帧丢弃:不让一条脏数据炸掉监听器(审查 R11)
+        }
         if (payload.report) listener({ type: "report", report: payload.report });
         if (payload.channel) listener({ type: "channel", channel: payload.channel });
         if (payload.delta) listener({ type: "delta", ...payload.delta });

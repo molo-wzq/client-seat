@@ -297,15 +297,6 @@
 }
 .desk-pet-hold-speak:disabled { opacity: 0.55; cursor: not-allowed; }
 
-/* 所有新动效都尊重 prefers-reduced-motion(工单 12)。 */
-@media (prefers-reduced-motion: reduce) {
-  .desk-pet-chat,
-  .desk-pet-dot,
-  .desk-pet-typing,
-  .desk-pet-chat-bubble[data-streaming]::after,
-  .desk-pet:not(.desk-pet-collapsed):not([data-dragging]) .desk-pet-avatar:hover img,
-  .desk-pet-badge { animation: none; }
-}
 .desk-pet[data-reduced-motion] .desk-pet-chat,
 .desk-pet[data-reduced-motion] .desk-pet-dot,
 .desk-pet[data-reduced-motion] .desk-pet-typing,
@@ -643,4 +634,15 @@
   border-left: 3px solid #cc092b; /* 砖红:强调 */
   background: #ece9e2;
   font-weight: 700;
+}
+
+/* 所有动效尊重 prefers-reduced-motion(工单 12;审查 R4:块放文件末尾,
+   之后新增的 animation 规则别再写在它后面,免得同优先级盖掉这里的 none)。 */
+@media (prefers-reduced-motion: reduce) {
+  .desk-pet-chat,
+  .desk-pet-dot,
+  .desk-pet-typing,
+  .desk-pet-chat-bubble[data-streaming]::after,
+  .desk-pet:not(.desk-pet-collapsed):not([data-dragging]) .desk-pet-avatar:hover img,
+  .desk-pet-badge { animation: none; }
 }

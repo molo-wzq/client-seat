@@ -43,6 +43,11 @@ export interface DeskPetHandle {
 const VARIANT_KEY = "desk-pet-variant";
 const defaultAgent = createAgentClient();
 
+/** 面板内定位滚动:jsdom 没有 scrollIntoView,可选调用不炸测试环境。 */
+function scrollIntoViewSafe(root: HTMLElement | null, selector: string): void {
+  root?.querySelector(selector)?.scrollIntoView?.({ block: "nearest" });
+}
+
 function loadVariant(): PetVariant {
   try {
     return window.localStorage.getItem(VARIANT_KEY) === "m" ? "m" : "f";
@@ -116,7 +121,7 @@ export function DeskPet({
     // todo 定位:面板挂上后滚到最早一张待拍板卡(微任务后查 DOM)。
     if (locate === "todo") {
       window.setTimeout(() => {
-        rootRef.current?.querySelector(".desk-pet-card[data-status='waiting']")?.scrollIntoView({ block: "nearest" });
+        scrollIntoViewSafe(rootRef.current, ".desk-pet-card[data-status='waiting']");
       }, 0);
     }
   }
@@ -152,15 +157,20 @@ export function DeskPet({
     }
   }
 
-  // Ctrl+K 全局唤出面板(工单 12;审查 R3 的勿扰忽略与不抢 ⌘K 在工单 15 后续收口)。
-  // 面板开合只碰 panelOpenRef 与稳定 setter,依赖空数组不会读到旧状态。
+  // Ctrl+K 全局唤出面板(工单 12→15 收口,审查 R3):只认 Ctrl,⌘K 留给浏览器;勿扰时忽略。
+  // 面板开合只碰 panelOpenRef/dndRef 与稳定 setter,依赖空数组不会读到旧状态。
+  const dndRef = useRef(false);
+  useEffect(() => {
+    dndRef.current = dnd;
+  });
   useEffect(() => {
     function onKeyDown(e: KeyboardEvent) {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
-        e.preventDefault();
-        if (panelOpenRef.current) closePanel();
-        else openPanel();
-      }
+      if (!e.ctrlKey || e.metaKey) return; // 只认 Ctrl+K,不抢 ⌘K(审查 R3)
+      if (e.key.toLowerCase() !== "k") return;
+      if (dndRef.current) return; // 勿扰中不唤出,退出勿扰也不补弹(审查 R3)
+      e.preventDefault();
+      if (panelOpenRef.current) closePanel();
+      else openPanel();
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
