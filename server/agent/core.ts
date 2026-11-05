@@ -14,7 +14,9 @@ import type {
   AgentTriggerInput,
   LedgerEntry,
   PostgameBasis,
+  EmitOutcome,
 } from "./types";
+export type { EmitOutcome } from "./types";
 import type { LedgerStorage } from "./storage";
 import { foldTickets } from "./tickets";
 import { findPolicyRule, foldEvals, initialPolicy } from "./policy";
@@ -32,9 +34,14 @@ import { findPolicyRule, foldEvals, initialPolicy } from "./policy";
  */
 export type ReportSink = (report: AgentReport) => Promise<void>;
 
+/** Worker 只读账本视图；决定依据与 UI 展示共用同一持久状态。 */
+export interface WorkerContext {
+  tickets(): Promise<AgentTicketView[]>;
+}
+
 /** Worker:领一张工单干活,途中可经 onReport 追加汇报,最终返回一条 Report。 */
 export interface AgentWorker {
-  run(ticket: AgentTicket, trigger: AgentTrigger, onReport: ReportSink): Promise<AgentReport>;
+  run(ticket: AgentTicket, trigger: AgentTrigger, onReport: ReportSink, context?: WorkerContext): Promise<AgentReport>;
 }
 
 /**
@@ -67,22 +74,25 @@ const DEMO_STEP_MS = 350;
  */
 export class DemoWorker implements AgentWorker {
   private readonly sleep: (ms: number) => Promise<void>;
-  /** 已抛出 waiting、还没收回决定的工单号;决议按最近优先。 */
-  private waitingTicketIds: string[] = [];
 
   constructor(deps: DemoWorkerDeps = {}) {
     this.sleep = deps.sleep ?? ((ms) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   }
 
-  async run(ticket: AgentTicket, trigger: AgentTrigger, onReport: ReportSink): Promise<AgentReport> {
+  async run(
+    ticket: AgentTicket,
+    trigger: AgentTrigger,
+    onReport: ReportSink,
+    context: WorkerContext = { tickets: async () => [] },
+  ): Promise<AgentReport> {
     if (trigger?.kind === "game-ended") return this.runPostgameReview(ticket, trigger);
     if (trigger?.kind === "dropped") return this.runMaterialDraft(ticket, onReport);
-    if (trigger?.kind === "annotate") return this.runAnnotate(ticket, trigger, onReport);
+    if (trigger?.kind === "annotate") return this.runAnnotate(ticket, trigger, onReport, context);
     if (trigger?.kind === "model-error") return this.runModelError(ticket, onReport);
     const text = typeof trigger?.data?.text === "string" ? trigger.data.text.trim() : "";
     // 待人决定的决议命令:「同意」「驳回」,可带工单号(待办面板按钮就这么发)。
     const decision = /^(同意|驳回)\s*(\S+)?$/.exec(text);
-    if (decision) return this.runDecision(ticket, decision[1], decision[2], onReport);
+    if (decision) return this.runDecision(ticket, decision[1], decision[2], onReport, context);
     if (text === "本周投研" || text.includes("并行")) return this.runStepwiseDemo(ticket, text, onReport);
     return { ticketId: ticket.id, status: "ready", text: SCRIPTED_REPLIES[text] ?? "收到，马上办" };
   }
@@ -107,7 +117,6 @@ export class DemoWorker implements AgentWorker {
     });
     await this.sleep(DEMO_STEP_MS);
     if (text === "本周投研") {
-      this.waitingTicketIds.push(ticket.id);
       return { ticketId: ticket.id, status: "waiting", text: "本周投研先押 AI 还是消费？等你拍板。" };
     }
     await onReport({
@@ -136,15 +145,17 @@ export class DemoWorker implements AgentWorker {
     verb: string,
     ticketId: string | undefined,
     onReport: ReportSink,
+    context: WorkerContext,
   ): Promise<AgentReport> {
     const agree = verb === "同意";
-    const target =
-      (ticketId !== undefined && this.waitingTicketIds.includes(ticketId) ? ticketId : undefined) ??
-      this.waitingTicketIds.at(-1);
+    const waiting = (await context.tickets()).filter((view) => view.status === "waiting");
+    // 显式 ID 失效时不可审批另一张工单；只有省略 ID 才取最近待办。
+    const target = ticketId === undefined
+      ? waiting.at(-1)?.ticketId
+      : waiting.find((view) => view.ticketId === ticketId)?.ticketId;
     if (target === undefined) {
       return { ticketId: ticket.id, status: "ready", text: "现在没有等你拍板的工单。" };
     }
-    this.waitingTicketIds = this.waitingTicketIds.filter((id) => id !== target);
     await onReport({
       ticketId: target,
       status: agree ? "ready" : "dropped",
@@ -163,7 +174,6 @@ export class DemoWorker implements AgentWorker {
       await onReport({ ticketId: ticket.id, status: "progress", text: `${step}…` });
       await this.sleep(DEMO_STEP_MS);
     }
-    this.waitingTicketIds.push(ticket.id);
     return { ticketId: ticket.id, status: "waiting", text: "草稿好了，进待审，等你过目。" };
   }
 
@@ -176,9 +186,10 @@ export class DemoWorker implements AgentWorker {
     ticket: AgentTicket,
     trigger: AgentTrigger,
     onReport: ReportSink,
+    context: WorkerContext,
   ): Promise<AgentReport> {
     const ticketId = typeof trigger.data.ticketId === "string" ? trigger.data.ticketId : "";
-    if (!this.waitingTicketIds.includes(ticketId)) {
+    if (!(await context.tickets()).some((view) => view.ticketId === ticketId && view.status === "waiting")) {
       return { ticketId: ticket.id, status: "ready", text: "没有这张待审工单。" };
     }
     await onReport({ ticketId, status: "progress", text: "按批注改草稿，改完再给你。" });
@@ -239,14 +250,6 @@ function draftPostgameOneLiner(
   };
 }
 
-/** emitTrigger 的结果:未准入时链路止于 Decision,ticket/report 为空。 */
-export interface EmitOutcome {
-  triggerId: string;
-  admitted: boolean;
-  ticket: AgentTicket | null;
-  report: AgentReport | null;
-}
-
 export interface AgentCore {
   /** 链路唯一入口:接收一次触发,同步驱动到 Report(或止于拒绝的 Decision)。 */
   emitTrigger(input: AgentTriggerInput): Promise<EmitOutcome>;
@@ -277,6 +280,10 @@ export function createAgentCore(deps: {
   const { storage, worker } = deps;
   const listeners = new Set<(event: AgentEvent) => void>();
   let policy = initialPolicy(deps.initialAcceptMode);
+  const attempts = new Map<string, { token: symbol; stop(): void }>();
+  const context: WorkerContext = { tickets: async () => foldTickets(await storage.listLedgerEntries()) };
+  // 审批/批注串行读取并更新待办，避免并发决定重复生效；其他任务仍可并行。
+  let reviewChain: Promise<void> = Promise.resolve();
 
   // 每条 Report(途中的与最终的)走同一条出口:先落账,再发事件;能说的才配气泡。
   const emitReport = async (report: AgentReport): Promise<void> => {
@@ -292,6 +299,36 @@ export function createAgentCore(deps: {
       channel: { target: "pet-bubble", ticketId: report.ticketId, text: [...report.text].slice(0, 40).join("") },
     });
   };
+
+  /** 首次执行与重试共享最终汇报和异常出口；新尝试使旧尝试的迟到汇报失效。 */
+  async function runWorker(ticket: AgentTicket, trigger: AgentTrigger): Promise<AgentReport> {
+    const attempt = Symbol(ticket.id);
+    // 放弃旧执行的等待，释放审批队列；它仍可能运行，但其后续汇报会被 token 拦住。
+    attempts.get(ticket.id)?.stop();
+    let stop!: () => void;
+    const superseded: AgentReport = { ticketId: ticket.id, status: "dropped", text: "本次执行已由重试或系统处置接管。" };
+    const stopped = new Promise<AgentReport>((resolve) => { stop = () => resolve(superseded); });
+    attempts.set(ticket.id, { token: attempt, stop });
+    const sink: ReportSink = async (report) => {
+      if (attempts.get(ticket.id)?.token === attempt) await emitReport(report);
+    };
+    const run = async (): Promise<AgentReport> => {
+      try {
+        return { ...(await worker.run(ticket, trigger, sink, context)), ticketId: ticket.id };
+      } catch {
+        return { ticketId: ticket.id, status: "failed", text: "工单执行失败，暂未完成，已保留记录。" };
+      }
+    };
+    const text = typeof trigger.data.text === "string" ? trigger.data.text.trim() : "";
+    const mutatesWaiting = trigger.kind === "annotate" || (trigger.kind === "command" && /^(同意|驳回)\s*(\S+)?$/.test(text));
+    const execute = () => attempts.get(ticket.id)?.token === attempt ? Promise.race([run(), stopped]) : Promise.resolve(superseded);
+    const pending = mutatesWaiting ? reviewChain.then(execute) : execute();
+    if (mutatesWaiting) reviewChain = pending.then(() => undefined, () => undefined);
+    const report = await pending;
+    await sink(report);
+    if (attempts.get(ticket.id)?.token === attempt) attempts.delete(ticket.id);
+    return report;
+  }
 
   return {
     async emitTrigger(input) {
@@ -353,8 +390,7 @@ export function createAgentCore(deps: {
       };
       await storage.appendLedgerEntry({ type: "ticket", ticket });
 
-      const report: AgentReport = { ...(await worker.run(ticket, trigger, emitReport)), ticketId: ticket.id };
-      await emitReport(report);
+      const report = await runWorker(ticket, trigger);
 
       return { triggerId: trigger.id, admitted: true, ticket, report };
     },
@@ -388,6 +424,8 @@ export function createAgentCore(deps: {
 
     async retryTicket(ticketId) {
       const entries = await storage.listLedgerEntries();
+      const view = foldTickets(entries).find((ticket) => ticket.ticketId === ticketId);
+      if (!view || view.status !== "progress") return false;
       const ticket = entries.find(
         (entry): entry is Extract<LedgerEntry, { type: "ticket" }> => entry.type === "ticket" && entry.ticket.id === ticketId,
       )?.ticket;
@@ -398,11 +436,16 @@ export function createAgentCore(deps: {
       )?.trigger;
       if (!trigger) return false;
       // 重启不等结果:卡住的工单本来就可能不返回,新汇报走同一条出口自然落账。
-      void worker.run(ticket, trigger, emitReport).catch(() => undefined);
+      void runWorker(ticket, trigger).catch(() => undefined);
       return true;
     },
 
     async appendSystemReport(report) {
+      // 受阻/失败后，仍在后台运行的尝试不能再覆盖系统终态。
+      if (report.status !== "progress") {
+        attempts.get(report.ticketId)?.stop();
+        attempts.delete(report.ticketId);
+      }
       // Watchdog 的汇报只落账与 report 事件,不配气泡(spec 故事 16:不对玩家说话)。
       await storage.appendLedgerEntry({ type: "report", report });
       publish({ type: "report", report });

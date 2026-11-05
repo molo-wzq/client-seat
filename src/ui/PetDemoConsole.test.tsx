@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { EmitOutcome } from "../../server/agent/core";
-import type { AgentTriggerInput, AgentTicket } from "../../server/agent/types";
+import type { EmitOutcome } from "../shared/agent-contract";
+import type { AgentTriggerInput, AgentTicket } from "../shared/agent-contract";
 import { DEMO_GAME_ID, DEMO_STEPS } from "./pet-demo";
 import { PetDemoConsole } from "./PetDemoConsole";
 import type { AgentClient } from "./agent-client";

@@ -4,7 +4,7 @@
  * 全程只发真实 Trigger 走真实链路(Source→Eval→Ticket→Worker→Report→Channel),
  * 不依赖任何真实模型——汇报时无 key 也能完整跑通。
  */
-import type { AcceptMode, AgentTriggerInput } from "../../server/agent/types";
+import type { AcceptMode, AgentTriggerInput } from "../shared/agent-contract";
 import type { ConversationTurn, StrategyCard } from "../domain/types";
 import type { PetExpression } from "./DeskPet";
 

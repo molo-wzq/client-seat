@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { AcceptMode } from "../../server/agent/types";
+import type { AcceptMode } from "../shared/agent-contract";
 import type { AgentClient } from "./agent-client";
 import type { PetExpression } from "./DeskPet";
 import {

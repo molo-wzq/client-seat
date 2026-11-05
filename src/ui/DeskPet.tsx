@@ -8,7 +8,7 @@ import type {
   AgentReport,
   AgentTicketView,
   ReportStatus,
-} from "../../server/agent/types";
+} from "../shared/agent-contract";
 import fCheer from "../assets/desk-pet/f-cheer.webp";
 import fPout from "../assets/desk-pet/f-pout.webp";
 import fSleepy from "../assets/desk-pet/f-sleepy.webp";
@@ -481,7 +481,7 @@ export function DeskPet({
   const popovers = (
     <div className="desk-pet-popovers">
       {dropHover && !dnd && <p className="desk-pet-drop-hint">交给我</p>}
-      {bubble !== null && !dnd && (
+      {bubble !== null && !dnd && !inCall && (
         <p className="desk-pet-bubble" role="status" aria-label="桌宠气泡">
           {bubble}
         </p>

@@ -546,7 +546,9 @@ describe("DemoWorker 分步演示(工单 05)", () => {
 
     const midReports: AgentReport[] = [];
     const agreeTrigger = demoTrigger("同意 t-week");
-    const final = await worker.run(demoTicket(agreeTrigger, "t-agree"), agreeTrigger, collectSink(midReports));
+    const final = await worker.run(demoTicket(agreeTrigger, "t-agree"), agreeTrigger, collectSink(midReports), {
+      tickets: async () => [{ ticketId: "t-week", status: "waiting", text: "待决定" }],
+    });
 
     expect(midReports).toEqual([{ ticketId: "t-week", status: "ready", text: "收到，按你拍板的出结果。" }]);
     expect(final).toMatchObject({ ticketId: "t-agree", status: "ready" });
@@ -559,7 +561,9 @@ describe("DemoWorker 分步演示(工单 05)", () => {
 
     const midReports: AgentReport[] = [];
     const rejectTrigger = demoTrigger("驳回");
-    const final = await worker.run(demoTicket(rejectTrigger, "t-reject"), rejectTrigger, collectSink(midReports));
+    const final = await worker.run(demoTicket(rejectTrigger, "t-reject"), rejectTrigger, collectSink(midReports), {
+      tickets: async () => [{ ticketId: "t-week", status: "waiting", text: "待决定" }],
+    });
 
     expect(midReports).toEqual([{ ticketId: "t-week", status: "dropped", text: "收到，这条不做了。" }]);
     expect(final).toMatchObject({ ticketId: "t-reject", status: "ready", text: "好，已驳回。" });

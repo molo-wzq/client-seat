@@ -4,15 +4,15 @@
  * onEvent 订阅事件流(SSE /api/agent/events)。fetch 与 EventSource 可注入,
  * 测试用假实现(见 agent-client.test.ts);生产缺省用浏览器全局实现。
  */
-import type { EmitOutcome } from "../../server/agent/core";
 import type {
+  EmitOutcome,
   AcceptMode,
   AgentEvalRecord,
   AgentEvent,
   AgentPolicy,
   AgentTicketView,
   AgentTriggerInput,
-} from "../../server/agent/types";
+} from "../shared/agent-contract";
 
 /** 注入缝:测试传假 fetch / 假 EventSource;缺省回落浏览器全局。 */
 export interface AgentClientDeps {

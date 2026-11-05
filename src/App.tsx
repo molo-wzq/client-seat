@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Conversation, ConversationResult, ConversationStartOptions, Material, Persona } from "./domain/types";
 import type { ProductCore } from "./domain/product-core";
 import type { RoleCard } from "./domain/role-card";
-import type { PostgameBasis } from "../server/agent/types";
+import type { PostgameBasis } from "./shared/agent-contract";
 import { BusyHint } from "./ui/BusyHint";
 import { CardsView, HistoryView, MaterialsView, ResearchReportView, RolesView } from "./ui/CatalogViews";
 import { DeskPet, type PetExpression, type QuickRingAction } from "./ui/DeskPet";
@@ -404,6 +404,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
           进结算后变「欢呼」,陪着看经理的复盘一句话(工单 06);
           演示期间表情由演示脚本接管(工单 10)。 */}
       <DeskPet
+        agent={agent}
         inCall={view === "table" && conversation?.status === "ongoing"}
         onQuickAction={handleQuickAction}
         onOpenDemo={() => setDemoOpen(true)}

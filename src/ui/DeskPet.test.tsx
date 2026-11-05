@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AgentEvalRecord, AgentEvent, AgentPolicy, AgentTicketView } from "../../server/agent/types";
+import type { AgentEvalRecord, AgentEvent, AgentPolicy, AgentTicketView } from "../shared/agent-contract";
 import { DeskPet, type PetExpression } from "./DeskPet";
 import type { AgentClient } from "./agent-client";
 
