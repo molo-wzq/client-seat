@@ -30,6 +30,24 @@ const DRAFT_MAX_CHARS = 500;
 /** 进模型的对话历史轮数上限(spec:history 最近 N 轮)。 */
 const CHAT_HISTORY_TURNS = 8;
 
+/** 演示节奏(工单 12):demo 对话每拍间隔与字数,面板看得见逐字又不拖沓。 */
+const DEMO_CHAT_STEP_MS = 160;
+const DEMO_CHAT_CHUNK_CHARS = 4;
+
+/** 缺省 sleep:真实等待;测试注入即时假钟。 */
+const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * demo 对话脚本(工单 12,无 key):按玩家话挑一句带表情前缀的桌宠口吻回复;
+ * 意图命中时快捷动作建议照给——与真实模型同形状,demo 模式完整可演示。
+ */
+function demoChatReply(text: string): string {
+  if (detectQuickActions(text).length > 0) return "[cheer]好，这就去安排。";
+  if (/复盘|上一局/.test(text)) return "[think]这局我陪着看的，值得学的一招我先记下。";
+  if (/在吗|你好|嗨|打招呼|陪|说说话/.test(text)) return "[wave]我在呢，你说，我听着。";
+  return "[wave]收到，先搁我手上，好了叫你。";
+}
+
 /** 表情前缀:模型按提示词约定开头,如「[cheer]正文」;标签表与提示词同源(pet-persona)。 */
 const EMOTION_TAG = new RegExp(`^\\[(${PET_EMOTIONS.join("|")})\\]\\s*`);
 /** 可能构成表情前缀的最大长度:按标签表算出(「[sleepy]」)。 */
@@ -91,10 +109,15 @@ function parseHistory(value: unknown): AgentModelMessage[] {
     .slice(-CHAT_HISTORY_TURNS);
 }
 
-/** 对话 Worker:走 Router(轻量)模型;出错/无 key 退回 demo,桌宠不卡死。 */
+/** 对话 Worker:走 Router(轻量)模型;出错/无 key 退回 demo 脚本,桌宠不卡死。 */
 class ChatWorker implements AgentWorker {
   constructor(
-    private readonly deps: { model?: AgentModelPort; demo: AgentWorker; persona: PetPersonaCard },
+    private readonly deps: {
+      model?: AgentModelPort;
+      persona: PetPersonaCard;
+      /** demo 分拍节奏(工单 12):测试注入即时假钟。 */
+      sleep: (ms: number) => Promise<void>;
+    },
   ) {}
 
   async run(
@@ -104,10 +127,10 @@ class ChatWorker implements AgentWorker {
     onDelta?: (text: string) => void,
   ): Promise<AgentReport> {
     const text = asText(trigger.data.text);
-    // 无 key:直接走 demo 脚本回复,演示模式完整可用。
-    if (!this.deps.model) return this.deps.demo.run(ticket, trigger, onReport);
     const hidden = asTextArray(trigger.data.hidden);
     const view = asText(trigger.data.view);
+    // 无 key:走演示脚本回复,一样分拍流式、带表情与快捷动作(工单 12:demo 完整可演示)。
+    if (!this.deps.model) return this.runDemoChat(ticket, text, hidden, onDelta);
     const messages: AgentModelMessage[] = [
       { role: "system", content: assemblePetSystemPrompt(this.deps.persona, view || undefined) },
       ...parseHistory(trigger.data.history),
@@ -162,14 +185,37 @@ class ChatWorker implements AgentWorker {
         ...(quickActions.length > 0 ? { quickActions } : {}),
       };
     } catch (error) {
-      // 出错或超时:落 failed 写明原因,退回 demo 回复(工单 11:桌宠不卡死)。
+      // 出错或超时:落 failed 写明原因,退回 demo 脚本(工单 11:桌宠不卡死)。
       await onReport({
         ticketId: ticket.id,
         status: "failed",
         text: `真实模型没接上：${(error as Error).message.slice(0, 200)}。先用演示话回你。`,
       });
-      return this.deps.demo.run(ticket, trigger, onReport);
+      return this.runDemoChat(ticket, text, hidden, onDelta);
     }
+  }
+
+  /** 演示对话(无 key/回退):脚本回复分拍流出,Report 带表情与建议,与真实模型同形状。 */
+  private async runDemoChat(
+    ticket: AgentTicket,
+    text: string,
+    hidden: string[],
+    onDelta?: (delta: string) => void,
+  ): Promise<AgentReport> {
+    const { text: body, emotion } = stripEmotionTag(demoChatReply(text));
+    const chars = [...truncateChars(redactHidden(body, hidden), CHAT_MAX_CHARS)];
+    for (let start = 0; start < chars.length; start += DEMO_CHAT_CHUNK_CHARS) {
+      if (start > 0) await this.deps.sleep(DEMO_CHAT_STEP_MS);
+      onDelta?.(chars.slice(start, start + DEMO_CHAT_CHUNK_CHARS).join(""));
+    }
+    const quickActions = detectQuickActions(text);
+    return {
+      ticketId: ticket.id,
+      status: "ready",
+      text: chars.join(""),
+      ...(emotion ? { emotion } : {}),
+      ...(quickActions.length > 0 ? { quickActions } : {}),
+    };
   }
 }
 
@@ -221,10 +267,12 @@ export function createModelWorkers(deps: {
   routerModel?: AgentModelPort;
   workerModel?: AgentModelPort;
   persona?: PetPersonaCard;
+  /** demo 对话分拍节奏(工单 12):缺省真实等待,测试注入即时假钟。 */
+  demoChatSleep?: (ms: number) => Promise<void>;
 }): AgentWorker {
   const demo = new DemoWorker();
   const persona = deps.persona ?? DEFAULT_PET_PERSONA;
-  const chat = new ChatWorker({ model: deps.routerModel, demo, persona });
+  const chat = new ChatWorker({ model: deps.routerModel, persona, sleep: deps.demoChatSleep ?? defaultSleep });
   const research = new DraftWorker({
     model: deps.workerModel,
     demoText: "投研草稿好了：本周要点三条、风险一条，进待审等你过目。",

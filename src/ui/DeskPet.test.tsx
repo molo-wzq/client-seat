@@ -1,11 +1,13 @@
-import { act, fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { EmitOutcome } from "../../server/agent/core";
 import type { AgentEvalRecord, AgentEvent, AgentPolicy, AgentTicketView } from "../../server/agent/types";
 import { DeskPet, type PetExpression } from "./DeskPet";
+import { IDLE_SLEEP_MS, POKE_LINES } from "./pet-reactions";
 import type { AgentClient } from "./agent-client";
 
-// 桌宠把版式、勿扰、位置都记在 localStorage,测试间互不串扰。
+// 桌宠把版式、位置、对话历史都记在 localStorage,测试间互不串扰。
 beforeEach(() => {
   window.localStorage.clear();
 });
@@ -15,7 +17,12 @@ function fakeAgent(overrides: Partial<AgentClient> = {}): AgentClient {
   return {
     sendCommand: vi.fn(() => Promise.resolve()),
     sendTrigger: vi.fn(() =>
-      Promise.resolve({ triggerId: "tr-x", admitted: true, ticket: null, report: null }),
+      Promise.resolve({
+        triggerId: "tr-x",
+        admitted: true,
+        ticket: { id: "t-x", triggerId: "tr-x", thread: { kind: "commandId" as const, key: "tr-x" } },
+        report: null,
+      }),
     ),
     onEvent: vi.fn(() => () => undefined),
     tickets: vi.fn(() => Promise.resolve([])),
@@ -29,6 +36,26 @@ function fakeAgent(overrides: Partial<AgentClient> = {}): AgentClient {
 /** 空规则策略样例:UI 只关心版本与当前模式,规则数据由服务端契约钉住。 */
 function emptyPolicy(acceptMode: AgentPolicy["acceptMode"]): AgentPolicy {
   return { version: 1, acceptMode, rules: [] };
+}
+
+/** 捕获事件监听器的假 agent:流式与红点用例靠它模拟 SSE。 */
+function eventCapturingAgent(sendTicketId = "t-chat"): { agent: AgentClient; listeners: Array<(event: AgentEvent) => void> } {
+  const listeners: Array<(event: AgentEvent) => void> = [];
+  const agent = fakeAgent({
+    onEvent: (listener) => {
+      listeners.push(listener);
+      return () => undefined;
+    },
+    sendTrigger: vi.fn(() =>
+      Promise.resolve({
+        triggerId: "tr-c",
+        admitted: true,
+        ticket: { id: sendTicketId, triggerId: "tr-c", thread: { kind: "commandId" as const, key: "tr-c" } },
+        report: null,
+      }),
+    ),
+  });
+  return { agent, listeners };
 }
 
 describe("桌宠外壳", () => {
@@ -129,108 +156,303 @@ describe("桌宠外壳", () => {
   });
 });
 
-describe("桌宠快捷环与命令条(工单 03)", () => {
-  it("点击头像弹出快捷环 4 项,点击项把命令发给 agent", async () => {
+describe("点击优先对话:对话面板(工单 12)", () => {
+  it("单击头像打开对话面板,输入框自动聚焦;快捷环收进顶部变成芯片,点了才执行", async () => {
     const user = userEvent.setup();
+    const agent = fakeAgent();
+    const onQuickAction = vi.fn();
+    render(<DeskPet agent={agent} onQuickAction={onQuickAction} />);
+
+    fireEvent.click(screen.getByRole("img", { name: /女版/ }));
+
+    expect(screen.getByRole("region", { name: "对话面板" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "对话输入" })).toHaveFocus();
+    for (const label of ["换个客户", "再来一局", "上局复盘", "本周投研"]) {
+      expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
+    }
+
+    await user.click(screen.getByRole("button", { name: "换个客户" }));
+    expect(agent.sendCommand).toHaveBeenCalledWith("换个客户");
+    expect(onQuickAction).toHaveBeenCalledWith("换个客户");
+    // 点完芯片收起面板,回到牌桌。
+    expect(screen.queryByRole("region", { name: "对话面板" })).not.toBeInTheDocument();
+  });
+
+  it("Ctrl+K 打开同一个面板;Enter 发送对话触发,面板不收起", async () => {
+    const user = userEvent.setup();
+    const agent = fakeAgent();
+    render(<DeskPet agent={agent} />);
+    expect(screen.queryByRole("region", { name: "对话面板" })).not.toBeInTheDocument();
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    const input = screen.getByRole("textbox", { name: "对话输入" });
+
+    await user.type(input, "经理刚才那句什么意思{Enter}");
+
+    expect(agent.sendTrigger).toHaveBeenCalledWith({
+      source: "pet",
+      kind: "chat",
+      data: expect.objectContaining({ text: "经理刚才那句什么意思" }),
+    });
+    // 对话保留:发送后面板仍然打开。
+    expect(screen.getByRole("region", { name: "对话面板" })).toBeInTheDocument();
+  });
+
+  it("Esc 关闭面板且不发送;再点头像又能打开", () => {
     const agent = fakeAgent();
     render(<DeskPet agent={agent} />);
 
     fireEvent.click(screen.getByRole("img", { name: /女版/ }));
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "对话输入" }), { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "对话面板" })).not.toBeInTheDocument();
+    expect(agent.sendTrigger).not.toHaveBeenCalled();
 
-    expect(screen.getByRole("button", { name: "换个客户" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "再来一局" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "上局复盘" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "本周投研" })).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "换个客户" }));
-    expect(agent.sendCommand).toHaveBeenCalledWith("换个客户");
+    fireEvent.click(screen.getByRole("img", { name: /女版/ }));
+    expect(screen.getByRole("region", { name: "对话面板" })).toBeInTheDocument();
   });
 
-  it("Ctrl+K 唤出命令条,回车发送并收起", async () => {
-    const user = userEvent.setup();
-    const agent = fakeAgent();
-    render(<DeskPet agent={agent} />);
-    expect(screen.queryByRole("textbox", { name: "命令条" })).not.toBeInTheDocument();
-
-    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
-    const input = screen.getByRole("textbox", { name: "命令条" });
-
-    await user.type(input, "把本周投研讲成一句人话{Enter}");
-
-    expect(agent.sendCommand).toHaveBeenCalledWith("把本周投研讲成一句人话");
-    expect(screen.queryByRole("textbox", { name: "命令条" })).not.toBeInTheDocument();
-  });
-
-  it("Esc 关闭命令条且不发送", async () => {
-    const user = userEvent.setup();
-    const agent = fakeAgent();
-    render(<DeskPet agent={agent} />);
-
-    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
-    const input = screen.getByRole("textbox", { name: "命令条" });
-    await user.type(input, "换个客户{Escape}");
-
-    expect(agent.sendCommand).not.toHaveBeenCalled();
-    expect(screen.queryByRole("textbox", { name: "命令条" })).not.toBeInTheDocument();
-  });
-
-  it("收到 pet-bubble 事件显示气泡,超 40 字截断", () => {
-    let listener: ((event: AgentEvent) => void) | undefined;
-    const agent = fakeAgent({
-      onEvent: (l) => {
-        listener = l;
-        return () => undefined;
-      },
-    });
+  it("收到 pet-bubble 事件显示气泡,超 40 字截断;面板开着时不再弹气泡", () => {
+    const { agent, listeners } = eventCapturingAgent();
     render(<DeskPet agent={agent} />);
 
     act(() => {
-      listener?.({
-        type: "channel",
-        channel: { target: "pet-bubble", ticketId: "t1", text: "很".repeat(50) },
-      });
+      listeners.forEach((listener) =>
+        listener({ type: "channel", channel: { target: "pet-bubble", ticketId: "t1", text: "很".repeat(50) } }),
+      );
     });
-
     const bubble = screen.getByRole("status", { name: "桌宠气泡" });
     expect(bubble.textContent).toBe("很".repeat(40));
+
+    // 面板开着:回复就在面板里看,气泡不更新(工单 12)。
+    fireEvent.click(screen.getByRole("img", { name: /女版/ }));
+    act(() => {
+      listeners.forEach((listener) =>
+        listener({ type: "channel", channel: { target: "pet-bubble", ticketId: "t1", text: "这条不开面板不弹" } }),
+      );
+    });
+    expect(screen.getByRole("status", { name: "桌宠气泡" }).textContent).toBe("很".repeat(40));
   });
 
-  it("对局中命令条置灰禁用,提交也不发送", () => {
+  it("通话中输入框锁住,提示「通话中，挂断后再聊」,提交也不发送;表情反应照常", () => {
     const agent = fakeAgent();
-    render(<DeskPet agent={agent} inCall />);
+    render(<DeskPet agent={agent} inCall reaction={{ kind: "hidden-revealed" }} />);
 
-    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
-    const input = screen.getByRole("textbox", { name: "命令条" });
+    fireEvent.click(screen.getByRole("img", { name: /欢呼/ }));
+    const input = screen.getByRole("textbox", { name: "对话输入" });
     expect(input).toBeDisabled();
+    expect(input).toHaveAttribute("placeholder", "通话中，挂断后再聊");
 
     fireEvent.submit(input.closest("form")!);
-    expect(agent.sendCommand).not.toHaveBeenCalled();
+    expect(agent.sendTrigger).not.toHaveBeenCalled();
+    // 锁的是输入,表情反应不受影响(工单 12)。
+    expect(screen.getByRole("img", { name: /欢呼/ })).toBeInTheDocument();
   });
 
   it("按住说话只留占位:按钮存在且禁用,不接 ASR", () => {
     const agent = fakeAgent();
     render(<DeskPet agent={agent} />);
 
-    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    fireEvent.click(screen.getByRole("img", { name: /女版/ }));
     const holdSpeak = screen.getByRole("button", { name: /按住说话/ });
     expect(holdSpeak).toBeDisabled();
     expect(agent.sendCommand).not.toHaveBeenCalled();
   });
 
-  it("上一条指令还没回,仍能继续发下一条(全双工)", async () => {
+  it("上一条还没回,仍能继续发下一条(全双工)", async () => {
     const user = userEvent.setup();
-    const agent = fakeAgent({ sendCommand: vi.fn(() => new Promise<void>(() => undefined)) });
+    const agent = fakeAgent({ sendTrigger: vi.fn(() => new Promise<EmitOutcome>(() => undefined)) });
     render(<DeskPet agent={agent} />);
 
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
-    await user.type(screen.getByRole("textbox", { name: "命令条" }), "把上周投研总结成一句话{Enter}");
+    await user.type(screen.getByRole("textbox", { name: "对话输入" }), "把上周投研总结成一句话{Enter}");
 
     fireEvent.keyDown(window, { key: "k", ctrlKey: true });
-    await user.type(screen.getByRole("textbox", { name: "命令条" }), "顺便看看上局复盘{Enter}");
+    await user.type(screen.getByRole("textbox", { name: "对话输入" }), "顺便看看上局复盘{Enter}");
 
-    expect(agent.sendCommand).toHaveBeenCalledTimes(2);
-    expect(agent.sendCommand).toHaveBeenNthCalledWith(1, "把上周投研总结成一句话");
-    expect(agent.sendCommand).toHaveBeenNthCalledWith(2, "顺便看看上局复盘");
+    expect(agent.sendTrigger).toHaveBeenCalledTimes(2);
+    expect(agent.sendTrigger).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({ kind: "chat", data: expect.objectContaining({ text: "把上周投研总结成一句话" }) }),
+    );
+    expect(agent.sendTrigger).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({ kind: "chat", data: expect.objectContaining({ text: "顺便看看上局复盘" }) }),
+    );
+  });
+
+  it("对话输入「演示」唤出演示,不进对话链路,面板收起", async () => {
+    const user = userEvent.setup();
+    const agent = fakeAgent();
+    const onOpenDemo = vi.fn();
+    render(<DeskPet agent={agent} onOpenDemo={onOpenDemo} />);
+
+    fireEvent.click(screen.getByRole("img", { name: /女版/ }));
+    await user.type(screen.getByRole("textbox", { name: "对话输入" }), "演示{Enter}");
+    expect(onOpenDemo).toHaveBeenCalledTimes(1);
+    expect(agent.sendTrigger).not.toHaveBeenCalled();
+    expect(screen.queryByRole("region", { name: "对话面板" })).not.toBeInTheDocument();
+  });
+});
+
+describe("对话流式与红点(工单 12)", () => {
+  it("回复期间显示「…」、表情切 think;delta 到达逐字显示;结束后按表情标签切表情、建议渲染成按钮", async () => {
+    const user = userEvent.setup();
+    const { agent, listeners } = eventCapturingAgent("t-stream");
+    render(<DeskPet agent={agent} />);
+
+    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
+    await user.type(screen.getByRole("textbox", { name: "对话输入" }), "在吗{Enter}");
+    await act(async () => {});
+
+    expect(screen.getByLabelText("正在输入")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: /拿笔想/ })).toBeInTheDocument();
+
+    act(() => {
+      listeners.forEach((listener) => listener({ type: "delta", ticketId: "t-stream", text: "我在" }));
+    });
+    expect(screen.queryByLabelText("正在输入")).not.toBeInTheDocument();
+
+    act(() => {
+      listeners.forEach((listener) => listener({ type: "delta", ticketId: "t-stream", text: "呢。" }));
+    });
+    const record = screen.getByRole("log", { name: "对话记录" });
+    expect(record).toHaveTextContent("我在呢。");
+
+    act(() => {
+      listeners.forEach((listener) =>
+        listener({
+          type: "report",
+          report: { ticketId: "t-stream", status: "ready", text: "我在呢，你说。", emotion: "cheer", quickActions: ["换个客户"] },
+        }),
+      );
+    });
+    expect(record).toHaveTextContent("我在呢，你说。");
+    expect(screen.getByRole("img", { name: /欢呼/ })).toBeInTheDocument();
+
+    // 建议只是建议:点了才执行(发命令 + 跳转)。
+    await user.click(within(record).getByRole("button", { name: "换个客户" }));
+    expect(agent.sendCommand).toHaveBeenCalledWith("换个客户");
+  });
+
+  it("面板关闭时收到新回复:头像亮红点、气泡弹出;重新打开红点消失、历史还在", async () => {
+    const user = userEvent.setup();
+    const { agent, listeners } = eventCapturingAgent("t-away");
+    render(<DeskPet agent={agent} />);
+
+    fireEvent.click(screen.getByRole("img", { name: /女版/ }));
+    await user.type(screen.getByRole("textbox", { name: "对话输入" }), "在吗{Enter}");
+    await act(async () => {});
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "对话输入" }), { key: "Escape" });
+    expect(screen.queryByLabelText("有新回复")).not.toBeInTheDocument();
+
+    act(() => {
+      listeners.forEach((listener) => listener({ type: "delta", ticketId: "t-away", text: "我在呢" }));
+      listeners.forEach((listener) =>
+        listener({ type: "report", report: { ticketId: "t-away", status: "ready", text: "我在呢，你说。", emotion: "wave" } }),
+      );
+      listeners.forEach((listener) =>
+        listener({ type: "channel", channel: { target: "pet-bubble", ticketId: "t-away", text: "我在呢，你说。" } }),
+      );
+    });
+
+    expect(screen.getByLabelText("有新回复")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "桌宠气泡" })).toHaveTextContent("我在呢，你说。");
+
+    fireEvent.click(screen.getByRole("img", { name: /女版/ }));
+    expect(screen.queryByLabelText("有新回复")).not.toBeInTheDocument();
+    expect(screen.getByRole("log", { name: "对话记录" })).toHaveTextContent("我在呢，你说。");
+  });
+
+  it("历史本地存最近 50 条:超出的旧话被截掉;「清空」一键抹掉", async () => {
+    const user = userEvent.setup();
+    const seed = Array.from({ length: 50 }, (_, index) => ({ speaker: "pet" as const, text: `旧话${index}` }));
+    window.localStorage.setItem("desk-pet-chat", JSON.stringify(seed));
+    const { agent, listeners } = eventCapturingAgent("t-hist");
+    render(<DeskPet agent={agent} />);
+
+    fireEvent.click(screen.getByRole("img", { name: /女版/ }));
+    const record = screen.getByRole("log", { name: "对话记录" });
+    expect(record).toHaveTextContent("旧话0");
+
+    await user.type(screen.getByRole("textbox", { name: "对话输入" }), "在吗{Enter}");
+    await act(async () => {});
+    act(() => {
+      listeners.forEach((listener) =>
+        listener({ type: "report", report: { ticketId: "t-hist", status: "ready", text: "新话", emotion: "wave" } }),
+      );
+    });
+    await act(async () => {});
+
+    expect(record).toHaveTextContent("新话");
+    expect(record).not.toHaveTextContent("旧话0");
+    expect(record).toHaveTextContent("旧话49");
+    const stored = JSON.parse(window.localStorage.getItem("desk-pet-chat")!) as Array<{ text: string }>;
+    expect(stored).toHaveLength(50);
+    // 最旧的两句(旧话0/旧话1)被截掉,顶上新进了「在吗」与「新话」。
+    expect(stored[0]!.text).toBe("旧话2");
+    expect(within(record).queryByText("旧话1")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "清空对话" }));
+    expect(screen.queryByText("旧话49")).not.toBeInTheDocument();
+    expect(screen.getByRole("log", { name: "对话记录" })).toHaveTextContent(/随时叫我/);
+  });
+});
+
+describe("互动感(工单 12)", () => {
+  it("双击头像戳一下:固定台词轮换、切换表情,不调模型", () => {
+    const agent = fakeAgent();
+    render(<DeskPet agent={agent} />);
+    const avatar = screen.getByRole("img", { name: /女版/ });
+
+    fireEvent.doubleClick(avatar);
+    expect(screen.getByRole("status", { name: "桌宠气泡" })).toHaveTextContent(POKE_LINES[0].text);
+    expect(screen.getByRole("img", { name: /鼓腮/ })).toBeInTheDocument();
+
+    fireEvent.doubleClick(avatar);
+    expect(screen.getByRole("status", { name: "桌宠气泡" })).toHaveTextContent(POKE_LINES[1].text);
+    expect(screen.getByRole("img", { name: /欢呼/ })).toBeInTheDocument();
+
+    expect(agent.sendCommand).not.toHaveBeenCalled();
+    expect(agent.sendTrigger).not.toHaveBeenCalled();
+  });
+
+  it("拖动中被拎起:表情变 pout,松手恢复", () => {
+    render(<DeskPet agent={fakeAgent()} />);
+    fireEvent.pointerDown(screen.getByRole("img", { name: /女版/ }), { pointerId: 1, clientX: 300, clientY: 400 });
+    expect(screen.getByRole("img", { name: /鼓腮/ })).toBeInTheDocument();
+    fireEvent.pointerMove(document.body, { pointerId: 1, clientX: 340, clientY: 460 });
+    fireEvent.pointerUp(document.body, { pointerId: 1, clientX: 340, clientY: 460 });
+    expect(screen.getByRole("img", { name: /挥手笑/ })).toBeInTheDocument();
+  });
+
+  it("闲置超过 3 分钟变 sleepy,再点一下醒来:只是表情,不推送消息", () => {
+    vi.useFakeTimers();
+    try {
+      render(<DeskPet agent={fakeAgent()} />);
+      act(() => {
+        vi.advanceTimersByTime(IDLE_SLEEP_MS + 1);
+      });
+      expect(screen.getByRole("img", { name: /打瞌睡/ })).toBeInTheDocument();
+
+      // 醒来不弹气泡、不提示用户,只回到正常神态(单击照旧打开对话面板)。
+      fireEvent.click(screen.getByRole("img", { name: /打瞌睡/ }));
+      expect(screen.getByRole("img", { name: /挥手笑/ })).toBeInTheDocument();
+      expect(screen.queryByRole("status", { name: "桌宠气泡" })).not.toBeInTheDocument();
+      expect(screen.getByRole("region", { name: "对话面板" })).toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("事件→表情:翻开隐藏牌→cheer,举牌→think,挂断→wave", () => {
+    const { rerender } = render(<DeskPet agent={fakeAgent()} reaction={{ kind: "hidden-revealed" }} />);
+    expect(screen.getByRole("img", { name: /欢呼/ })).toBeInTheDocument();
+
+    rerender(<DeskPet agent={fakeAgent()} reaction={{ kind: "hidden-raised" }} />);
+    expect(screen.getByRole("img", { name: /拿笔想/ })).toBeInTheDocument();
+
+    rerender(<DeskPet agent={fakeAgent()} reaction={{ kind: "call-ended" }} />);
+    expect(screen.getByRole("img", { name: /挥手笑/ })).toBeInTheDocument();
   });
 });
 
@@ -261,19 +483,13 @@ describe("角标、待办面板与工单列表(工单 05)", () => {
   });
 
   it("report 事件实时刷新:新工单落 waiting,角标从无到有", async () => {
-    let listener: ((event: AgentEvent) => void) | undefined;
-    const agent = fakeAgent({
-      onEvent: (l) => {
-        listener = l;
-        return () => undefined;
-      },
-    });
+    const { agent, listeners } = eventCapturingAgent();
     render(<DeskPet agent={agent} />);
     await act(async () => {});
     expect(screen.queryByRole("button", { name: /^待办 \d+$/ })).not.toBeInTheDocument();
 
     act(() => {
-      listener?.({ type: "report", report: { ticketId: "t-w", status: "waiting", text: "等你拍板" } });
+      listeners.forEach((listener) => listener({ type: "report", report: { ticketId: "t-w", status: "waiting", text: "等你拍板" } }));
     });
 
     expect(screen.getByRole("button", { name: "待办 1" })).toBeInTheDocument();
@@ -458,41 +674,25 @@ describe("放权模式与评估记录(工单 08)", () => {
   });
 });
 
-describe("快捷环跳转与演示入口(工单 10)", () => {
-  it("快捷环 4 项不只回话:命令照发,跳转回调带动作被调用", async () => {
+describe("快捷芯片跳转与演示入口(工单 10→12)", () => {
+  it("芯片 4 项不只回话:命令照发,跳转回调带动作被调用", async () => {
     const user = userEvent.setup();
     const agent = fakeAgent();
     const onQuickAction = vi.fn();
     render(<DeskPet agent={agent} onQuickAction={onQuickAction} />);
 
     for (const label of ["换个客户", "再来一局", "上局复盘", "本周投研"]) {
-      // 点一项快捷环即收起;每次重新点头像展开。
+      // 点一枚芯片即收起;每次重新点头像展开。
       fireEvent.click(screen.getByRole("img", { name: /女版/ }));
       await user.click(screen.getByRole("button", { name: label }));
       expect(agent.sendCommand).toHaveBeenCalledWith(label);
       expect(onQuickAction).toHaveBeenCalledWith(label);
     }
-    // 点完收起快捷环。
-    expect(screen.queryByRole("button", { name: "换个客户" })).not.toBeInTheDocument();
+    // 点完收起面板。
+    expect(screen.queryByRole("region", { name: "对话面板" })).not.toBeInTheDocument();
   });
 
-  it("命令条输入「演示」唤出演示,不发命令;普通命令照发", async () => {
-    const user = userEvent.setup();
-    const agent = fakeAgent();
-    const onOpenDemo = vi.fn();
-    render(<DeskPet agent={agent} onOpenDemo={onOpenDemo} />);
-
-    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
-    await user.type(screen.getByRole("textbox", { name: "命令条" }), "演示{Enter}");
-    expect(onOpenDemo).toHaveBeenCalledTimes(1);
-    expect(agent.sendCommand).not.toHaveBeenCalled();
-
-    fireEvent.keyDown(window, { key: "k", ctrlKey: true });
-    await user.type(screen.getByRole("textbox", { name: "命令条" }), "换个客户{Enter}");
-    expect(agent.sendCommand).toHaveBeenCalledWith("换个客户");
-  });
-
-  it("focusPanel 让演示直接展开工单列表/待办面板,强开待办同样拉放权数据", async () => {
+  it("focusPanel 让演示直接展开工单列表/待办面板/对话面板,强开待办同样拉放权数据", async () => {
     const { unmount } = render(<DeskPet agent={fakeAgent()} focusPanel="tickets" />);
     expect(screen.getByRole("region", { name: "工单列表" })).toBeInTheDocument();
     unmount();
@@ -502,5 +702,28 @@ describe("快捷环跳转与演示入口(工单 10)", () => {
     expect(screen.getByRole("region", { name: "待办面板" })).toBeInTheDocument();
     await act(async () => {});
     expect(agent.policy).toHaveBeenCalled();
+    unmount();
+
+    render(<DeskPet agent={fakeAgent()} focusPanel="chat" />);
+    expect(screen.getByRole("region", { name: "对话面板" })).toBeInTheDocument();
+  });
+
+  it("演示代发对话(demoChatCue):打开面板并发送,如同玩家亲手输入", async () => {
+    const agent = fakeAgent();
+    render(
+      <DeskPet
+        agent={agent}
+        demoChatCue={{ nonce: 1, text: "小贝，跟观众打个招呼" }}
+        onDemoChatDone={() => undefined}
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "对话面板" })).toBeInTheDocument();
+    expect(agent.sendTrigger).toHaveBeenCalledWith({
+      source: "pet",
+      kind: "chat",
+      data: expect.objectContaining({ text: "小贝，跟观众打个招呼" }),
+    });
+    expect(screen.getByRole("log", { name: "对话记录" })).toHaveTextContent("小贝，跟观众打个招呼");
   });
 });

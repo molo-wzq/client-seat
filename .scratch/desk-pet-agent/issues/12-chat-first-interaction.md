@@ -1,6 +1,6 @@
 # 12 · 点击优先对话 + 互动感
 
-Status: ready-for-agent
+Status: done
 Blocked by: 11
 
 用户 2026-11-05：要加强桌宠的互动感，并且方便对话，**点击后优先进入对话**。
@@ -23,3 +23,5 @@ Blocked by: 11
 
 ## 测试缝
 DeskPet / ChatPanel 的渲染与交互（单击即对话、焦点、快捷键、流式拼接、锁定、红点）；戳一下的台词轮换（纯函数）；事件→表情映射（纯函数）。
+
+Comments: 2026-11-05 单击头像/Ctrl+K 打开 PetChatPanel(自动聚焦,Enter 发送/Shift+Enter 换行/Esc 关闭,历史本地存最近 50 条可清空);快捷环收进面板顶部成芯片(对局中不锁,点完收起),「演示」命令词沿用;回复期间「…」打字指示+表情 think,delta 逐字拼接(带光标),ready 后按 Report.emotion 换表情、quickActions 渲染成按钮点了才执行;通话中输入框锁住提示「通话中，挂断后再聊」;面板关闭收到回复→头像红点+40 字气泡,面板开着不弹气泡。互动感:悬停探头/双击戳台词轮换(pet-reactions 纯函数,不调模型)/拖动 pout 松手恢复/闲置 3 分钟 sleepy 点一下醒来(不推送)/翻牌 cheer、举牌 think、挂断 wave(App reaction 事件驱动,停留 2.4s)/待审角标晃一下;动效全部 prefers-reduced-motion。workers.ts 无 key 的 chat 也走演示脚本:分拍流式+表情+快捷动作,demo 完整可演示;一键演示第①幕改为点开对话面板打招呼(focus chat + demoChatCue 代发)。挂断与工单 06 的结算欢呼衔接:先 wave 2.4s 再回 cheer,App.test 已按新时序钉住。

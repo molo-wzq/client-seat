@@ -83,21 +83,23 @@ describe("演示控制条(工单 10)", () => {
     expect(onPetExpression).toHaveBeenCalledWith("wave");
   });
 
-  it("下一步推进:步数与说明更新,问候命令真的发给 agent", async () => {
+  it("下一步推进:步数与说明更新,第一幕的打招呼走对话面板代发(工单 12)", async () => {
     const agent = fakeAgent();
-    render(<PetDemoConsole agent={agent} />);
+    const onChat = vi.fn();
+    render(<PetDemoConsole agent={agent} onChat={onChat} />);
 
     fireEvent.click(screen.getByRole("button", { name: "下一步" }));
     await act(async () => {});
 
     expect(screen.getByRole("region", { name: "演示控制条" })).toHaveTextContent(`第 2/${DEMO_STEPS.length} 步`);
-    expect(agent.sendCommand).toHaveBeenCalledWith("跟观众打个招呼");
+    expect(onChat).toHaveBeenCalledWith("小贝，跟观众打个招呼");
   });
 
   it("播放按脚本节奏自动推进,暂停即停在当前步", () => {
     vi.useFakeTimers();
     const agent = fakeAgent();
-    render(<PetDemoConsole agent={agent} />);
+    const onChat = vi.fn();
+    render(<PetDemoConsole agent={agent} onChat={onChat} />);
     const bar = screen.getByRole("region", { name: "演示控制条" });
 
     fireEvent.click(screen.getByRole("button", { name: "播放" }));
@@ -111,7 +113,7 @@ describe("演示控制条(工单 10)", () => {
       vi.advanceTimersByTime(60_000);
     });
     expect(bar).toHaveTextContent(`第 2/${DEMO_STEPS.length} 步`);
-    expect(agent.sendCommand).toHaveBeenCalledWith("跟观众打个招呼");
+    expect(onChat).toHaveBeenCalledWith("小贝，跟观众打个招呼");
   });
 
   it("自动播完停在总步并显示「演示完毕」,不越界", () => {

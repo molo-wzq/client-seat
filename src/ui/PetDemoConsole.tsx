@@ -21,6 +21,7 @@ import {
   resetDemo,
   stepDemo,
   type DemoAction,
+  type DemoFocusPanel,
   type DemoScene,
 } from "./pet-demo";
 
@@ -35,7 +36,9 @@ interface DemoMove {
 interface DemoIO {
   agent: AgentClient;
   onPetExpression?: (expression: PetExpression | null) => void;
-  onFocusPanel?: (panel: "tickets" | "inbox" | "none") => void;
+  onFocusPanel?: (panel: DemoFocusPanel) => void;
+  /** 对话代发(工单 12):让 App 请桌宠在对话面板替玩家发一句。 */
+  onChat?: (text: string) => void;
   setScene: (scene: DemoScene) => void;
   setMoves: (updater: (prev: DemoMove[]) => DemoMove[]) => void;
   setReview: (review: { text: string } | null) => void;
@@ -62,6 +65,10 @@ function runDemoAction(action: DemoAction, io: DemoIO): void {
       break;
     case "command":
       void io.agent.sendCommand(action.text).catch(() => undefined);
+      break;
+    case "chat":
+      // 对话面板代发(工单 12):经 App→DeskPet 走玩家的手,回复与历史都留在面板里。
+      io.onChat?.(action.text);
       break;
     case "trigger":
       void io.agent
@@ -110,13 +117,16 @@ export function PetDemoConsole({
   agent,
   onPetExpression,
   onFocusPanel,
+  onChat,
   onClose,
 }: {
   agent: AgentClient;
   /** 演示接管桌宠表情(点头/鼓腮/惊讶…);null 表示还回去。 */
   onPetExpression?: (expression: PetExpression | null) => void;
-  /** 演示请 App 打开桌宠的哪个面板(工单列表/待办面板)。 */
-  onFocusPanel?: (panel: "tickets" | "inbox" | "none") => void;
+  /** 演示请 App 打开桌宠的哪个面板(对话面板/工单列表/待办面板)。 */
+  onFocusPanel?: (panel: DemoFocusPanel) => void;
+  /** 对话代发(工单 12):App 请桌宠在对话面板替玩家发一句。 */
+  onChat?: (text: string) => void;
   onClose?: () => void;
 }) {
   const [state, setState] = useState(initialDemoState);
@@ -138,14 +148,15 @@ export function PetDemoConsole({
       agent,
       onPetExpression,
       onFocusPanel,
+      onChat,
       setScene,
       setMoves,
       setReview,
       lastDroppedTicket,
     };
     for (const action of step.actions) runDemoAction(action, io);
-    // 动作是数据,解释器只依赖这四个稳定引用;逐字面列全以免漏跑。
-  }, [state.index, step, agent, onPetExpression, onFocusPanel]);
+    // 动作是数据,解释器只依赖这几个稳定引用;逐字面列全以免漏跑。
+  }, [state.index, step, agent, onPetExpression, onFocusPanel, onChat]);
 
   // 自动播放:到点进下一步;暂停或演完时计时器随之清掉。
   useEffect(() => {

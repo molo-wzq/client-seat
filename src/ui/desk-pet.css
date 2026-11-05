@@ -72,7 +72,7 @@
 .desk-pet-restore img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
 .desk-pet-restore:focus-visible { outline: 2px solid #bf8636; outline-offset: 3px; }
 
-/* 头顶悬浮栈(工单 03):气泡在上、快捷环居中、命令条贴身,右对齐不遮主内容。 */
+/* 头顶悬浮栈(工单 03→12):气泡在上、待办/工单居中、对话面板贴身,右对齐不遮主内容。 */
 .desk-pet-popovers {
   position: absolute;
   right: 0;
@@ -81,7 +81,7 @@
   flex-direction: column;
   align-items: flex-end;
   gap: 6px;
-  max-width: 280px;
+  max-width: 320px;
 }
 
 /* 气泡:卡纸便签 + 黄铜边,一句话不超过 40 字由数据保证。 */
@@ -97,55 +97,242 @@
   box-shadow: 0 3px 8px #0005;
 }
 
-/* 快捷环:竖排 4 项,深木底浅字,与桌宠动作钮同一语言。 */
-.desk-pet-ring { display: flex; flex-direction: column; gap: 4px; }
-.desk-pet-ring-item {
-  padding: 4px 12px;
+/* 悬停探头(工单 12):轻微探头打招呼,拖动/勿扰时不演。 */
+@keyframes desk-pet-peek {
+  45% { transform: translateY(-5px) rotate(-5deg); }
+}
+.desk-pet:not(.desk-pet-collapsed):not([data-dragging]) .desk-pet-avatar:hover img {
+  animation: desk-pet-peek 0.8s ease;
+}
+
+/* 新回复红点(工单 12):砖红小珠钉在头像右下,打开面板即清。 */
+.desk-pet-dot {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #cc092b; /* 砖红(注意) */
+  border: 2px solid #f4ecdc; /* 卡纸镶边,压在深木衬圈上也看得清 */
+  box-shadow: 0 1px 3px #0006;
+  animation: desk-pet-dot-pulse 1.6s ease-in-out infinite;
+}
+@keyframes desk-pet-dot-pulse {
+  50% { transform: scale(1.25); }
+}
+
+/* ---- 工单 12:对话面板(点击优先对话) ---- */
+
+/* 面板:卡纸底 + 黄铜描边,轻入场。 */
+.desk-pet-chat {
+  display: flex;
+  flex-direction: column;
+  width: 300px;
+  max-height: 400px;
+  padding: 9px 11px 10px;
   border: 1px solid #b28c52;
-  border-radius: 10px;
-  color: #e6d7ba;
-  background: #4d3624e0;
-  font-size: 12px;
+  border-radius: 12px;
+  background: radial-gradient(circle at 50% 0%, #f4ecdc, #ebe0ce 80%);
+  box-shadow: 0 6px 16px #0006;
+  animation: desk-pet-pop-in 0.18s ease-out;
+}
+@keyframes desk-pet-pop-in {
+  from { opacity: 0; transform: translateY(8px) scale(0.97); }
+}
+
+/* 头部:标题 + 清空 + 关闭。 */
+.desk-pet-chat-head { display: flex; align-items: center; gap: 6px; }
+.desk-pet-chat-title { margin-right: auto; color: #4d3624; font-weight: 700; font-size: 12px; }
+.desk-pet-chat-clear {
+  padding: 1px 8px;
+  border: 1px solid #b28c52;
+  border-radius: 999px;
+  background: transparent;
+  color: #4d3624;
+  font-size: 11px;
   line-height: 1.6;
   cursor: pointer;
-  text-align: right;
 }
-.desk-pet-ring-item:hover { background: #5d4430; }
-.desk-pet-ring-item:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+.desk-pet-chat-clear:hover { background: #e0d4be; }
+.desk-pet-chat-clear:focus-visible,
+.desk-pet-chat-close:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+.desk-pet-chat-close {
+  padding: 0 7px;
+  border: none;
+  border-radius: 999px;
+  background: transparent;
+  color: #6b6b8b; /* 中灰:次级 */
+  font-size: 14px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.desk-pet-chat-close:hover { color: #4d3624; }
 
-/* 命令条:卡纸底输入 + 占位的按住说话,对局中整体置灰。 */
-.desk-pet-commandbar { display: flex; gap: 4px; align-items: center; }
-.desk-pet-command-input {
-  width: 210px;
+/* 快捷芯片(原快捷环收进来):深木底浅字小药丸,对局中不锁。 */
+.desk-pet-chat-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 6px 0;
+  border-bottom: 1px dashed #d1c6b2; /* 浅卡其分隔 */
+}
+.desk-pet-chip {
+  padding: 2px 9px;
+  border: 1px solid #b28c52;
+  border-radius: 999px;
+  background: #4d3624e0; /* 深木底 */
+  color: #e6d7ba;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.desk-pet-chip:hover { background: #5d4430; }
+.desk-pet-chip:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 消息记录:玩家靠右深木底,桌宠靠左米白底,流式带光标。 */
+.desk-pet-chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 64px;
+  max-height: 190px;
+  overflow-y: auto;
+  padding: 6px 2px;
+}
+.desk-pet-chat-empty { margin: auto; color: #7a664f; font-size: 11px; }
+.desk-pet-chat-msg { display: flex; flex-direction: column; }
+.desk-pet-chat-msg[data-speaker="player"] { align-items: flex-end; }
+.desk-pet-chat-msg[data-speaker="pet"] { align-items: flex-start; }
+.desk-pet-chat-bubble {
+  margin: 0;
+  max-width: 88%;
   padding: 5px 10px;
+  border-radius: 10px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+.desk-pet-chat-msg[data-speaker="player"] .desk-pet-chat-bubble {
+  background: #4d3624e0;
+  color: #e6d7ba;
+  border-bottom-right-radius: 3px;
+}
+.desk-pet-chat-msg[data-speaker="pet"] .desk-pet-chat-bubble {
+  background: #ece9e2; /* 客户气泡米白 */
+  color: #4d3624;
+  border: 1px solid #d1c6b2;
+  border-bottom-left-radius: 3px;
+}
+/* 流式中的正文挂一道光标,逐字到达看得见节奏。 */
+.desk-pet-chat-bubble[data-streaming]::after {
+  content: "▍";
+  color: #b28c52;
+  animation: desk-pet-caret 0.9s steps(1) infinite;
+}
+@keyframes desk-pet-caret {
+  50% { opacity: 0; }
+}
+
+/* 回复里的快捷动作建议:深绿小按钮(主要),点了才执行。 */
+.desk-pet-chat-action {
+  margin-top: 3px;
+  padding: 2px 10px;
+  border: 1px solid #0f2d1f;
+  border-radius: 9px;
+  background: #0f2d1f; /* 深绿:主要 */
+  color: #ede0d9;
+  font-size: 11px;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.desk-pet-chat-action:hover { background: #1a402c; }
+.desk-pet-chat-action:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+
+/* 打字指示「…」:呼吸一下,像在听写。 */
+.desk-pet-typing {
+  animation: desk-pet-typing 1s ease-in-out infinite;
+  letter-spacing: 2px;
+}
+@keyframes desk-pet-typing {
+  50% { opacity: 0.35; }
+}
+
+/* 输入区:卡纸底多行输入 + 发送/按住说话,通话中整体置灰。 */
+.desk-pet-chat-input {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px dashed #d1c6b2;
+}
+.desk-pet-chat-input textarea {
+  resize: none;
+  padding: 5px 9px;
   border: 1px solid #b28c52;
   border-radius: 10px;
   background: #f4ecdc;
   color: #4d3624;
   font-size: 12px;
   line-height: 1.6;
+  font-family: inherit;
 }
-.desk-pet-command-input::placeholder { color: #4d362480; }
-.desk-pet-command-input:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
-.desk-pet-commandbar[data-incall] .desk-pet-command-input {
-  background: #d8cdb9; /* 灰卡纸:对局中置灰禁用 */
+.desk-pet-chat-input textarea::placeholder { color: #4d362480; }
+.desk-pet-chat-input textarea:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
+.desk-pet-chat-input[data-incall] textarea {
+  background: #d8cdb9; /* 灰卡纸:通话中锁住 */
   color: #8a7a5f;
   cursor: not-allowed;
 }
+.desk-pet-chat-input-actions { display: flex; gap: 6px; justify-content: flex-end; }
+.desk-pet-chat-send {
+  padding: 3px 12px;
+  border: 1px solid #0f2d1f;
+  border-radius: 9px;
+  background: #0f2d1f; /* 深绿:主要 */
+  color: #ede0d9;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.6;
+  cursor: pointer;
+}
+.desk-pet-chat-send:hover { background: #1a402c; }
+.desk-pet-chat-send:disabled { background: #6b6b8b; border-color: #6b6b8b; cursor: default; }
+.desk-pet-chat-send:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
 .desk-pet-hold-speak {
-  padding: 5px 9px;
+  padding: 3px 9px;
   border: 1px solid #b28c52;
-  border-radius: 10px;
+  border-radius: 9px;
   color: #e6d7ba;
   background: #4d3624e0;
-  font-size: 12px;
+  font-size: 11px;
   line-height: 1.6;
 }
 .desk-pet-hold-speak:disabled { opacity: 0.55; cursor: not-allowed; }
 
+/* 所有新动效都尊重 prefers-reduced-motion(工单 12)。 */
+@media (prefers-reduced-motion: reduce) {
+  .desk-pet-chat,
+  .desk-pet-dot,
+  .desk-pet-typing,
+  .desk-pet-chat-bubble[data-streaming]::after,
+  .desk-pet:not(.desk-pet-collapsed):not([data-dragging]) .desk-pet-avatar:hover img,
+  .desk-pet-badge { animation: none; }
+}
+.desk-pet[data-reduced-motion] .desk-pet-chat,
+.desk-pet[data-reduced-motion] .desk-pet-dot,
+.desk-pet[data-reduced-motion] .desk-pet-typing,
+.desk-pet[data-reduced-motion] .desk-pet-chat-bubble[data-streaming]::after,
+.desk-pet[data-reduced-motion]:not(.desk-pet-collapsed):not([data-dragging]) .desk-pet-avatar:hover img,
+.desk-pet[data-reduced-motion] .desk-pet-badge { animation: none; }
+
 /* ---- 工单 05:角标、待办面板、工单列表 ---- */
 
-/* 头顶角标:待人决定的数量,砖红印章钉在头像右上角。 */
+/* 头顶角标:待人决定的数量,砖红印章钉在头像右上角;收到待审晃一下(工单 12)——
+   数量或待审节拍变化时组件按 key 重挂载,动画随之重放。 */
+@keyframes desk-pet-badge-shake {
+  25% { transform: rotate(-14deg) scale(1.08); }
+  75% { transform: rotate(14deg) scale(1.08); }
+}
 .desk-pet-badge {
   position: absolute;
   top: -6px;
@@ -162,6 +349,7 @@
   line-height: 1;
   cursor: pointer;
   box-shadow: 0 2px 5px #0006;
+  animation: desk-pet-badge-shake 0.5s ease;
 }
 .desk-pet-badge:focus-visible { outline: 2px solid #bf8636; outline-offset: 2px; }
 

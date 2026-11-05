@@ -11,13 +11,14 @@ import type { PetExpression } from "./DeskPet";
 /** 演示舞台场景:控制条旁的小舞台显示什么(隐藏牌/结算由真实组件渲染)。 */
 export type DemoScene = "table" | "hidden-cards" | "settle" | "none";
 
-/** 舞台外焦点:让 App 打开桌宠的哪个面板(工单列表/待办面板)。 */
-export type DemoFocusPanel = "tickets" | "inbox" | "none";
+/** 舞台外焦点:让 App 打开桌宠的哪个面板(对话面板/工单列表/待办面板)。 */
+export type DemoFocusPanel = "chat" | "tickets" | "inbox" | "none";
 
 /**
  * 一步内要执行的动作(数据,不是函数):控制条按 kind 解释——
  * pet 换桌宠表情、manager-move 台账加一条经理出招、command/trigger 发真实触发、
- * annotate-last-drop 批注上一张拖入工单、policy 切放权、focus 开面板、scene 换舞台。
+ * chat 让 App 代玩家在对话面板发一句(工单 12)、annotate-last-drop 批注上一张拖入工单、
+ * policy 切放权、focus 开面板、scene 换舞台。
  */
 export type DemoAction =
   | { kind: "pet"; expression: PetExpression }
@@ -33,6 +34,8 @@ export type DemoAction =
       reactionLabel: string;
     }
   | { kind: "command"; text: string }
+  /** 对话面板代发(工单 12):如同玩家亲手输入,回复逐字流回面板。 */
+  | { kind: "chat"; text: string }
   | { kind: "trigger"; input: AgentTriggerInput }
   | { kind: "annotate-last-drop"; note: string }
   | { kind: "policy"; mode: AcceptMode }
@@ -123,7 +126,10 @@ function demoGameEndedInput(): AgentTriggerInput {
 export const DEMO_STEPS: readonly DemoStep[] = [
   // ① 桌宠挥手入场
   { act: 1, note: "第①幕·入场:桌宠挥挥手,在客户席坐下", holdMs: 1600, actions: [{ kind: "pet", expression: "wave" }, { kind: "scene", scene: "none" }] },
-  { act: 1, note: "打个招呼——命令进真实链路,气泡从账本回来", holdMs: 2400, actions: [{ kind: "command", text: "跟观众打个招呼" }] },
+  { act: 1, note: "打个招呼——点开对话面板,回复逐字流出、表情跟着换", holdMs: 3600, actions: [
+    { kind: "focus", panel: "chat" },
+    { kind: "chat", text: "小贝，跟观众打个招呼" },
+  ] },
   // ② 陪看对局:经理出招,桌宠只用表情回应(spec 故事 3,不说话)
   { act: 2, note: "第②幕·陪看:经理用『钱有窗口』问季度奖,桌宠点头", holdMs: 2400, actions: [
     { kind: "scene", scene: "table" },

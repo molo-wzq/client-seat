@@ -196,7 +196,7 @@ describe("桌宠复盘一句话(工单 06)", () => {
     expect(await screen.findByRole("heading", { name: "这通电话是怎样推进的" })).toBeInTheDocument();
   }
 
-  it("对局一结束自动发 game-ended 触发;插槽显示一句话可展开,桌宠变 cheer", async () => {
+  it("对局一结束自动发 game-ended 触发;插槽显示一句话可展开,桌宠先挥手再变 cheer", async () => {
     const user = userEvent.setup();
     const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
     const { agent, sendTrigger } = petAgentWith((input) => ({
@@ -230,8 +230,12 @@ describe("桌宠复盘一句话(工单 06)", () => {
     await user.click(screen.getByText("展开依据"));
     expect(screen.getByText(/^第 1 轮 · 策略卡『/)).toBeInTheDocument();
 
-    // 桌宠对局结束后变欢呼(spec 故事 7)。
-    expect(document.querySelector(".desk-pet")).toHaveAttribute("data-expression", "cheer");
+    // 桌宠挂断先挥手(工单 12:挂断→wave),反应停留过后回到结算的欢呼(spec 故事 7)。
+    expect(document.querySelector(".desk-pet")).toHaveAttribute("data-expression", "wave");
+    await vi.waitFor(
+      () => expect(document.querySelector(".desk-pet")).toHaveAttribute("data-expression", "cheer"),
+      { timeout: 4000 },
+    );
   });
 
   it("复盘没有值得说的内容(dropped):照样发触发,但结算页不出插槽", async () => {

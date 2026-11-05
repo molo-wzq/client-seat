@@ -129,16 +129,30 @@ describe("对话 Worker(工单 11,假模型端口)", () => {
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({ ticketId: "t-chat", status: "failed" });
     expect(reports[0].text).toContain("网关 502");
-    expect(report).toMatchObject({ status: "ready", text: "收到，马上办" });
+    // 回退也是对话脚本:带表情、说得像桌宠,面板里看得见(工单 12)。
+    expect(report).toMatchObject({ status: "ready", emotion: "wave" });
+    expect(report.text).toContain("我在呢");
   });
 
-  it("没配模型(无 key):chat 直接走 demo 回复,演示不断", async () => {
-    const worker = createModelWorkers({});
+  it("没配模型(无 key):chat 走演示脚本——分拍流式、带表情,面板逐字可演示", async () => {
+    const worker = createModelWorkers({ demoChatSleep: () => Promise.resolve() });
     const trigger = chatTrigger("陪我说说话");
+    const deltas: string[] = [];
+
+    const report = await worker.run(ticketOf(trigger), trigger, async () => undefined, (delta) => deltas.push(delta));
+
+    expect(report).toMatchObject({ status: "ready", emotion: "wave" });
+    expect(deltas.length).toBeGreaterThan(1); // 分几拍流出,看得见逐字
+    expect(deltas.join("")).toBe(report.text);
+  });
+
+  it("没配模型:玩家话里的命令意图照样转成快捷动作建议(点了才执行)", async () => {
+    const worker = createModelWorkers({ demoChatSleep: () => Promise.resolve() });
+    const trigger = chatTrigger("不然换个客户，再来一局试试");
 
     const report = await worker.run(ticketOf(trigger), trigger, async () => undefined);
 
-    expect(report).toMatchObject({ status: "ready", text: "收到，马上办" });
+    expect(report.quickActions).toEqual(["换个客户", "再来一局"]);
   });
 });
 

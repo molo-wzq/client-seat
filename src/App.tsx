@@ -5,7 +5,7 @@ import type { RoleCard } from "./domain/role-card";
 import type { PostgameBasis } from "../server/agent/types";
 import { BusyHint } from "./ui/BusyHint";
 import { CardsView, HistoryView, MaterialsView, ResearchReportView, RolesView } from "./ui/CatalogViews";
-import { DeskPet, type PetExpression, type QuickRingAction } from "./ui/DeskPet";
+import { DeskPet, type PetExpression, type PetReactionEvent, type QuickRingAction } from "./ui/DeskPet";
 import { PetDemoConsole } from "./ui/PetDemoConsole";
 import { settleHiddenCards, type HiddenCardChoice } from "./ui/HiddenCards";
 import { LeftRail, type AppView } from "./ui/LeftRail";
@@ -43,7 +43,12 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
   // 一键演示(工单 10):控制条开关、演示期间的桌宠表情接管与面板焦点。
   const [demoOpen, setDemoOpen] = useState(false);
   const [demoExpression, setDemoExpression] = useState<PetExpression | null>(null);
-  const [petFocus, setPetFocus] = useState<"tickets" | "inbox" | null>(null);
+  const [petFocus, setPetFocus] = useState<"tickets" | "inbox" | "chat" | null>(null);
+  // 演示代发对话(工单 12):App 转交给桌宠在对话面板替玩家发一句;nonce 保证只发一次。
+  const [demoChat, setDemoChat] = useState<{ nonce: number; text: string } | null>(null);
+  const demoChatNonce = useRef(0);
+  // 事件反应(工单 12):翻牌/举牌/挂断换表情;每次都传新对象,桌宠按事件反应。
+  const [petReaction, setPetReaction] = useState<PetReactionEvent | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [catalogBusy, setCatalogBusy] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -84,10 +89,15 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
     void initialLoad();
   }, [api]);
 
-  // 一键演示入口(工单 10):URL 带 ?demo=pet 直接开演;命令条输入「演示」同效。
+  // 一键演示入口(工单 10):URL 带 ?demo=pet 直接开演;对话输入「演示」同效。
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("demo") === "pet") setDemoOpen(true);
   }, []);
+
+  // 举牌即事件(工单 12):有牌举着待决定,桌宠换「拿笔想」。
+  useEffect(() => {
+    if (raisePending) setPetReaction({ kind: "hidden-raised" });
+  }, [raisePending]);
 
   const publishedCards = useMemo(
     () => materials.flatMap((material) => material.cards.filter((card) => card.status === "published")),
@@ -339,12 +349,14 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
                 persona={seatedPersona}
                 publishedCards={publishedCards}
                 hiddenChoices={hiddenChoicesByCall[conversation.id] ?? {}}
-                onHiddenChoice={(item, choice) =>
+                onHiddenChoice={(item, choice) => {
                   setHiddenChoicesByCall((current) => ({
                     ...current,
                     [conversation.id]: { ...(current[conversation.id] ?? {}), [item]: choice },
-                  }))
-                }
+                  }));
+                  // 亲手翻开隐藏牌→桌宠欢呼(工单 12 事件反应)。
+                  if (choice === "flip") setPetReaction({ kind: "hidden-revealed" });
+                }}
                 onRaisePendingChange={setRaisePending}
                 onConversationChange={(next) => {
                   const accept = (current: Conversation) => next.revision === undefined || current.revision === undefined || next.revision >= current.revision;
@@ -354,7 +366,8 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
                 onFinished={(finished) => {
                   setResult(finished);
                   setConversation((current) => (current ? { ...current, status: "ended" } : current));
-                  setView((current) => current === "table" ? "postgame" : current);
+                  setView((current) => (current === "table" ? "postgame" : current));
+                  setPetReaction({ kind: "call-ended" }); // 挂断→桌宠挥手(工单 12)
                   requestPetReview(finished);
                   void refreshCatalog().catch(() => undefined);
                 }}
@@ -392,19 +405,27 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
           agent={agent}
           onPetExpression={setDemoExpression}
           onFocusPanel={(panel) => setPetFocus(panel === "none" ? null : panel)}
+          onChat={(text) => {
+            demoChatNonce.current += 1;
+            setDemoChat({ nonce: demoChatNonce.current, text });
+          }}
           onClose={closeDemo}
         />
       )}
       {/* 桌宠固定在牌桌右下角,不参与布局,也不遮挡主内容。
-          对局进行中(主幕 + ongoing)命令条置灰(工单 03);
-          有隐藏牌举着待决定时表情变「拿笔想」(工单 04);
-          进结算后变「欢呼」,陪着看经理的复盘一句话(工单 06);
+          单击头像优先进入对话面板(工单 12);
+          对局进行中(主幕 + ongoing)输入框锁住(工单 12);
+          举牌/翻牌/挂断经 reaction 换表情,进结算后变「欢呼」陪着看复盘(工单 06→12);
           演示期间表情由演示脚本接管(工单 10)。 */}
       <DeskPet
         inCall={view === "table" && conversation?.status === "ongoing"}
         onQuickAction={handleQuickAction}
         onOpenDemo={() => setDemoOpen(true)}
         focusPanel={petFocus}
+        view={view}
+        reaction={petReaction}
+        demoChatCue={demoChat}
+        onDemoChatDone={() => setDemoChat(null)}
         expression={
           demoExpression
             ?? (view === "postgame"
