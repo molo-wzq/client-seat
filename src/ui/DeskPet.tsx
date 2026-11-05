@@ -146,6 +146,7 @@ export function DeskPet({
   onQuickAction,
   onOpenDemo,
   focusPanel = null,
+  policySignal = 0,
 }: {
   expression?: PetExpression;
   inCall?: boolean;
@@ -156,6 +157,8 @@ export function DeskPet({
   onOpenDemo?: () => void;
   /** 演示要看的面板(工单 10):直接展开工单列表/待办面板,演示结束还回去。 */
   focusPanel?: "tickets" | "inbox" | null;
+  /** 放权被动过的信号(工单 10):演示脚本每切一次放权就 +1,开着的面板据此重拉,开关立即同步。 */
+  policySignal?: number;
 }) {
   const [variant, setVariant] = useState<PetVariant>(
     () => (window.localStorage.getItem(VARIANT_KEY) === "m" ? "m" : "f"),
@@ -224,6 +227,7 @@ export function DeskPet({
 
   // 待办面板打开时拉取放权模式与评估记录(工单 08);演示经 focusPanel 强开时同样要拉
   // (工单 10 第⑦幕直接展示放权开关与评估记录)。失败静默,开关与列表先给空态。
+  // policySignal 变化(演示脚本切过放权)时重拉:面板开着,开关也要立即显示当前模式。
   useEffect(() => {
     if (!inboxOpen && focusPanel !== "inbox") return;
     let alive = true;
@@ -242,7 +246,7 @@ export function DeskPet({
     return () => {
       alive = false;
     };
-  }, [agent, inboxOpen, focusPanel]);
+  }, [agent, inboxOpen, focusPanel, policySignal]);
 
   // 命令条打开即聚焦,直接打字。
   useEffect(() => {

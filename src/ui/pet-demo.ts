@@ -121,8 +121,12 @@ function demoGameEndedInput(): AgentTriggerInput {
 /* ---- 7 幕演示脚本(数据) ---- */
 
 export const DEMO_STEPS: readonly DemoStep[] = [
-  // ① 桌宠挥手入场
-  { act: 1, note: "第①幕·入场:桌宠挥挥手,在客户席坐下", holdMs: 1600, actions: [{ kind: "pet", expression: "wave" }, { kind: "scene", scene: "none" }] },
+  // ① 桌宠挥手入场(开场即把放权切到「自动」:后面复盘、起草这些主动活才真的执行)
+  { act: 1, note: "第①幕·入场:你来当客户,桌宠挥挥手,放权先切「自动」", holdMs: 1800, actions: [
+    { kind: "pet", expression: "wave" },
+    { kind: "policy", mode: "auto" },
+    { kind: "scene", scene: "none" },
+  ] },
   { act: 1, note: "打个招呼——命令进真实链路,气泡从账本回来", holdMs: 2400, actions: [{ kind: "command", text: "跟观众打个招呼" }] },
   // ② 陪看对局:经理出招,桌宠只用表情回应(spec 故事 3,不说话)
   { act: 2, note: "第②幕·陪看:经理用『钱有窗口』问季度奖,桌宠点头", holdMs: 2400, actions: [
@@ -161,12 +165,15 @@ export const DEMO_STEPS: readonly DemoStep[] = [
     { kind: "focus", panel: "inbox" },
     { kind: "annotate-last-drop", note: "开头一句改得口语一点" },
   ] },
-  // ⑦ 放权模式 + 评估记录 + Watchdog 标受阻
-  { act: 7, note: "第⑦幕·放权:从「观察」切到「自动」", holdMs: 2400, actions: [
-    { kind: "policy", mode: "auto" },
+  // ⑦ 放权模式 + 评估记录 + Watchdog 标受阻(开场一直是 auto,这里先切观察做对比)
+  { act: 7, note: "第⑦幕·放权:先切到「观察」——只记录,不动手", holdMs: 2400, actions: [
+    { kind: "policy", mode: "observe" },
     { kind: "focus", panel: "inbox" },
   ] },
-  { act: 7, note: "评估记录留痕:本来会做什么、为什么;observe 只记录、auto 已执行", holdMs: 2600, actions: [] },
+  { act: 7, note: "评估记录留痕:本来会做什么、为什么;自动时都干了,观察只记着", holdMs: 2600, actions: [] },
+  { act: 7, note: "切回「自动」,该干的接着替你干", holdMs: 2400, actions: [
+    { kind: "policy", mode: "auto" },
+  ] },
   { act: 7, note: "模型报错→重试无果,Watchdog 标受阻进待办,不打扰玩家", holdMs: 3000, actions: [
     { kind: "trigger", input: { source: "system", kind: "model-error", data: { error: "演示:模型超时" } } },
   ] },

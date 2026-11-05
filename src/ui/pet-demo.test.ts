@@ -28,6 +28,23 @@ describe("演示脚本数据(工单 10)", () => {
       expect(allowed.has(action.kind)).toBe(true);
     }
   });
+
+  it("开场(第①幕第一步)即把放权切到 auto,第⑦幕先观察再切回自动(保留对比)", () => {
+    expect(DEMO_STEPS[0].actions).toContainEqual({ kind: "policy", mode: "auto" });
+
+    const act7Modes = DEMO_STEPS.filter((step) => step.act === 7)
+      .flatMap((step) => step.actions)
+      .filter((action): action is { kind: "policy"; mode: "auto" | "observe" | "off" } => action.kind === "policy")
+      .map((action) => action.mode);
+    expect(act7Modes).toEqual(["observe", "auto"]);
+  });
+
+  it("开场说明用「你来当客户」,全文不出现「客户席」", () => {
+    expect(DEMO_STEPS[0].note).toContain("你来当客户");
+    for (const step of DEMO_STEPS) {
+      expect(step.note).not.toContain("客户席");
+    }
+  });
 });
 
 /** 约定测试缝:演示状态机纯函数(下一步/暂停/重置/越界)。 */

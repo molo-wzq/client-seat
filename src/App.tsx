@@ -44,6 +44,8 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
   const [demoOpen, setDemoOpen] = useState(false);
   const [demoExpression, setDemoExpression] = useState<PetExpression | null>(null);
   const [petFocus, setPetFocus] = useState<"tickets" | "inbox" | null>(null);
+  // 演示切过放权的信号(工单 10):每切一次 +1,DeskPet 开着的待办面板据此重拉,开关立即同步。
+  const [petPolicySignal, setPetPolicySignal] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [catalogBusy, setCatalogBusy] = useState(true);
   const [catalogError, setCatalogError] = useState<string | null>(null);
@@ -392,6 +394,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
           agent={agent}
           onPetExpression={setDemoExpression}
           onFocusPanel={(panel) => setPetFocus(panel === "none" ? null : panel)}
+          onPolicyChange={() => setPetPolicySignal((current) => current + 1)}
           onClose={closeDemo}
         />
       )}
@@ -405,6 +408,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
         onQuickAction={handleQuickAction}
         onOpenDemo={() => setDemoOpen(true)}
         focusPanel={petFocus}
+        policySignal={petPolicySignal}
         expression={
           demoExpression
             ?? (view === "postgame"
