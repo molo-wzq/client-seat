@@ -313,9 +313,12 @@ describe("对话流式与红点(工单 12/15)", () => {
     expect(record).toHaveTextContent("我在呢，你说。");
     expect(screen.getByRole("img", { name: /欢呼/ })).toBeInTheDocument();
 
-    // 建议只是建议:点了才执行(发命令 + 跳转)。
+    // 动态建议(工单 16):点了作为一句话发给桌宠(对话式),不再走命令+跳转。
     await user.click(within(record).getByRole("button", { name: "换个客户" }));
-    expect(agent.sendCommand).toHaveBeenCalledWith("换个客户");
+    expect(agent.sendTrigger).toHaveBeenCalledWith(
+      expect.objectContaining({ kind: "chat", data: expect.objectContaining({ text: "换个客户" }) }),
+    );
+    expect(agent.sendCommand).not.toHaveBeenCalled();
   });
 
   it("没有 delta 也能落回复:回执自带的 ready Report 直接定稿(审查 S1)", async () => {

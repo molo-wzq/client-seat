@@ -177,11 +177,11 @@ const DEMO_CHAT_CHUNK_CHARS = 4;
 const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
 /**
- * demo 对话脚本(工单 12,无 key):按玩家话挑一句带表情前缀的桌宠口吻回复;
- * 意图命中时快捷动作建议照给——与真实模型同形状,demo 模式完整可演示。
+ * demo 对话脚本(工单 12,无 key):按玩家话挑一句带表情前缀的桌宠口吻回复。
+ * 建议动作(工单 16)不再从玩家话里猜命令意图,改为按牌局回合给固定 2 个
+ * (demoSuggestions),与真实模型同形状,demo 模式完整可演示。
  */
 function demoChatReply(text: string): string {
-  if (detectQuickActions(text).length > 0) return "[cheer]好，这就去安排。";
   if (/复盘|上一局/.test(text)) return "[think]这局我陪着看的，值得学的一招我先记下。";
   if (/在吗|你好|嗨|打招呼|陪|说说话/.test(text)) return "[wave]我在呢，你说，我听着。";
   return "[wave]收到，先搁我手上，好了叫你。";
@@ -193,17 +193,75 @@ const EMOTION_TAG = new RegExp(`^\\s*\\[(${PET_EMOTIONS.join("|")})\\]\\s*`);
 /** 可能构成表情前缀的最大长度:按标签表算出(「[sleepy]」)。 */
 const EMOTION_TAG_MAX_CHARS = Math.max(...PET_EMOTIONS.map((emotion) => `[${emotion}]`.length));
 
-/** 快捷动作意图表:玩家话里的命令意图 → 快捷环按钮文案(DeskPet QUICK_RING 同名)。 */
-const QUICK_ACTION_INTENTS: ReadonlyArray<{ pattern: RegExp; label: string }> = [
-  { pattern: /换个?客户|换一位/, label: "换个客户" },
-  { pattern: /再来一局|再开一局|重新开一局/, label: "再来一局" },
-  { pattern: /上局复盘|上一局复盘|复盘上一局/, label: "上局复盘" },
-  { pattern: /本周投研|投研/, label: "本周投研" },
-];
+/** 建议尾行标记(工单 16):模型把本轮建议动作写在末尾这一行,Worker 剥成 quickActions。 */
+const SUGGESTION_MARKER = "【建议】";
+/** 建议条数上限(工单 16):每轮最多 3 个建议动作。 */
+const SUGGESTION_MAX_ITEMS = 3;
 
-/** 从玩家话里识别命令意图:只给建议(按钮文案),不执行。 */
-function detectQuickActions(text: string): string[] {
-  return QUICK_ACTION_INTENTS.filter((intent) => intent.pattern.test(text)).map((intent) => intent.label);
+/** 把回复拆成正文与建议动作:尾行「【建议】a | b | c」剥掉,条数截到上限。 */
+function splitSuggestionTail(reply: string): { text: string; suggestions: string[] } {
+  const index = reply.indexOf(SUGGESTION_MARKER);
+  if (index < 0) return { text: reply, suggestions: [] };
+  const suggestions = reply
+    .slice(index + SUGGESTION_MARKER.length)
+    .split("|")
+    .map((item) => item.trim())
+    .filter((item) => item !== "")
+    .slice(0, SUGGESTION_MAX_ITEMS);
+  return { text: reply.slice(0, index).trimEnd(), suggestions };
+}
+
+/**
+ * 建议尾行流式闸门(工单 16):标记(含跨增量拆开的部分标记)之前照常放出,
+ * 标记起整段扣住——建议只进 quickActions 按钮,绝不当正文上屏。
+ * flush 在流结束时补放扣住的残字(没凑成标记的部分)。
+ */
+function createSuggestionGate(emit: (piece: string) => void): { push: (piece: string) => void; flush: () => void } {
+  let buffer = "";
+  let closed = false;
+  return {
+    push(piece) {
+      if (closed || piece === "") return;
+      buffer += piece;
+      const index = buffer.indexOf(SUGGESTION_MARKER);
+      if (index >= 0) {
+        closed = true;
+        // 标记前的换行是协议分隔符,不算正文;与最终 Report 的 trimEnd 口径一致。
+        emit(buffer.slice(0, index).trimEnd());
+        buffer = "";
+        return;
+      }
+      // 尾部若是标记的前缀,先扣住等下一段;最长匹配,不误伤正文里的「【」。
+      const chars = [...buffer];
+      let hold = 0;
+      for (let len = Math.min(chars.length, SUGGESTION_MARKER.length - 1); len > 0; len -= 1) {
+        if (SUGGESTION_MARKER.startsWith(chars.slice(-len).join(""))) {
+          hold = len;
+          break;
+        }
+      }
+      // 紧邻其后的尾部空白同理(可能是建议行前的分隔换行):一并扣住,
+      // 正文还有下文时随下一段补放;流结束由 flush 兜底放出。
+      while (hold < chars.length && /\s/.test(chars[chars.length - hold - 1] ?? "")) hold += 1;
+      const safe = chars.slice(0, chars.length - hold);
+      if (safe.length > 0) emit(safe.join(""));
+      buffer = chars.slice(chars.length - hold).join("");
+    },
+    flush() {
+      if (closed || buffer === "") return;
+      const rest = buffer;
+      buffer = "";
+      emit(rest);
+    },
+  };
+}
+
+/** demo 按回合给的建议(工单 16):固定 2 个,牌局阶段不同换一套;不在牌局给开场那 2 个。 */
+function demoSuggestions(context: ChatContext | undefined): string[] {
+  if (context?.phase !== "game") return ["这周投研帮我划重点", "陪我看看上局哪里值得学"];
+  if (context.turnNumber <= 4) return ["他在探我底？", "帮我想个推托的说法"];
+  if (context.turnNumber <= 8) return ["这招想引我说什么？", "帮我顶住不松口"];
+  return ["他想收口了？", "帮我留个台阶别把话说死"];
 }
 
 /** 防御性取字符串:undefined/非字符串都归空。 */
@@ -349,14 +407,16 @@ class ChatWorker implements AgentWorker {
       // delta 与 Report 共用同一个脱敏出口(S4)。
       onDelta(this.deps.redact(out));
     };
+    // 建议尾行闸门(工单 16):【建议】起整段扣住,只进 quickActions 按钮不上屏。
+    const suggestionGate = createSuggestionGate(emit);
     const forwardStripped = (delta: string): void => {
       if (!onDelta) return;
-      if (leadResolved) return emit(delta);
+      if (leadResolved) return suggestionGate.push(delta);
       pendingLead += delta;
       const match = EMOTION_TAG.exec(pendingLead);
       if (match) {
         leadResolved = true;
-        emit(pendingLead.slice(match[0].length));
+        suggestionGate.push(pendingLead.slice(match[0].length));
         pendingLead = "";
         return;
       }
@@ -366,13 +426,13 @@ class ChatWorker implements AgentWorker {
       if (rest === "" || rest.startsWith("[")) {
         if (rest !== "" && [...rest].length > EMOTION_TAG_MAX_CHARS) {
           leadResolved = true;
-          emit(pendingLead);
+          suggestionGate.push(pendingLead);
           pendingLead = "";
         }
         return;
       }
       leadResolved = true;
-      emit(pendingLead);
+      suggestionGate.push(pendingLead);
       pendingLead = "";
     };
     /** 流结束(S3):前缀一直没判定成(如「[好]」),扣住的字符按正文补放,不丢字。 */
@@ -381,20 +441,22 @@ class ChatWorker implements AgentWorker {
       leadResolved = true;
       const rest = EMOTION_TAG.exec(pendingLead) ? pendingLead.replace(EMOTION_TAG, "") : pendingLead;
       pendingLead = "";
-      emit(rest);
+      suggestionGate.push(rest);
     };
     try {
       const raw = await this.runToReply(ticket.id, messages, onReport, forwardStripped, context);
       flushPendingLead();
-      const { text: body, emotion } = stripEmotionTag(raw.trim());
-      const cleaned = truncateChars(this.deps.redact(body), CHAT_MAX_CHARS);
-      const quickActions = detectQuickActions(text);
+      suggestionGate.flush();
+      // 建议尾行(工单 16):剥成 quickActions(动态建议,替换工单 15 的建议位)。
+      const { text: body, suggestions } = splitSuggestionTail(raw.trim());
+      const { text: cleanedBody, emotion } = stripEmotionTag(body);
+      const cleaned = truncateChars(this.deps.redact(cleanedBody), CHAT_MAX_CHARS);
       return {
         ticketId: ticket.id,
         status: "ready",
         text: cleaned,
         ...(emotion ? { emotion } : {}),
-        ...(quickActions.length > 0 ? { quickActions } : {}),
+        ...(suggestions.length > 0 ? { quickActions: suggestions } : {}),
       };
     } catch (error) {
       // 原始报错不进 Report/账本/气泡(S5):对外只写中文短码,
@@ -471,7 +533,8 @@ class ChatWorker implements AgentWorker {
       if (start > 0) await this.deps.sleep(DEMO_CHAT_STEP_MS);
       onDelta?.(this.deps.redact(chars.slice(start, start + DEMO_CHAT_CHUNK_CHARS).join("")));
     }
-    const quickActions = detectQuickActions(text);
+    // demo 建议按牌局回合给固定 2 个(工单 16),与真实模型同形状。
+    const quickActions = demoSuggestions(context);
     return {
       ticketId: ticket.id,
       status: "ready",

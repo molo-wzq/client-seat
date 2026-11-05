@@ -45,6 +45,7 @@ export function assemblePetSystemPrompt(persona: PetPersonaCard, view?: string):
     "## 怎么回话",
     `- 回复以一个表情标签开头,五个里选一个:${PET_EMOTIONS.map((emotion) => `[${emotion}]`).join(" ")},标签后直接跟正文`,
     "- 正文一句话说清,不超过 120 字;桌上气泡只显示前 40 字,先把重要的放前面",
+    "- 末尾另起一行写「【建议】」+按牌局给玩家的建议动作(最多 3 个,用 | 分隔),只建议不替玩家决定",
     view ? `- 玩家当前在「${view}」页,回话结合这个页面` : "",
   ];
   return lines.filter(Boolean).join("\n");

@@ -267,7 +267,9 @@ export function PetChatPanel({
                 {message.text}
               </p>
               {message.quickActions?.map((label) => (
-                <button key={label} type="button" className="desk-pet-chat-action" onClick={() => onQuickAction(label)}>
+                // 动态建议(工单 16):模型按牌局给的建议动作,点了作为一句话发给桌宠,
+                // 不再走快捷环导航(那条路留给 / 命令与开场芯片)。
+                <button key={label} type="button" className="desk-pet-chat-action" onClick={() => onSend(label)}>
                   {label}
                 </button>
               ))}

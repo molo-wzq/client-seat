@@ -121,17 +121,36 @@ describe("对话 Worker(工单 11,假模型端口)", () => {
     expect(report.emotion).toBeUndefined();
   });
 
-  it("快捷动作:玩家话里识别出命令意图转成建议,不直接执行", async () => {
+  it("模型按牌局给建议:尾行【建议】剥成 quickActions,正文与流式增量都不带它(工单 16)", async () => {
     const model = new FakeModelPort();
-    model.enqueue("[wave]好嘞，听你的，我陪你看。");
+    model.enqueue("[think]他在探你的底。\n【建议】他在探我底？|帮我想个推托的说法");
     const worker = createModelWorkers({ routerModel: model });
-    const trigger = chatTrigger("不然换个客户，再来一局试试");
+    const trigger = chatTrigger("经理这句什么意思");
+    const deltas: string[] = [];
 
-    const report = await worker.run(ticketOf(trigger), trigger, { onReport: async () => undefined });
+    const report = await worker.run(ticketOf(trigger), trigger, {
+      onReport: async () => undefined,
+      onDelta: (delta) => deltas.push(delta),
+    });
 
-    expect(report.quickActions).toEqual(["换个客户", "再来一局"]);
-    // 是建议不是执行:回复仍是模型对话原文,而不是快捷命令的脚本答复。
-    expect(report.text).toBe("好嘞，听你的，我陪你看。");
+    // 建议进结构化字段(替换工单 15 的静态建议位),正文只剩对话本身。
+    expect(report.quickActions).toEqual(["他在探我底？", "帮我想个推托的说法"]);
+    expect(report.text).toBe("他在探你的底。");
+    // 流式增量绝不把建议行上屏(标记跨 delta 拆开也扣得住)。
+    expect(deltas.join("")).toBe("他在探你的底。");
+  });
+
+  it("建议超过 3 条只取前 3;没有尾行就没有建议", async () => {
+    const model = new FakeModelPort();
+    model.enqueue("[wave]稳住。\n【建议】一|二|三|四");
+    const worker = createModelWorkers({ routerModel: model });
+
+    const capped = await worker.run(ticketOf(chatTrigger("a")), chatTrigger("a"), { onReport: async () => undefined });
+    expect(capped.quickActions).toEqual(["一", "二", "三"]);
+
+    model.enqueue("[wave]就一句。");
+    const bare = await worker.run(ticketOf(chatTrigger("b")), chatTrigger("b"), { onReport: async () => undefined });
+    expect(bare.quickActions).toBeUndefined();
   });
 
   it("单条回复硬上限 120 字:超出截断(气泡 40 字由核心另截)", async () => {
@@ -228,13 +247,27 @@ describe("对话 Worker(工单 11,假模型端口)", () => {
     expect(deltas.join("")).toBe(report.text);
   });
 
-  it("没配模型:玩家话里的命令意图照样转成快捷动作建议(点了才执行)", async () => {
+  it("没配模型:demo 按回合给固定的 2 个建议;不在牌局给开场那 2 个(工单 16)", async () => {
     const worker = createModelWorkers({ demoChatSleep: () => Promise.resolve() });
-    const trigger = chatTrigger("不然换个客户，再来一局试试");
+    const earlyContext = { phase: "game" as const, turnNumber: 2 };
+    const lateContext = { phase: "game" as const, turnNumber: 11 };
 
-    const report = await worker.run(ticketOf(trigger), trigger, { onReport: async () => undefined });
+    const early = await worker.run(
+      ticketOf(chatTrigger("在吗")),
+      chatTrigger("在吗", { context: { ...earlyContext, customer: { name: "陈建国", visible: [] }, hiddenCards: [], turns: [], cardsPlayed: [], maxTurns: 12, revealedHidden: 0 } }),
+      { onReport: async () => undefined },
+    );
+    const late = await worker.run(
+      ticketOf(chatTrigger("在吗")),
+      chatTrigger("在吗", { context: { ...lateContext, customer: { name: "陈建国", visible: [] }, hiddenCards: [], turns: [], cardsPlayed: [], maxTurns: 12, revealedHidden: 0 } }),
+      { onReport: async () => undefined },
+    );
+    const idle = await worker.run(ticketOf(chatTrigger("在吗")), chatTrigger("在吗"), { onReport: async () => undefined });
 
-    expect(report.quickActions).toEqual(["换个客户", "再来一局"]);
+    // 固定 2 个;不同回合阶段换一套(早期防探底/后期防收口)。
+    expect(early.quickActions).toHaveLength(2);
+    expect(early.quickActions).not.toEqual(late.quickActions);
+    expect(idle.quickActions).toEqual(["这周投研帮我划重点", "陪我看看上局哪里值得学"]);
   });
 });
 

@@ -125,23 +125,23 @@ describe("对话面板(工单 12/15)", () => {
     ).toBeInTheDocument();
   });
 
-  it("消息按说话人排开;回复带的快捷动作建议渲染成按钮,点了才执行", async () => {
+  it("消息按说话人排开;回复带的建议动作渲染成按钮,点了作为一句话发出(工单 16)", async () => {
     const user = userEvent.setup();
     const props = renderPanel({
       messages: [
-        msg("player", "换个客户试试"),
-        msg("pet", "好，这就去安排。", { quickActions: ["换个客户", "再来一局"] }),
+        msg("player", "经理这句什么意思"),
+        msg("pet", "他在探你的底。", { quickActions: ["他在探我底？", "帮我想个推托的说法"] }),
       ],
     });
 
     const list = screen.getByRole("log", { name: "对话记录" });
-    expect(list).toHaveTextContent("换个客户试试");
-    expect(list).toHaveTextContent("好，这就去安排。");
+    expect(list).toHaveTextContent("他在探你的底。");
     expect(props.onQuickAction).not.toHaveBeenCalled();
-    await user.click(within(list).getByRole("button", { name: "换个客户" }));
-    expect(props.onQuickAction).toHaveBeenCalledWith("换个客户");
-    await user.click(within(list).getByRole("button", { name: "再来一局" }));
-    expect(props.onQuickAction).toHaveBeenCalledWith("再来一局");
+    // 动态建议是对话式提示:点了发给桌宠,不走快捷环导航。
+    await user.click(within(list).getByRole("button", { name: "他在探我底？" }));
+    expect(props.onSend).toHaveBeenCalledWith("他在探我底？");
+    await user.click(within(list).getByRole("button", { name: "帮我想个推托的说法" }));
+    expect(props.onSend).toHaveBeenCalledWith("帮我想个推托的说法");
   });
 
   it("等待回复时显示「…」;流式正文开始上屏后「…」让位", () => {
