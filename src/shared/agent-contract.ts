@@ -11,8 +11,9 @@ export type AgentSource = "table" | "materials" | "research" | "pet" | "system";
  * 触发类型:同一来源下的事件类别——pet 命令条为 "command",对局结束为 "game-ended"(工单 06),
  * 拖文件到桌宠为 "dropped"(data:{fileName,fileKind}),待审批注为 "annotate"(data:{ticketId,note})(工单 07),
  * 模型报错为 "model-error"(工单 10 补上类型,R5 规则自此可命中;data:{error} 可选),
- * 桌宠对话为 "chat"(工单 11;data:{text,history,view,hidden},见下),
+ * 桌宠对话为 "chat"(工单 11;data:{text,history,view},见 ChatTriggerData),
  * 周报到期为 "research-due"(工单 11;data:{weekId}),策略卡发布为 "cards-published"(工单 11;data:{materialId,cardIds})。
+ * 每个 kind 只认所属域的 source(如 research-due 只来自 research),冒名即拒绝。
  */
 export type AgentTriggerKind =
   | "command"
@@ -137,7 +138,7 @@ export interface AgentReport {
   basis?: PostgameBasis;
   /**
    * 桌宠表情(工单 11):对话 Worker 剥离模型回复的表情前缀后携带;
-   * 其余 Worker 缺省。隐藏牌原文永不进 Report 任何字段(工单 11 隔离测试钉住)。
+   * 其余 Worker 缺省。Report 文本与 delta 共用同一个可注入脱敏出口(默认不处理)。
    */
   emotion?: PetEmotion;
   /**

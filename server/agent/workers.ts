@@ -1,4 +1,5 @@
-import { DemoWorker, type AgentWorker, type ReportSink } from "./core";
+import type { AgentWorker, WorkerRunOptions } from "./core";
+import { DemoWorker } from "./workers/demo";
 import type { AgentReport, AgentTicket, AgentTrigger, PetEmotion } from "./types";
 import { DEFAULT_PET_PERSONA, PET_EMOTIONS, assemblePetSystemPrompt, type PetPersonaCard } from "./pet-persona";
 // PET_EMOTIONS 仅用于拼 EMOTION_TAG 正则与上限,标签语义见 pet-persona.ts。
@@ -8,8 +9,8 @@ import { DEFAULT_PET_PERSONA, PET_EMOTIONS, assemblePetSystemPrompt, type PetPer
  * - 对话 Worker(chat):桌宠以人格卡口吻回玩家,流式 delta、表情剥离、快捷动作建议;
  * - 投研/盲区 Worker(research-due / cards-published):只产 waiting 草稿,人审闸门不变
  *   (ADR 0007)——Worker 手上没有任何发布接口,草稿永远到不了牌桌。
- * 隔离:hidden 原文只用来「从落账文本里抹掉自己」,绝不进模型提示词——
- * 模型不知道的内容,也就无从往外说。
+ * 脱敏(S4):服务端不接受前端传入的 hidden 原文;输出文本(delta 与 Report)
+ * 共用同一个可注入 redact 出口,默认不做处理。
  */
 
 /** 模型端口:OpenAI 兼容流式补全的最小形状(server/main.ts 用现有适配器实现)。 */
@@ -48,8 +49,9 @@ function demoChatReply(text: string): string {
   return "[wave]收到，先搁我手上，好了叫你。";
 }
 
-/** 表情前缀:模型按提示词约定开头,如「[cheer]正文」;标签表与提示词同源(pet-persona)。 */
-const EMOTION_TAG = new RegExp(`^\\[(${PET_EMOTIONS.join("|")})\\]\\s*`);
+/** 表情前缀:模型按提示词约定开头,如「[cheer]正文」;标签表与提示词同源(pet-persona)。
+ * 容忍前导空白(S3):模型常以换行开头,trim 后的最终 Report 剥得掉,流式也要剥得掉。 */
+const EMOTION_TAG = new RegExp(`^\\s*\\[(${PET_EMOTIONS.join("|")})\\]\\s*`);
 /** 可能构成表情前缀的最大长度:按标签表算出(「[sleepy]」)。 */
 const EMOTION_TAG_MAX_CHARS = Math.max(...PET_EMOTIONS.map((emotion) => `[${emotion}]`.length));
 
@@ -81,14 +83,15 @@ function truncateChars(text: string, maxChars: number): string {
   return [...text].slice(0, maxChars).join("");
 }
 
-/** 抹掉隐藏牌原文:替换成占位,落账字段(Report 文本)一个字不留。 */
-function redactHidden(text: string, hidden: string[]): string {
-  let result = text;
-  for (const entry of hidden) {
-    if (entry) result = result.split(entry).join("（这块先不记）");
-  }
-  return result;
-}
+/**
+ * 脱敏出口(S4):delta 逐段与 Report 全文共用同一个函数,组合根注入实现
+ * (如按 gameId 自取隐藏牌做替换);默认不做处理。逐段调用、无跨段状态,
+ * 需要跨分片匹配的脱敏由注入方自行缓冲。
+ */
+export type TextRedactor = (text: string) => string;
+
+/** 缺省脱敏:不处理。 */
+const noRedact: TextRedactor = (text) => text;
 
 /** 从完整回复里剥表情前缀,返回正文与表情;没有前缀时表情为 undefined。 */
 function stripEmotionTag(reply: string): { text: string; emotion: PetEmotion | undefined } {
@@ -115,22 +118,19 @@ class ChatWorker implements AgentWorker {
     private readonly deps: {
       model?: AgentModelPort;
       persona: PetPersonaCard;
+      /** 脱敏出口(S4):delta 逐段与 Report 全文共用。 */
+      redact: TextRedactor;
       /** demo 分拍节奏(工单 12):测试注入即时假钟。 */
       sleep: (ms: number) => Promise<void>;
     },
   ) {}
 
-  async run(
-    ticket: AgentTicket,
-    trigger: AgentTrigger,
-    onReport: ReportSink,
-    onDelta?: (text: string) => void,
-  ): Promise<AgentReport> {
+  async run(ticket: AgentTicket, trigger: AgentTrigger, options: WorkerRunOptions): Promise<AgentReport> {
+    const { onReport, onDelta } = options;
     const text = asText(trigger.data.text);
-    const hidden = asTextArray(trigger.data.hidden);
     const view = asText(trigger.data.view);
     // 无 key:走演示脚本回复,一样分拍流式、带表情与快捷动作(工单 12:demo 完整可演示)。
-    if (!this.deps.model) return this.runDemoChat(ticket, text, hidden, onDelta);
+    if (!this.deps.model) return this.runDemoChat(ticket, text, onDelta);
     const messages: AgentModelMessage[] = [
       { role: "system", content: assemblePetSystemPrompt(this.deps.persona, view || undefined) },
       ...parseHistory(trigger.data.history),
@@ -141,12 +141,16 @@ class ChatWorker implements AgentWorker {
     let pendingLead = "";
     let leadResolved = false;
     let emittedChars = 0;
+    // 是否已有正文推给玩家(S2):已流出的失败不能再退回 demo 流,面板会看到两段拼接的怪话。
+    let streamed = false;
     const emit = (piece: string): void => {
       if (!onDelta || piece === "" || emittedChars >= CHAT_MAX_CHARS) return;
       const room = CHAT_MAX_CHARS - emittedChars;
       const out = [...piece].slice(0, room).join("");
       emittedChars += [...out].length;
-      onDelta(out);
+      if (out.length > 0) streamed = true;
+      // delta 与 Report 共用同一个脱敏出口(S4)。
+      onDelta(this.deps.redact(out));
     };
     const forwardStripped = (delta: string): void => {
       if (!onDelta) return;
@@ -159,23 +163,34 @@ class ChatWorker implements AgentWorker {
         pendingLead = "";
         return;
       }
-      if (!pendingLead.startsWith("[")) {
-        leadResolved = true;
-        emit(pendingLead);
-        pendingLead = "";
+      // 只有前导空白、或空白后以 [ 开头:仍可能构成表情前缀,继续扣住(S3);
+      // 长度上限按去掉空白的部分算,空白不占标签预算。
+      const rest = pendingLead.trimStart();
+      if (rest === "" || rest.startsWith("[")) {
+        if (rest !== "" && [...rest].length > EMOTION_TAG_MAX_CHARS) {
+          leadResolved = true;
+          emit(pendingLead);
+          pendingLead = "";
+        }
         return;
       }
-      // 还是「可能是前缀」的形状:攒着;超过前缀最大长度仍不是标签,按正文放行。
-      if ([...pendingLead].length > EMOTION_TAG_MAX_CHARS) {
-        leadResolved = true;
-        emit(pendingLead);
-        pendingLead = "";
-      }
+      leadResolved = true;
+      emit(pendingLead);
+      pendingLead = "";
+    };
+    /** 流结束(S3):前缀一直没判定成(如「[好]」),扣住的字符按正文补放,不丢字。 */
+    const flushPendingLead = (): void => {
+      if (leadResolved || pendingLead === "") return;
+      leadResolved = true;
+      const rest = EMOTION_TAG.exec(pendingLead) ? pendingLead.replace(EMOTION_TAG, "") : pendingLead;
+      pendingLead = "";
+      emit(rest);
     };
     try {
       const raw = await this.deps.model.completeStream(messages, forwardStripped);
+      flushPendingLead();
       const { text: body, emotion } = stripEmotionTag(raw.trim());
-      const cleaned = truncateChars(redactHidden(body, hidden), CHAT_MAX_CHARS);
+      const cleaned = truncateChars(this.deps.redact(body), CHAT_MAX_CHARS);
       const quickActions = detectQuickActions(text);
       return {
         ticketId: ticket.id,
@@ -185,13 +200,19 @@ class ChatWorker implements AgentWorker {
         ...(quickActions.length > 0 ? { quickActions } : {}),
       };
     } catch (error) {
-      // 出错或超时:落 failed 写明原因,退回 demo 脚本(工单 11:桌宠不卡死)。
+      const reason = (error instanceof Error ? error.message : String(error)).slice(0, 200);
+      // 半截正文已经上屏(S2):不再退回 demo 流,直接以 failed 收口——
+      // 否则面板会把演示话术接在半截真实输出后面,拼成两段不相干的话。
+      if (streamed) {
+        return { ticketId: ticket.id, status: "failed", text: `真实模型没接上：${reason}。刚才那句只说了一半，再说一遍？` };
+      }
+      // 一个字都没流出:落 failed 写明原因,退回 demo 脚本(工单 11:桌宠不卡死)。
       await onReport({
         ticketId: ticket.id,
         status: "failed",
-        text: `真实模型没接上：${(error as Error).message.slice(0, 200)}。先用演示话回你。`,
+        text: `真实模型没接上：${reason}。先用演示话回你。`,
       });
-      return this.runDemoChat(ticket, text, hidden, onDelta);
+      return this.runDemoChat(ticket, text, onDelta);
     }
   }
 
@@ -199,14 +220,13 @@ class ChatWorker implements AgentWorker {
   private async runDemoChat(
     ticket: AgentTicket,
     text: string,
-    hidden: string[],
     onDelta?: (delta: string) => void,
   ): Promise<AgentReport> {
     const { text: body, emotion } = stripEmotionTag(demoChatReply(text));
-    const chars = [...truncateChars(redactHidden(body, hidden), CHAT_MAX_CHARS)];
+    const chars = [...truncateChars(this.deps.redact(body), CHAT_MAX_CHARS)];
     for (let start = 0; start < chars.length; start += DEMO_CHAT_CHUNK_CHARS) {
       if (start > 0) await this.deps.sleep(DEMO_CHAT_STEP_MS);
-      onDelta?.(chars.slice(start, start + DEMO_CHAT_CHUNK_CHARS).join(""));
+      onDelta?.(this.deps.redact(chars.slice(start, start + DEMO_CHAT_CHUNK_CHARS).join("")));
     }
     const quickActions = detectQuickActions(text);
     return {
@@ -230,7 +250,8 @@ class DraftWorker implements AgentWorker {
     },
   ) {}
 
-  async run(ticket: AgentTicket, trigger: AgentTrigger, onReport: ReportSink): Promise<AgentReport> {
+  async run(ticket: AgentTicket, trigger: AgentTrigger, options: WorkerRunOptions): Promise<AgentReport> {
+    const { onReport } = options;
     if (!this.deps.model) {
       return { ticketId: ticket.id, status: "waiting", text: this.deps.demoText };
     }
@@ -267,12 +288,21 @@ export function createModelWorkers(deps: {
   routerModel?: AgentModelPort;
   workerModel?: AgentModelPort;
   persona?: PetPersonaCard;
+  /** 脱敏出口(S4):delta 与 Report 共用,缺省不处理。 */
+  redact?: TextRedactor;
+  /** demo Worker 分步节奏(工单 05):缺省真实等待,测试注入即时假钟。 */
+  demoSleep?: (ms: number) => Promise<void>;
   /** demo 对话分拍节奏(工单 12):缺省真实等待,测试注入即时假钟。 */
   demoChatSleep?: (ms: number) => Promise<void>;
 }): AgentWorker {
-  const demo = new DemoWorker();
+  const demo = new DemoWorker(deps.demoSleep ? { sleep: deps.demoSleep } : undefined);
   const persona = deps.persona ?? DEFAULT_PET_PERSONA;
-  const chat = new ChatWorker({ model: deps.routerModel, persona, sleep: deps.demoChatSleep ?? defaultSleep });
+  const chat = new ChatWorker({
+    model: deps.routerModel,
+    persona,
+    redact: deps.redact ?? noRedact,
+    sleep: deps.demoChatSleep ?? defaultSleep,
+  });
   const research = new DraftWorker({
     model: deps.workerModel,
     demoText: "投研草稿好了：本周要点三条、风险一条，进待审等你过目。",
@@ -289,11 +319,13 @@ export function createModelWorkers(deps: {
     },
   });
   return {
-    async run(ticket, trigger, onReport, onDelta) {
-      if (trigger.kind === "chat") return chat.run(ticket, trigger, onReport, onDelta);
-      if (trigger.kind === "research-due") return research.run(ticket, trigger, onReport);
-      if (trigger.kind === "cards-published") return blindspot.run(ticket, trigger, onReport);
-      return demo.run(ticket, trigger, onReport);
+    // 路由必须原样透传整个 options(onDelta/context 也不例外,B1):
+    // 兜底分支少了 context,审批/批注在生产组合下会全部「查不到待办」。
+    async run(ticket, trigger, options) {
+      if (trigger.kind === "chat") return chat.run(ticket, trigger, options);
+      if (trigger.kind === "research-due") return research.run(ticket, trigger, options);
+      if (trigger.kind === "cards-published") return blindspot.run(ticket, trigger, options);
+      return demo.run(ticket, trigger, options);
     },
   };
 }

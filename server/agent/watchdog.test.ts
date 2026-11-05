@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { createAgentCore, DemoWorker, type AgentWorker } from "./core";
+import { DemoWorker } from "./workers/demo";
+import { createAgentCore, type AgentWorker } from "./core";
 import { InMemoryLedgerStorage } from "./storage";
 import { createWatchdog } from "./watchdog";
 import type { AgentEvent, AgentReport } from "./types";

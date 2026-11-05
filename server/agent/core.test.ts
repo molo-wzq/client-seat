@@ -12,7 +12,8 @@ import type {
   TicketEntry,
   TriggerEntry,
 } from "./types";
-import { createAgentCore, DemoWorker, type ReportSink } from "./core";
+import { DemoWorker } from "./workers/demo";
+import { createAgentCore, type ReportSink } from "./core";
 import { InMemoryLedgerStorage } from "./storage";
 
 /**
@@ -142,6 +143,50 @@ describe("Agent 核心(工单 02)", () => {
     ).rejects.toThrow("触发类型不合法");
     expect(await core.ledger()).toEqual([]);
   });
+
+  it("source 与 kind 不匹配(伪造 source)→ ValidationError,放权模式绕不过(S1)", async () => {
+    // source 完全由客户端提供:R4/R7 只登记 research/materials,若按 source+kind
+    // 精确匹配规则,{source:"pet",kind:"research-due"} 会漏成显式命令直接立项。
+    const core = createAgentCore({
+      storage: new InMemoryLedgerStorage(),
+      worker: new DemoWorker({ sleep: async () => undefined }),
+      initialAcceptMode: "auto",
+    });
+
+    await expect(core.emitTrigger({ source: "pet", kind: "research-due", data: {} })).rejects.toThrow(
+      "触发来源与类型不匹配",
+    );
+    await expect(core.emitTrigger({ source: "pet", kind: "cards-published", data: {} })).rejects.toThrow(
+      "触发来源与类型不匹配",
+    );
+    // 伪装成事件的命令同理:command/chat 只属于 pet。
+    await expect(core.emitTrigger({ source: "table", kind: "chat", data: { text: "在吗" } })).rejects.toThrow(
+      "触发来源与类型不匹配",
+    );
+    expect(await core.ledger()).toEqual([]);
+    // 合法配对不受影响:research 域的周报到期照常走放权研判(auto 立项)。
+    const ok = await core.emitTrigger({ source: "research", kind: "research-due", data: { weekId: "w-1" } });
+    expect(ok.admitted).toBe(true);
+  });
+
+  it("触发数据里的敏感字段落账前被剔除:hidden 原文不进账本任何位置(S4)", async () => {
+    const secret = "其实我私房钱有五十万";
+    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+
+    await core.emitTrigger({
+      source: "pet",
+      kind: "chat",
+      data: { text: "跟你说个秘密", hidden: [secret] },
+    });
+
+    const entries = await core.ledger();
+    expect(entries.length).toBeGreaterThan(0);
+    const triggerEntry = entries.find((entry) => entry.type === "trigger") as TriggerEntry | undefined;
+    expect(triggerEntry).toBeDefined();
+    expect(triggerEntry?.trigger.data.hidden).toBeUndefined();
+    expect(triggerEntry?.trigger.data.text).toBe("跟你说个秘密");
+    for (const entry of entries) expect(JSON.stringify(entry)).not.toContain(secret);
+  });
 });
 
 describe("Agent 核心:多 Report 与 tickets()(工单 05)", () => {
@@ -149,7 +194,7 @@ describe("Agent 核心:多 Report 与 tickets()(工单 05)", () => {
     const core = createAgentCore({
       storage: new InMemoryLedgerStorage(),
       worker: {
-        async run(ticket, _trigger, onReport) {
+        async run(ticket, _trigger, { onReport }) {
           await onReport({ ticketId: ticket.id, status: "progress", text: "先拆上周通话" });
           return { ticketId: ticket.id, status: "waiting", text: "两个方向等你拍板" };
         },
@@ -181,7 +226,7 @@ describe("Agent 核心:多 Report 与 tickets()(工单 05)", () => {
     const core = createAgentCore({
       storage: new InMemoryLedgerStorage(),
       worker: {
-        async run(ticket, trigger, onReport) {
+        async run(ticket, trigger, { onReport }) {
           const text = String(trigger.data.text);
           if (text === "决议") {
             await onReport({ ticketId: waitingTicketId, status: "ready", text: "拍板后办妥" });
@@ -473,7 +518,7 @@ describe("DemoWorker 快捷环命令(工单 03)", () => {
 
   function runDemoWorker(text: string) {
     const trigger = demoTrigger(text);
-    return new DemoWorker().run(demoTicket(trigger), trigger, noopSink);
+    return new DemoWorker().run(demoTicket(trigger), trigger, { onReport: noopSink });
   }
 
   it("快捷环即时命令各有确定性中文回复,且不超过 40 字", async () => {
@@ -518,7 +563,7 @@ describe("DemoWorker 分步演示(工单 05)", () => {
     const midReports: AgentReport[] = [];
     const trigger = demoTrigger("并行整理素材和投研");
 
-    const final = await worker.run(demoTicket(trigger, "t-par"), trigger, collectSink(midReports));
+    const final = await worker.run(demoTicket(trigger, "t-par"), trigger, { onReport: collectSink(midReports) });
 
     expect(midReports.map((report) => report.status)).toEqual(["progress", "progress"]);
     expect(midReports.map((report) => report.ticketId)).toEqual(["t-par", "t-par"]);
@@ -531,7 +576,7 @@ describe("DemoWorker 分步演示(工单 05)", () => {
     const midReports: AgentReport[] = [];
     const trigger = demoTrigger("本周投研");
 
-    const final = await worker.run(demoTicket(trigger, "t-week"), trigger, collectSink(midReports));
+    const final = await worker.run(demoTicket(trigger, "t-week"), trigger, { onReport: collectSink(midReports) });
 
     expect(midReports.map((report) => report.status)).toEqual(["progress"]);
     expect(final).toMatchObject({ ticketId: "t-week", status: "waiting" });
@@ -542,12 +587,13 @@ describe("DemoWorker 分步演示(工单 05)", () => {
   it("「同意 <工单号>」唤醒等待工单:原工单落 ready,决议自身就绪", async () => {
     const worker = new DemoWorker({ sleep: instantClock().sleep });
     const weekTrigger = demoTrigger("本周投研");
-    await worker.run(demoTicket(weekTrigger, "t-week"), weekTrigger, noopSink);
+    await worker.run(demoTicket(weekTrigger, "t-week"), weekTrigger, { onReport: noopSink });
 
     const midReports: AgentReport[] = [];
     const agreeTrigger = demoTrigger("同意 t-week");
-    const final = await worker.run(demoTicket(agreeTrigger, "t-agree"), agreeTrigger, collectSink(midReports), undefined, {
-      tickets: async () => [{ ticketId: "t-week", status: "waiting", text: "待决定" }],
+    const final = await worker.run(demoTicket(agreeTrigger, "t-agree"), agreeTrigger, {
+      onReport: collectSink(midReports),
+      context: { tickets: async () => [{ ticketId: "t-week", status: "waiting", text: "待决定" }] },
     });
 
     expect(midReports).toEqual([{ ticketId: "t-week", status: "ready", text: "收到，按你拍板的出结果。" }]);
@@ -557,12 +603,13 @@ describe("DemoWorker 分步演示(工单 05)", () => {
   it("「驳回」不带工单号:决议最近一张等待工单,落 dropped", async () => {
     const worker = new DemoWorker({ sleep: instantClock().sleep });
     const weekTrigger = demoTrigger("本周投研");
-    await worker.run(demoTicket(weekTrigger, "t-week"), weekTrigger, noopSink);
+    await worker.run(demoTicket(weekTrigger, "t-week"), weekTrigger, { onReport: noopSink });
 
     const midReports: AgentReport[] = [];
     const rejectTrigger = demoTrigger("驳回");
-    const final = await worker.run(demoTicket(rejectTrigger, "t-reject"), rejectTrigger, collectSink(midReports), undefined, {
-      tickets: async () => [{ ticketId: "t-week", status: "waiting", text: "待决定" }],
+    const final = await worker.run(demoTicket(rejectTrigger, "t-reject"), rejectTrigger, {
+      onReport: collectSink(midReports),
+      context: { tickets: async () => [{ ticketId: "t-week", status: "waiting", text: "待决定" }] },
     });
 
     expect(midReports).toEqual([{ ticketId: "t-week", status: "dropped", text: "收到，这条不做了。" }]);
@@ -574,7 +621,7 @@ describe("DemoWorker 分步演示(工单 05)", () => {
     const midReports: AgentReport[] = [];
     const trigger = demoTrigger("同意");
 
-    const final = await worker.run(demoTicket(trigger, "t-none"), trigger, collectSink(midReports));
+    const final = await worker.run(demoTicket(trigger, "t-none"), trigger, { onReport: collectSink(midReports) });
 
     expect(midReports).toEqual([]);
     expect(final).toMatchObject({ ticketId: "t-none", status: "ready", text: "现在没有等你拍板的工单。" });

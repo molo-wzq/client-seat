@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { createAgentCore, DemoWorker, type AgentWorker } from "./core";
+import { DemoWorker } from "./workers/demo";
+import { createAgentCore, type AgentWorker } from "./core";
+import { createModelWorkers } from "./workers";
 import { InMemoryLedgerStorage } from "./storage";
 import { createWatchdog } from "./watchdog";
 import type { AgentReport, AgentTriggerInput } from "./types";
@@ -97,7 +99,7 @@ describe("Agent 状态加固", () => {
 
   it("重试仅报 progress 后再次卡住仍会受阻，不会无限重启", async () => {
     let runs = 0;
-    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: { async run(ticket, _trigger, sink) {
+    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: { async run(ticket, _trigger, { onReport: sink }) {
       if (++runs > 1) await sink({ ticketId: ticket.id, status: "progress", text: "重试开始" });
       return new Promise<AgentReport>(() => undefined);
     } } });
@@ -143,5 +145,28 @@ describe("Agent 状态加固", () => {
     await new Promise(r => setTimeout(r, 0));
     expect((await core.tickets()).map(t => t.status)).toEqual(["ready", "ready"]);
     expect(runs).toBe(3);
+  });
+
+  it("生产组合(createModelWorkers)下审批与批注仍然可达：同意/驳回能唤醒 waiting，批注能改草稿", async () => {
+    // B1 回归：368029e 把审批依据挪进 WorkerContext(账本视图)，路由若丢掉 context，
+    // 生产下一切审批都变成「没有待办」。必须钉住生产组合，而不是裸 DemoWorker。
+    const core = createAgentCore({
+      storage: new InMemoryLedgerStorage(),
+      worker: createModelWorkers({ demoSleep: async () => undefined, demoChatSleep: async () => undefined }),
+      initialAcceptMode: "auto",
+    });
+    const research = await core.emitTrigger({ source: "research", kind: "research-due", data: { weekId: "w-1" } });
+    expect(research.report?.status).toBe("waiting");
+
+    await core.emitTrigger(command(`同意 ${research.ticket!.id}`));
+    expect((await core.tickets()).find((t) => t.ticketId === research.ticket!.id)?.status).toBe("ready");
+
+    const dropped = await core.emitTrigger({
+      source: "materials",
+      kind: "dropped",
+      data: { fileName: "a.wav", fileKind: "audio" },
+    });
+    await core.emitTrigger({ source: "pet", kind: "annotate", data: { ticketId: dropped.ticket!.id, note: "补一句来源" } });
+    expect((await core.tickets()).find((t) => t.ticketId === dropped.ticket!.id)?.text).toContain("批注");
   });
 });

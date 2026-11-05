@@ -8,8 +8,7 @@ import { InMemoryLedgerStorage } from "./storage";
  * 真实模型 Worker(工单 11)约定测试缝:一律用假模型端口,不发网络请求。
  * - 对话 Worker:流式 delta、表情标签剥离、快捷动作建议、120 字截断、出错回退 demo 且 Report=failed;
  * - 投研/盲区 Worker:只产出 waiting 草稿,人审闸门不变(ADR 0007),Worker 手上没有任何发布接口;
- * - 隔离:hidden 条目原文不进入对话 Worker 落账的任何 Report 字段
- *   (经理侧提示词的隔离由 prompts.test.ts 既有用例钉住,这里只钉新增路径)。
+ * - 脱敏:delta 与 Report 共用同一个可注入 redact 出口(S4),默认不做处理。
  */
 
 /** 假模型端口:排队回放预设回复,逐字流式回调;置 error 可模拟网关故障。 */
@@ -17,6 +16,8 @@ class FakeModelPort implements AgentModelPort {
   readonly calls: Array<{ messages: AgentModelMessage[] }> = [];
   private readonly queue: string[] = [];
   error: Error | null = null;
+  /** S2 场景:先把 delta 逐字流出,再抛错(半截真实输出后失败)。 */
+  failAfter: { delta: string; error: Error } | null = null;
 
   enqueue(reply: string): void {
     this.queue.push(reply);
@@ -28,6 +29,10 @@ class FakeModelPort implements AgentModelPort {
   ): Promise<string> {
     this.calls.push({ messages: messages.map((message) => ({ ...message })) });
     if (this.error) throw this.error;
+    if (this.failAfter) {
+      for (const char of [...this.failAfter.delta]) onDelta?.(char);
+      throw this.failAfter.error;
+    }
     const reply = this.queue.shift() ?? "好";
     for (const char of [...reply]) onDelta?.(char);
     return reply;
@@ -71,7 +76,7 @@ describe("对话 Worker(工单 11,假模型端口)", () => {
     model.enqueue("[cheer]接住这波节奏，咱们稳着来。");
     const worker = createModelWorkers({ routerModel: model });
 
-    const report = await worker.run(ticketOf(chatTrigger("这轮我接得怎么样")), chatTrigger("这轮我接得怎么样"), async () => undefined);
+    const report = await worker.run(ticketOf(chatTrigger("这轮我接得怎么样")), chatTrigger("这轮我接得怎么样"), { onReport: async () => undefined });
 
     expect(report).toMatchObject({
       status: "ready",
@@ -86,9 +91,34 @@ describe("对话 Worker(工单 11,假模型端口)", () => {
     const worker = createModelWorkers({ routerModel: model });
     const deltas: string[] = [];
 
-    await worker.run(ticketOf(chatTrigger("经理刚才那句什么意思")), chatTrigger("经理刚才那句什么意思"), async () => undefined, (delta) => deltas.push(delta));
+    await worker.run(ticketOf(chatTrigger("经理刚才那句什么意思")), chatTrigger("经理刚才那句什么意思"), { onReport: async () => undefined, onDelta: (delta) => deltas.push(delta) });
 
     expect(deltas.join("")).toBe("我先看看经理这步棋。");
+  });
+
+  it("回复前有空白时表情标签照样剥掉:delta 不带 [cheer] 上屏,与最终 Report 一致(S3)", async () => {
+    const model = new FakeModelPort();
+    model.enqueue("\n[cheer]你好");
+    const worker = createModelWorkers({ routerModel: model });
+    const deltas: string[] = [];
+
+    const report = await worker.run(ticketOf(chatTrigger("在吗")), chatTrigger("在吗"), { onReport: async () => undefined, onDelta: (delta) => deltas.push(delta) });
+
+    expect(deltas.join("")).toBe("你好");
+    expect(report).toMatchObject({ text: "你好", emotion: "cheer" });
+  });
+
+  it("短回复不是表情标签(如「[好]」):流结束时扣住的字符也要放出,不丢字(S3)", async () => {
+    const model = new FakeModelPort();
+    model.enqueue("[好]");
+    const worker = createModelWorkers({ routerModel: model });
+    const deltas: string[] = [];
+
+    const report = await worker.run(ticketOf(chatTrigger("就这样办")), chatTrigger("就这样办"), { onReport: async () => undefined, onDelta: (delta) => deltas.push(delta) });
+
+    expect(deltas.join("")).toBe("[好]");
+    expect(report).toMatchObject({ text: "[好]" });
+    expect(report.emotion).toBeUndefined();
   });
 
   it("快捷动作:玩家话里识别出命令意图转成建议,不直接执行", async () => {
@@ -97,7 +127,7 @@ describe("对话 Worker(工单 11,假模型端口)", () => {
     const worker = createModelWorkers({ routerModel: model });
     const trigger = chatTrigger("不然换个客户，再来一局试试");
 
-    const report = await worker.run(ticketOf(trigger), trigger, async () => undefined);
+    const report = await worker.run(ticketOf(trigger), trigger, { onReport: async () => undefined });
 
     expect(report.quickActions).toEqual(["换个客户", "再来一局"]);
     // 是建议不是执行:回复仍是模型对话原文,而不是快捷命令的脚本答复。
@@ -111,7 +141,7 @@ describe("对话 Worker(工单 11,假模型端口)", () => {
     const worker = createModelWorkers({ routerModel: model });
     const trigger = chatTrigger("多说点");
 
-    const report = await worker.run(ticketOf(trigger), trigger, async () => undefined);
+    const report = await worker.run(ticketOf(trigger), trigger, { onReport: async () => undefined });
 
     expect([...report.text].length).toBe(120);
     expect(report.text).toBe([...longBody].slice(0, 120).join(""));
@@ -124,7 +154,7 @@ describe("对话 Worker(工单 11,假模型端口)", () => {
     const reports: AgentReport[] = [];
     const trigger = chatTrigger("在吗");
 
-    const report = await worker.run(ticketOf(trigger), trigger, collectingSink(reports));
+    const report = await worker.run(ticketOf(trigger), trigger, { onReport: collectingSink(reports) });
 
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({ ticketId: "t-chat", status: "failed" });
@@ -134,12 +164,32 @@ describe("对话 Worker(工单 11,假模型端口)", () => {
     expect(report.text).toContain("我在呢");
   });
 
+  it("流式已开始后模型失败:demo 话术不再接在半截输出后面,直接落 failed(S2)", async () => {
+    const model = new FakeModelPort();
+    model.failAfter = { delta: "[wave]半截真实", error: new Error("网关 502") };
+    const worker = createModelWorkers({ routerModel: model });
+    const trigger = chatTrigger("在吗");
+    const deltas: string[] = [];
+    const reports: AgentReport[] = [];
+
+    const report = await worker.run(ticketOf(trigger), trigger, {
+      onReport: collectingSink(reports),
+      onDelta: (delta) => deltas.push(delta),
+    });
+
+    // 面板收到的增量只有半截真实输出,失败后不再追加演示文本(不拼怪话)。
+    expect(deltas.join("")).toBe("半截真实");
+    expect(report).toMatchObject({ status: "failed" });
+    // 失败即最终 Report,不先落一笔重复的途中 failed。
+    expect(reports).toHaveLength(0);
+  });
+
   it("没配模型(无 key):chat 走演示脚本——分拍流式、带表情,面板逐字可演示", async () => {
     const worker = createModelWorkers({ demoChatSleep: () => Promise.resolve() });
     const trigger = chatTrigger("陪我说说话");
     const deltas: string[] = [];
 
-    const report = await worker.run(ticketOf(trigger), trigger, async () => undefined, (delta) => deltas.push(delta));
+    const report = await worker.run(ticketOf(trigger), trigger, { onReport: async () => undefined, onDelta: (delta) => deltas.push(delta) });
 
     expect(report).toMatchObject({ status: "ready", emotion: "wave" });
     expect(deltas.length).toBeGreaterThan(1); // 分几拍流出,看得见逐字
@@ -150,7 +200,7 @@ describe("对话 Worker(工单 11,假模型端口)", () => {
     const worker = createModelWorkers({ demoChatSleep: () => Promise.resolve() });
     const trigger = chatTrigger("不然换个客户，再来一局试试");
 
-    const report = await worker.run(ticketOf(trigger), trigger, async () => undefined);
+    const report = await worker.run(ticketOf(trigger), trigger, { onReport: async () => undefined });
 
     expect(report.quickActions).toEqual(["换个客户", "再来一局"]);
   });
@@ -163,7 +213,7 @@ describe("投研/盲区 Worker(工单 11,假模型端口)", () => {
     const worker = createModelWorkers({ workerModel: model });
     const trigger = researchTrigger();
 
-    const report = await worker.run({ ...ticketOf(trigger), id: "t-research" }, trigger, async () => undefined);
+    const report = await worker.run({ ...ticketOf(trigger), id: "t-research" }, trigger, { onReport: async () => undefined });
 
     expect(report).toMatchObject({ status: "waiting" });
     expect(report.text).toContain("本周三要点");
@@ -175,7 +225,7 @@ describe("投研/盲区 Worker(工单 11,假模型端口)", () => {
     const worker = createModelWorkers({ workerModel: model });
     const trigger = blindspotTrigger();
 
-    const report = await worker.run({ ...ticketOf(trigger), id: "t-blindspot" }, trigger, async () => undefined);
+    const report = await worker.run({ ...ticketOf(trigger), id: "t-blindspot" }, trigger, { onReport: async () => undefined });
 
     expect(report).toMatchObject({ status: "waiting" });
     expect(report.text).toContain("盲区一");
@@ -186,12 +236,12 @@ describe("投研/盲区 Worker(工单 11,假模型端口)", () => {
     const research = await worker.run(
       { ...ticketOf(researchTrigger()), id: "t-research" },
       researchTrigger(),
-      async () => undefined,
+      { onReport: async () => undefined },
     );
     const blindspot = await worker.run(
       { ...ticketOf(blindspotTrigger()), id: "t-blindspot" },
       blindspotTrigger(),
-      async () => undefined,
+      { onReport: async () => undefined },
     );
 
     expect(research).toMatchObject({ status: "waiting" });
@@ -210,7 +260,7 @@ describe("投研/盲区 Worker(工单 11,假模型端口)", () => {
     const report = await worker.run(
       { ...ticketOf(trigger), id: "t-research" },
       trigger,
-      collectingSink(reports),
+      { onReport: collectingSink(reports) },
     );
 
     expect(reports).toHaveLength(1);
@@ -221,27 +271,26 @@ describe("投研/盲区 Worker(工单 11,假模型端口)", () => {
   });
 });
 
-describe("隔离与流式事件(工单 11,经核心公开接口)", () => {
-  it("hidden 原文不落账:模型复读玩家秘密,对话 Worker 写进账本的 Report 也要抹掉", async () => {
-    const hidden = "其实我私房钱有五十万";
+describe("脱敏出口与流式事件(经核心公开接口)", () => {
+  it("可注入 redact 是 delta 与 Report 的共用出口:两路文本都过同一道(S4)", async () => {
+    // 服务端不再接受前端传入的 hidden 原文;需要脱敏时在组合根注入 redact。
     const model = new FakeModelPort();
-    model.enqueue(`[cheer]放心，${hidden}，我记下了。`);
-    const core = createAgentCore({
-      storage: new InMemoryLedgerStorage(),
-      worker: createModelWorkers({ routerModel: model }),
+    model.enqueue("[cheer]放心，卡号是 622202123456，我记下了。");
+    const worker = createModelWorkers({
+      routerModel: model,
+      redact: (text) => text.replace(/\d/g, "●"),
+    });
+    const trigger = chatTrigger("跟你说个秘密");
+    const deltas: string[] = [];
+
+    const report = await worker.run(ticketOf(trigger), trigger, {
+      onReport: async () => undefined,
+      onDelta: (delta) => deltas.push(delta),
     });
 
-    await core.emitTrigger({
-      source: "pet",
-      kind: "chat",
-      data: { text: "跟你说个秘密", hidden: [hidden] },
-    });
-
-    const reportTexts = (await core.ledger())
-      .filter((entry) => entry.type === "report")
-      .map((entry) => JSON.stringify(entry));
-    expect(reportTexts.length).toBeGreaterThan(0);
-    for (const text of reportTexts) expect(text).not.toContain(hidden);
+    // 逐段 delta 与最终 Report 都不带明文数字,且走的是同一个 redact。
+    expect(deltas.join("")).toBe("放心，卡号是 ●●●●●●●●●●●●，我记下了。");
+    expect(report.text).toBe("放心，卡号是 ●●●●●●●●●●●●，我记下了。");
   });
 
   it("订阅者收到 delta 事件(ticketId + 文本片段),结束后 Report ready", async () => {
