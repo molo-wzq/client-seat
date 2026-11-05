@@ -4,6 +4,7 @@ import {
   assembleManagerSystemPrompt,
 } from "./prompts";
 import { errorMessage, maskModelSecrets } from "./model-errors";
+import type { ToolCallShape, ToolCompletionShape } from "./failover-model-adapter";
 import { cleanReplyText, sanitizeCustomerText } from "../domain/reply-text";
 import { DEFAULT_ROLE_CARD, roleDemoMessages, roleTailReminder } from "../domain/role-card";
 import { PROMPT_TUNING_ENV, tuningDisabled, tuningEnabled } from "../domain/prompt-tuning";
@@ -198,6 +199,83 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
   ): Promise<string> {
     const { content } = await this.chatStream(messages, onDelta);
     return content;
+  }
+
+  /**
+   * 带工具的非流式补全(工单 16:桌宠只读工具):assistant 的 toolCalls 映射成
+   * 线格式 tool_calls,tool 消息带 tool_call_id;返回扁平的调用形状给调用方。
+   * 非流式——工具调用没有"半截增量"顾虑,失败可由链上层直接切备用。
+   */
+  async completeWithTools(
+    messages: Array<{ role: string; content: string; toolCalls?: ToolCallShape[]; toolCallId?: string; name?: string }>,
+    tools: Array<{ type: "function"; function: { name: string; description: string; parameters: Record<string, unknown> } }>,
+  ): Promise<ToolCompletionShape> {
+    const wireMessages = messages.map((message) => ({
+      role: message.role,
+      content: message.content,
+      ...(message.toolCalls
+        ? {
+            tool_calls: message.toolCalls.map((call) => ({
+              id: call.id,
+              type: "function",
+              function: { name: call.name, arguments: call.arguments },
+            })),
+          }
+        : {}),
+      ...(message.role === "tool" && message.toolCallId ? { tool_call_id: message.toolCallId } : {}),
+    }));
+    let response: Response;
+    try {
+      response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+        signal: AbortSignal.timeout(120_000),
+        body: JSON.stringify({
+          model: this.config.model,
+          messages: wireMessages,
+          temperature: 0.7,
+          max_tokens: 16384,
+          frequency_penalty: 0,
+          presence_penalty: 0,
+          tools,
+        }),
+      });
+    } catch (error) {
+      if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+        throw new Error("语言模型调用超时(120 秒)");
+      }
+      throw error;
+    }
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`语言模型调用失败(HTTP ${response.status}):${body.slice(0, 300)}`);
+    }
+    const data = (await response.json()) as {
+      choices?: Array<{
+        message?: {
+          content?: string;
+          tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
+        };
+      }>;
+    };
+    const choice = data.choices?.[0];
+    const calls = (choice?.message?.tool_calls ?? [])
+      .filter((call) => typeof call.id === "string" && typeof call.function?.name === "string")
+      .map((call) => ({
+        id: call.id as string,
+        name: call.function!.name!,
+        arguments: typeof call.function?.arguments === "string" ? call.function.arguments : "{}",
+      }));
+    if (calls.length > 0) return { type: "tool_calls", calls };
+    const content = choice?.message?.content ?? "";
+    if (!content.trim()) {
+      console.warn("[adapter] 带工具补全返回为空:", maskModelSecrets(JSON.stringify(data).slice(0, 400)));
+      throw new Error("语言模型返回为空");
+    }
+    return { type: "text", text: content };
   }
 
   /**

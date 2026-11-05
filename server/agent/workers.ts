@@ -17,13 +17,149 @@ import { CHAT_CONTEXT_LIMITS, type ChatContext } from "../../src/shared/agent-co
 
 /** 模型端口:OpenAI 兼容流式补全的最小形状(server/main.ts 用现有适配器实现)。 */
 export interface AgentModelMessage {
-  role: "system" | "user" | "assistant";
+  role: "system" | "user" | "assistant" | "tool";
   content: string;
+  /** assistant 轮携带(工单 16):模型发起的工具调用。 */
+  toolCalls?: AgentToolCall[];
+  /** tool 轮携带:对应的调用 id 与工具名。 */
+  toolCallId?: string;
+  name?: string;
+}
+
+/** 模型发起的一次工具调用(OpenAI tools 形状的最小集)。 */
+export interface AgentToolCall {
+  id: string;
+  name: string;
+  /** 参数 JSON 字符串(模型原样,Worker 解析)。 */
+  arguments: string;
+}
+
+/** 带工具的补全结果(工单 16):正文或一批工具调用,二选一。 */
+export type AgentToolResult =
+  | { type: "text"; text: string }
+  | { type: "tool_calls"; calls: AgentToolCall[] };
+
+/** OpenAI function calling 的工具定义。 */
+export interface AgentToolSpec {
+  type: "function";
+  function: {
+    name: string;
+    description: string;
+    parameters: Record<string, unknown>;
+  };
 }
 
 export interface AgentModelPort {
   /** 流式补全:onDelta 逐段回调增量,resolve 完整正文(含可能的表情前缀)。 */
   completeStream(messages: AgentModelMessage[], onDelta?: (delta: string) => void): Promise<string>;
+  /**
+   * 非流式带工具补全(工单 16):模型可选实现;未实现时对话 Worker 不带工具直答。
+   * 适配器层负责把 toolCalls/tool 消息映射到 OpenAI 线格式。
+   */
+  completeWithTools?(messages: AgentModelMessage[], tools: AgentToolSpec[]): Promise<AgentToolResult>;
+}
+
+/**
+ * 只读工具的数据源(工单 16):组合根注入真实实现(投研 JSON、素材库、历史对局);
+ * 缺省空实现——查不到就如实说查不到,不编数据。异步:素材库/历史要过存储。
+ */
+export interface PetToolSources {
+  /** get_weekly_research:本周投研情报卡(情报档案夹的数据源)。 */
+  weeklyResearch(): Promise<string>;
+  /** search_cards:按关键词查策略卡,返回卡面与原始通话片段出处。 */
+  searchCards(keyword: string): Promise<string>;
+  /** get_last_review:上一局复盘摘要。 */
+  lastReview(): Promise<string>;
+}
+
+const emptySources: PetToolSources = {
+  weeklyResearch: async () => "本周投研数据源未接入,查不到。",
+  searchCards: async () => "策略卡数据源未接入,查不到。",
+  lastReview: async () => "还没有上一局复盘。",
+};
+
+/** 四个只读工具(工单 16):全部本地数据,不接外网、不查实时利率。 */
+export const PET_TOOL_SPECS: readonly AgentToolSpec[] = [
+  {
+    type: "function",
+    function: {
+      name: "get_weekly_research",
+      description: "查本周投研情报卡(宏观要点、行业主线、风险提示),不查实时利率。",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_cards",
+      description: "按关键词查策略卡,返回卡面要点与原始通话片段出处。",
+      parameters: {
+        type: "object",
+        properties: { keyword: { type: "string", description: "关键词,如「存款搬家」" } },
+        required: ["keyword"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_last_review",
+      description: "查上一局对战的复盘摘要。",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_customer_card",
+      description: "查当前客户的公开面(姓名与经理也看得到的可见信息)。",
+      parameters: { type: "object", properties: {}, required: [] },
+    },
+  },
+] as const;
+
+/** 工具名 → 给人看的短名(progress 文案与轨迹用)。 */
+const PET_TOOL_LABELS: Record<string, string> = {
+  get_weekly_research: "本周投研",
+  search_cards: "策略卡",
+  get_last_review: "上局复盘",
+  get_customer_card: "客户公开面",
+};
+
+/** 工具调用轮数上限(工单 16):超出后不再提供工具,强制收口。 */
+const PET_TOOL_MAX_ROUNDS = 3;
+
+/** 工具的 progress 文案:工具名 + 一句中文(工单 15 的「做了什么」轨迹吃它)。 */
+function petToolProgressText(name: string): string {
+  return `查了${PET_TOOL_LABELS[name] ?? name},拿回来就能说。`;
+}
+
+/** 防御性解析工具参数:坏 JSON 当空对象。 */
+function parseToolArguments(raw: string): Record<string, unknown> {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    return typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/** 执行一次只读工具:数据从注入的数据源或牌局快照取,绝不外联。 */
+async function runPetTool(call: AgentToolCall, sources: PetToolSources, context: ChatContext | undefined): Promise<string> {
+  const args = parseToolArguments(call.arguments);
+  switch (call.name) {
+    case "get_weekly_research":
+      return sources.weeklyResearch();
+    case "search_cards":
+      return sources.searchCards(asText(args.keyword));
+    case "get_last_review":
+      return sources.lastReview();
+    case "get_customer_card":
+      if (context?.phase !== "game") return "当前不在牌局,没有客户卡。";
+      return `${context.customer.name};公开面:${context.customer.visible.join(";")}`;
+    default:
+      return `未知工具:${call.name}`;
+  }
 }
 
 /** 对话面板单条上限(工单 11):气泡 40 字由核心截,这里截的是对话全文。 */
@@ -174,6 +310,8 @@ class ChatWorker implements AgentWorker {
       redact: TextRedactor;
       /** demo 分拍节奏(工单 12):测试注入即时假钟。 */
       sleep: (ms: number) => Promise<void>;
+      /** 只读工具数据源(工单 16):组合根注入,缺省空实现。 */
+      toolSources: PetToolSources;
     },
   ) {}
 
@@ -183,11 +321,13 @@ class ChatWorker implements AgentWorker {
     const view = asText(trigger.data.view);
     // 牌局快照(工单 16):拼在人格提示词后,只进桌宠这一侧;落账前已剔除(core)。
     const context = parseChatContext(trigger.data.context);
+    const toolsAvailable = typeof this.deps.model?.completeWithTools === "function";
     const systemPrompt =
       assemblePetSystemPrompt(this.deps.persona, view || undefined) +
-      (context ? `\n${renderChatContext(context)}` : "");
-    // 无 key:走演示脚本回复,一样分拍流式、带表情与快捷动作(工单 12:demo 完整可演示)。
-    if (!this.deps.model) return this.runDemoChat(ticket, text, onDelta);
+      (context ? `\n${renderChatContext(context)}` : "") +
+      (toolsAvailable ? `\n${PET_TOOLS_PROMPT}` : "");
+    // 无 key:走演示脚本回复,一样分拍流式、带表情,并模拟一次工具调用(工单 16)。
+    if (!this.deps.model) return this.runDemoChat(ticket, text, onReport, onDelta, context);
     const messages: AgentModelMessage[] = [
       { role: "system", content: systemPrompt },
       ...parseHistory(trigger.data.history),
@@ -244,7 +384,7 @@ class ChatWorker implements AgentWorker {
       emit(rest);
     };
     try {
-      const raw = await this.deps.model.completeStream(messages, forwardStripped);
+      const raw = await this.runToReply(ticket.id, messages, onReport, forwardStripped, context);
       flushPendingLead();
       const { text: body, emotion } = stripEmotionTag(raw.trim());
       const cleaned = truncateChars(this.deps.redact(body), CHAT_MAX_CHARS);
@@ -272,16 +412,59 @@ class ChatWorker implements AgentWorker {
         status: "failed",
         text: `真实模型没接上：${code}。先用演示话回你。`,
       });
-      return this.runDemoChat(ticket, text, onDelta);
+      return this.runDemoChat(ticket, text, onReport, onDelta, context);
     }
   }
 
-  /** 演示对话(无 key/回退):脚本回复分拍流出,Report 带表情与建议,与真实模型同形状。 */
+  /**
+   * 拿到最终回复(工单 16):模型支持工具时先走 function calling 循环
+   * (最多 3 轮,每轮工具调用发一条 progress,结果作为 tool 消息回模型);
+   * 文本结果一次性放出(表情前缀闸门照走);轮次用尽或模型不支持工具时
+   * 退回流式补全——收口一律不带工具,模型只能直接作答。
+   */
+  private async runToReply(
+    ticketId: string,
+    messages: AgentModelMessage[],
+    onReport: (report: AgentReport) => Promise<void>,
+    emitText: (piece: string) => void,
+    context: ChatContext | undefined,
+  ): Promise<string> {
+    const model = this.deps.model!;
+    if (!model.completeWithTools) return model.completeStream(messages, emitText);
+    for (let round = 0; round < PET_TOOL_MAX_ROUNDS; round += 1) {
+      const result = await model.completeWithTools(messages, [...PET_TOOL_SPECS]);
+      if (result.type === "text") {
+        emitText(result.text);
+        return result.text;
+      }
+      messages.push({ role: "assistant", content: "", toolCalls: result.calls });
+      for (const call of result.calls) {
+        await onReport({ ticketId, status: "progress", text: petToolProgressText(call.name) });
+        messages.push({
+          role: "tool",
+          toolCallId: call.id,
+          name: call.name,
+          content: await runPetTool(call, this.deps.toolSources, context),
+        });
+      }
+    }
+    // 轮次用尽:不再提供工具,流式收口(真实等待,不是伪进度)。
+    return model.completeStream(messages, emitText);
+  }
+
+  /** 演示对话(无 key/回退):先模拟一次工具调用(progress),脚本回复再分拍流出。 */
   private async runDemoChat(
     ticket: AgentTicket,
     text: string,
+    onReport: (report: AgentReport) => Promise<void>,
     onDelta?: (delta: string) => void,
+    context?: ChatContext,
   ): Promise<AgentReport> {
+    // demo 用脚本模拟一次工具调用(工单 16):轨迹里看得见「查了什么」,
+    // 牌局里查客户公开面(读快照),不在牌局查本周投研。
+    const toolLabel = context?.phase === "game" ? PET_TOOL_LABELS.get_customer_card : PET_TOOL_LABELS.get_weekly_research;
+    await onReport({ ticketId: ticket.id, status: "progress", text: `查了${toolLabel},翻到相关那页。` });
+    await this.deps.sleep(DEMO_CHAT_STEP_MS);
     const { text: body, emotion } = stripEmotionTag(demoChatReply(text));
     const chars = [...truncateChars(this.deps.redact(body), CHAT_MAX_CHARS)];
     for (let start = 0; start < chars.length; start += DEMO_CHAT_CHUNK_CHARS) {
@@ -335,6 +518,13 @@ class DraftWorker implements AgentWorker {
   }
 }
 
+/** 工具段系统提示(工单 16):只描述可用工具与「不编造」约束,不带数据本身。 */
+const PET_TOOLS_PROMPT = [
+  "## 手上的查询工具",
+  "get_weekly_research(本周投研情报卡)、search_cards(按关键词查策略卡与出处)、get_last_review(上一局复盘摘要)、get_customer_card(当前客户公开面)。",
+  "涉及这些内容先查工具再回答;工具查不到就直说没有,不接外网、不编造实时数据。",
+].join("\n");
+
 /** 投研草稿系统提示:产出的只是草稿,上不上桌由人审决定。 */
 const RESEARCH_DRAFT_SYSTEM =
   "你是投研助理。把到期的周报整理成本周要点草稿:三个要点、一条风险提示。这只是草稿,等待人工审核,不会直接发布。";
@@ -357,6 +547,8 @@ export function createModelWorkers(deps: {
   demoSleep?: (ms: number) => Promise<void>;
   /** demo 对话分拍节奏(工单 12):缺省真实等待,测试注入即时假钟。 */
   demoChatSleep?: (ms: number) => Promise<void>;
+  /** 只读工具数据源(工单 16):组合根注入真实实现(投研 JSON/素材库/历史);缺省空实现。 */
+  toolSources?: PetToolSources;
 }): AgentWorker {
   const demo = new DemoWorker(deps.demoSleep ? { sleep: deps.demoSleep } : undefined);
   const persona = deps.persona ?? DEFAULT_PET_PERSONA;
@@ -365,6 +557,7 @@ export function createModelWorkers(deps: {
     persona,
     redact: deps.redact ?? noRedact,
     sleep: deps.demoChatSleep ?? defaultSleep,
+    toolSources: deps.toolSources ?? emptySources,
   });
   const research = new DraftWorker({
     model: deps.workerModel,

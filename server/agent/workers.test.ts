@@ -156,8 +156,9 @@ describe("对话 Worker(工单 11,假模型端口)", () => {
 
     const report = await worker.run(ticketOf(trigger), trigger, { onReport: collectingSink(reports) });
 
-    expect(reports).toHaveLength(1);
+    // 第一条是 failed(短码);demo 回退起手先模拟一次工具调用(工单 16),再出 ready。
     expect(reports[0]).toMatchObject({ ticketId: "t-chat", status: "failed" });
+    expect(reports.slice(1).map((item) => item.status)).toEqual(["progress"]);
     // Report 只写分类短码(S5),原始报错不进 Report/账本/气泡。
     expect(reports[0].text).toContain("模型网关错误");
     expect(reports[0].text).not.toContain("网关 502");

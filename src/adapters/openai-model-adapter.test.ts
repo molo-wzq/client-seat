@@ -353,3 +353,68 @@ describe("分析输出的轮次标注", () => {
     expect(bodies[0]?.frequency_penalty).toBe(0);
   });
 });
+
+describe("带工具补全(工单 16:桌宠只读工具)", () => {
+  const toolSpec = {
+    type: "function" as const,
+    function: { name: "get_weekly_research", description: "查本周投研情报卡", parameters: { type: "object", properties: {}, required: [] } },
+  };
+
+  it("解析 tool_calls:扁平调用形状返回给调用方,请求体带 tools 且非流式", async () => {
+    const toolPayload = {
+      choices: [
+        {
+          finish_reason: "tool_calls",
+          message: {
+            content: "",
+            tool_calls: [{ id: "call-1", type: "function", function: { name: "get_weekly_research", arguments: "{}" } }],
+          },
+        },
+      ],
+    };
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string | URL, init?: RequestInit): Promise<StubResponse> => {
+      bodies.push(JSON.parse((init?.body as string) ?? "{}") as Record<string, unknown>);
+      return { ok: true, status: 200, text: async () => JSON.stringify(toolPayload), json: async () => toolPayload };
+    }));
+
+    const out = await adapter.completeWithTools([{ role: "user", content: "这周投研有什么?" }], [toolSpec]);
+
+    expect(out).toEqual({ type: "tool_calls", calls: [{ id: "call-1", name: "get_weekly_research", arguments: "{}" }] });
+    expect(bodies[0]?.tools).toEqual([toolSpec]);
+    expect(bodies[0]?.stream).toBeUndefined();
+  });
+
+  it("assistant 的 toolCalls 与 tool 消息映射成 OpenAI 线格式;正文结果按 text 返回", async () => {
+    const textPayload = chatCompletion({ content: "[cheer]查到了,这就说。" });
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal("fetch", vi.fn(async (_url: string | URL, init?: RequestInit): Promise<StubResponse> => {
+      bodies.push(JSON.parse((init?.body as string) ?? "{}") as Record<string, unknown>);
+      return { ok: true, status: 200, text: async () => JSON.stringify(textPayload), json: async () => textPayload };
+    }));
+
+    const out = await adapter.completeWithTools(
+      [
+        { role: "user", content: "这周投研有什么?" },
+        { role: "assistant", content: "", toolCalls: [{ id: "call-1", name: "get_weekly_research", arguments: "{}" }] },
+        { role: "tool", content: "本周要点:防御为先。", toolCallId: "call-1", name: "get_weekly_research" },
+      ],
+      [toolSpec],
+    );
+
+    expect(out).toEqual({ type: "text", text: "[cheer]查到了,这就说。" });
+    const messages = bodies[0]?.messages as Array<Record<string, unknown>>;
+    expect(messages[1]).toMatchObject({
+      role: "assistant",
+      tool_calls: [{ id: "call-1", type: "function", function: { name: "get_weekly_research", arguments: "{}" } }],
+    });
+    expect(messages[2]).toMatchObject({ role: "tool", tool_call_id: "call-1", content: "本周要点:防御为先。" });
+  });
+
+  it("网关返回 5xx 时抛带状态码的错误(链上层据此 failover)", async () => {
+    vi.stubGlobal("fetch", vi.fn(async (): Promise<StubResponse> => {
+      return { ok: false, status: 502, text: async () => "bad gateway", json: async () => ({}) };
+    }));
+    await expect(adapter.completeWithTools([{ role: "user", content: "查" }], [toolSpec])).rejects.toThrow("HTTP 502");
+  });
+});

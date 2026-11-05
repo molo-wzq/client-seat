@@ -11,6 +11,7 @@ import { createRequestListener } from "./app-server";
 import { createAgentCore } from "./agent/core";
 import { createModelWorkers } from "./agent/workers";
 import { createWatchdog } from "./agent/watchdog";
+import { loadCurrentResearchReport } from "./report-parser";
 import { loadEnvFile, readConversationRetention } from "./env";
 import { FileStorage } from "./file-store";
 import {
@@ -98,6 +99,7 @@ const core = createProductCore({
 // 桌宠 Agent(ADR 0007,工单 11→13):账本与产品数据同库。
 // 对话走 agent.chat 链(轻量),投研/盲区草稿走 agent.worker 链(强模型),
 // 都由注册表解析(旧变量映射或 models.config.json);链为空即无 key,Worker 退回 demo,演示完整可用。
+// 只读工具数据源(工单 16):全部本地数据(投研 JSON/素材库/历史对局),不接外网。
 const chatChain = registry.roles["agent.chat"];
 const draftChain = registry.roles["agent.worker"];
 const agent = createAgentCore({
@@ -105,6 +107,39 @@ const agent = createAgentCore({
   worker: createModelWorkers({
     routerModel: chatChain.length > 0 ? buildChain(chatChain) : undefined,
     workerModel: draftChain.length > 0 ? buildChain(draftChain) : undefined,
+    toolSources: {
+      weeklyResearch: async () => {
+        const report = loadCurrentResearchReport(ROOT);
+        const risk = report.sections.risk;
+        return [
+          `${report.title}(${report.period})`,
+          `宏观:${report.sections.macro.headline}`,
+          `行业:${report.sections.sector.summary}`,
+          risk.objections[0] ? `高频异议:${risk.objections[0].question}` : "",
+        ]
+          .filter(Boolean)
+          .join("\n");
+      },
+      searchCards: async (keyword) => {
+        const query = keyword.trim();
+        if (!query) return "请给一个关键词。";
+        const hits = (await core.listMaterials())
+          .flatMap((material) => material.cards.filter((card) => card.status === "published").map((card) => ({ card, material })))
+          .filter(({ card }) =>
+            [card.name, ...card.triggerSignals, ...card.referenceScripts].some((text) => text.includes(query)),
+          )
+          .slice(0, 5);
+        if (hits.length === 0) return `没有找到与「${query}」相关的已发布策略卡。`;
+        return hits
+          .map(({ card, material }) => `${card.name}:目的「${card.currentPurpose}」;出处:${material.title} ${card.sourceExcerpt.turnRange}`)
+          .join("\n");
+      },
+      lastReview: async () => {
+        const ended = (await core.listConversations()).find((item) => item.status === "ended");
+        if (!ended) return "还没有打过一局。";
+        return `上一局结局:${ended.outcomeSummary ?? "未知"};收口原因:${ended.endReason ?? "未知"}。`;
+      },
+    },
   }),
 });
 if (chatChain.length === 0 && draftChain.length === 0) {

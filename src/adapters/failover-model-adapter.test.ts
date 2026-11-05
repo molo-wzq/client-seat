@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { FailoverModelAdapter } from "./failover-model-adapter";
+import { FailoverModelAdapter, type ToolCompletionShape } from "./failover-model-adapter";
 import type { CopywritingPort, DialoguePort, TranscriptAnalysis } from "../domain/ports";
 
 /** 可编程的端口替身:按脚本抛错/返回,并记录调用与流式增量。 */
@@ -166,6 +166,46 @@ describe("FailoverModelAdapter(工单 13:按角色的 fallback 链)", () => {
 
     expect(out).toBe("stream-1");
     expect(fallback.calls.completeStream).toBe(0);
+  });
+
+  it("completeWithTools(工单 16):主模型失败 → 切到链上下一个;成功即用,不碰备用", async () => {
+    const calls = { primary: 0, fallback: 0 };
+    const toolSpec = { type: "function" as const, function: { name: "get_last_review", description: "查上一局", parameters: {} } };
+    const primaryResult: ToolCompletionShape = { type: "text", text: "主模型第二次成了" };
+    const fallbackResult: ToolCompletionShape = {
+      type: "tool_calls",
+      calls: [{ id: "c1", name: "get_last_review", arguments: "{}" }],
+    };
+    const primary = {
+      ...makePort(),
+      async completeWithTools(): Promise<ToolCompletionShape> {
+        calls.primary += 1;
+        if (calls.primary === 1) throw new Error("HTTP 502");
+        return primaryResult;
+      },
+    };
+    const fallback = {
+      ...makePort(),
+      async completeWithTools(): Promise<ToolCompletionShape> {
+        calls.fallback += 1;
+        return fallbackResult;
+      },
+    };
+    const adapter = new FailoverModelAdapter([primary, fallback]);
+
+    // 第一次:主模型失败(工具调用非流式,无增量顾虑)→ 备用接手。
+    const first = await adapter.completeWithTools([{ role: "user", content: "上局复盘" }], [toolSpec]);
+    expect(first).toEqual({ type: "tool_calls", calls: [{ id: "c1", name: "get_last_review", arguments: "{}" }] });
+
+    // 第二次:主模型缓过来了,自己答,不再碰备用。
+    const second = await adapter.completeWithTools([{ role: "user", content: "上局复盘" }], [toolSpec]);
+    expect(second).toEqual({ type: "text", text: "主模型第二次成了" });
+    expect(calls).toEqual({ primary: 2, fallback: 1 });
+  });
+
+  it("completeWithTools(工单 16):链上没有支持工具的模型时抛错,不静默", async () => {
+    const adapter = new FailoverModelAdapter([makePort(), makePort()]);
+    await expect(adapter.completeWithTools([{ role: "user", content: "查点东西" }], [])).rejects.toThrow("工具");
   });
 
   it("空链直接拒绝构造:链上至少要有一个模型", () => {
