@@ -100,15 +100,27 @@ describe("对话面板(工单 12/15)", () => {
     expect(props.onSend).not.toHaveBeenCalled();
   });
 
-  it("顶部一排快捷芯片:点了才执行(发命令 + 跳转回调)", async () => {
+  it("空对话显示 2 个开场建议:点击即作为一句话发出(工单 15:固定芯片已删)", async () => {
     const user = userEvent.setup();
     const props = renderPanel();
-    const chips = screen.getByRole("group", { name: "快捷芯片" });
-    for (const label of ["换个客户", "再来一局", "上局复盘", "本周投研"]) {
-      expect(chips).toHaveTextContent(label);
-    }
-    await user.click(screen.getByRole("button", { name: "本周投研" }));
-    expect(props.onQuickAction).toHaveBeenCalledWith("本周投研");
+    const suggestions = within(screen.getByRole("group", { name: "开场建议" })).getAllByRole("button");
+    expect(suggestions).toHaveLength(2);
+    await user.click(suggestions[0]!);
+    expect(props.onSend).toHaveBeenCalledWith(suggestions[0]!.textContent);
+  });
+
+  it("有对话后不再显示开场建议,只留模型本轮给出的建议动作(工单 15)", () => {
+    renderPanel({
+      messages: [
+        msg("player", "在吗"),
+        msg("pet", "我在呢。", { quickActions: ["本周投研"] }),
+      ],
+    });
+    expect(screen.queryByRole("group", { name: "开场建议" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("group", { name: "快捷芯片" })).not.toBeInTheDocument();
+    expect(
+      within(screen.getByRole("log", { name: "对话记录" })).getByRole("button", { name: "本周投研" }),
+    ).toBeInTheDocument();
   });
 
   it("消息按说话人排开;回复带的快捷动作建议渲染成按钮,点了才执行", async () => {

@@ -21,7 +21,7 @@ export type PetVariant = "f" | "m";
  */
 export type PetExpression = PetEmotion;
 
-/** 快捷芯片动作(工单 10→15):面板芯片与回复建议共用,App 按动作决定去哪个视图。 */
+/** 快捷动作(工单 10→15):回复建议按钮与 / 命令共用,App 按动作决定去哪个视图。 */
 export type { QuickRingAction, PetReactionEvent } from "./pet-reactions";
 
 /**

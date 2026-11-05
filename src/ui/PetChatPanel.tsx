@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { QUICK_RING } from "./pet-reactions";
+import { OPENING_SUGGESTIONS } from "./pet-reactions";
 import type { PetChatMessage } from "./chat-history";
 import type { AcceptMode, AgentPolicy, AgentTicketView } from "../shared/agent-contract";
 import type { WorkLogItem } from "./agent-trace";
@@ -154,7 +154,17 @@ export function PetChatPanel({
       {logOpen && <WorkLog items={workLog} />}
       <div className="desk-pet-chat-list" ref={listRef} role="log" aria-label="对话记录">
         {messages.length === 0 && !awaitingReply && tickets.length === 0 && (
-          <p className="desk-pet-chat-empty">点头像或按 Ctrl+K,随时叫我。</p>
+          <>
+            <p className="desk-pet-chat-empty">点头像或按 Ctrl+K,随时叫我。</p>
+            {/* 空对话的 2 个开场建议(工单 15):点了作为一句话发出;之后只剩模型本轮建议动作。 */}
+            <div className="desk-pet-chat-chips" role="group" aria-label="开场建议">
+              {OPENING_SUGGESTIONS.map((text) => (
+                <button key={text} type="button" className="desk-pet-chip" onClick={() => onSend(text)}>
+                  {text}
+                </button>
+              ))}
+            </div>
+          </>
         )}
         {messages.map((message) => (
           <div className="desk-pet-chat-msg" data-speaker={message.speaker} key={message.key}>
@@ -195,13 +205,6 @@ export function PetChatPanel({
           </button>
         </div>
       )}
-      <div className="desk-pet-chat-chips" role="group" aria-label="快捷芯片">
-        {QUICK_RING.map((label) => (
-          <button key={label} type="button" className="desk-pet-chip" onClick={() => onQuickAction(label)}>
-            {label}
-          </button>
-        ))}
-      </div>
       <form
         className="desk-pet-chat-input"
         onSubmit={(e) => {
