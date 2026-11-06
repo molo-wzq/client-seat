@@ -7,7 +7,7 @@ import { createInProcessProductCore } from "./product/in-process-product-api";
 import { SCORING_PATTERN } from "./test/scoring-pattern";
 import { App } from "./App";
 import type { AgentClient } from "./ui/agent-client";
-import type { AgentReport, AgentTriggerInput } from "./shared/agent-contract";
+import type { AgentEvent, AgentReport, AgentTriggerInput } from "./shared/agent-contract";
 
 /**
  * 最高层端到端产品测试(spec.md 测试决策):只断言用户可观察行为,
@@ -173,13 +173,21 @@ describe("左栏口径与标签", () => {
 describe("桌宠复盘一句话(工单 06)", () => {
   /** 假桌宠 agent:记录 sendTrigger,按本次触发的 data 回一条复盘 Report。 */
   function petAgentWith(reportFor: (input: AgentTriggerInput) => AgentReport) {
-    const sendTrigger = vi.fn((input: AgentTriggerInput) =>
-      Promise.resolve({ triggerId: "tr-1", admitted: true, ticket: null, report: reportFor(input) }),
-    );
+    // 模拟 SSE(工单 16):触发回执之外,report 事件也会回流——
+    // 表情(复盘 cheer、牌局微反应)经事件流进 DeskPet,不再靠 App 的 prop。
+    const listeners: Array<(event: AgentEvent) => void> = [];
+    const sendTrigger = vi.fn((input: AgentTriggerInput) => {
+      const report = reportFor(input);
+      queueMicrotask(() => listeners.forEach((listener) => listener({ type: "report", report })));
+      return Promise.resolve({ triggerId: "tr-1", admitted: true, ticket: null, report });
+    });
     const agent = {
       sendCommand: vi.fn(() => Promise.resolve()),
       sendTrigger,
-      onEvent: vi.fn(() => () => undefined),
+      onEvent: vi.fn((listener: (event: AgentEvent) => void) => {
+        listeners.push(listener);
+        return () => undefined;
+      }),
       tickets: vi.fn(() => Promise.resolve([])),
     } as unknown as AgentClient;
     return { agent, sendTrigger };
@@ -196,36 +204,53 @@ describe("桌宠复盘一句话(工单 06)", () => {
     expect(await screen.findByRole("heading", { name: "这通电话是怎样推进的" })).toBeInTheDocument();
   }
 
-  it("对局一结束自动发 game-ended 触发;插槽显示一句话可展开,桌宠变 cheer", async () => {
+  it("对局一结束自动发 game-ended 触发;插槽显示一句话可展开,复盘 cheer 随 Report 事件到达(工单 16)", async () => {
     const user = userEvent.setup();
     const api = createInProcessProductCore({ adapter: new FakeModelAdapter() });
-    const { agent, sendTrigger } = petAgentWith((input) => ({
-      ticketId: "t-1",
-      status: "ready",
-      text: "第1轮先接住话头再往下谈，这招值得学。",
-      basis: {
-        gameId: String(input.data.gameId),
-        turnNumber: 1,
-        cardId: (input.data.rounds as Array<{ cardId?: string }>)[0]?.cardId,
-      },
-    }));
+    const { agent, sendTrigger } = petAgentWith((input) => {
+      // 牌局反应触发(工单 16)不带 rounds:回 dropped 沉默 Report,不带表情。
+      if (input.kind !== "game-ended") {
+        return { ticketId: "t-react", status: "dropped" as const, text: "看在眼里,不说话。" };
+      }
+      return {
+        ticketId: "t-1",
+        status: "ready" as const,
+        text: "第1轮先接住话头再往下谈，这招值得学。",
+        // 工单 16:结算「欢呼」由 Report 携带(表情由事件驱动,App 不再切 prop)。
+        emotion: "cheer" as const,
+        basis: {
+          gameId: String(input.data.gameId),
+          turnNumber: 1,
+          cardId: ((input.data.rounds as Array<{ cardId?: string }> | undefined)?.[0])?.cardId,
+        },
+      };
+    });
     render(<App api={api} agent={agent} />);
 
     await finishQuickCall(user);
 
+    // 事件流订阅与工单视图拉取都发生了;牌局反应 Report 会让视图多拉几轮(工单 16)。
     expect(agent.onEvent).toHaveBeenCalledTimes(1);
-    expect(agent.tickets).toHaveBeenCalledTimes(1);
+    expect((agent.tickets as unknown as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(1);
 
     // 自动发送的触发:table 来源、game-ended 类型,带本局各轮经理话术与未翻开隐藏牌数。
-    expect(sendTrigger).toHaveBeenCalledTimes(1);
-    const input = sendTrigger.mock.calls[0][0] as AgentTriggerInput;
-    expect(input.source).toBe("table");
-    expect(input.kind).toBe("game-ended");
-    expect(typeof input.data.gameId).toBe("string");
-    expect(input.data.rounds).toEqual([
+    // (经理回话用了卡,通话中还会先发一条 card-played 反应触发,工单 16。)
+    const gameEnded = sendTrigger.mock.calls
+      .map((call) => call[0] as AgentTriggerInput)
+      .find((input) => input.kind === "game-ended");
+    expect(gameEnded).toBeDefined();
+    expect(gameEnded?.source).toBe("table");
+    expect(typeof gameEnded?.data.gameId).toBe("string");
+    expect(gameEnded?.data.rounds).toEqual([
       expect.objectContaining({ managerText: expect.stringContaining("理财经理小王") }),
     ]);
-    expect(typeof input.data.hiddenUnrevealedCount).toBe("number");
+    expect(typeof gameEnded?.data.hiddenUnrevealedCount).toBe("number");
+    // 出卡反应触发:同局、带卡名,由 Worker 落 think 表情。
+    const cardPlayed = sendTrigger.mock.calls
+      .map((call) => call[0] as AgentTriggerInput)
+      .find((input) => input.kind === "card-played");
+    expect(cardPlayed).toMatchObject({ source: "table" });
+    expect(typeof cardPlayed?.data.cardName).toBe("string");
 
     // 结算页插槽:一句话 + 展开依据(第 1 轮 · 策略卡)。
     expect(screen.getByRole("heading", { name: "桌宠复盘" })).toBeInTheDocument();
@@ -233,8 +258,11 @@ describe("桌宠复盘一句话(工单 06)", () => {
     await user.click(screen.getByText("展开依据"));
     expect(screen.getByText(/^第 1 轮 · 策略卡『/)).toBeInTheDocument();
 
-    // 桌宠对局结束后变欢呼(spec 故事 7)。
-    expect(document.querySelector(".desk-pet")).toHaveAttribute("data-expression", "cheer");
+    // 挂断先挥手(命令接口),game-ended 的 Report 事件回流后换「欢呼」(工单 16:事件驱动)。
+    await vi.waitFor(
+      () => expect(document.querySelector(".desk-pet")).toHaveAttribute("data-expression", "cheer"),
+      { timeout: 4000 },
+    );
   });
 
   it("复盘没有值得说的内容(dropped):照样发触发,但结算页不出插槽", async () => {
@@ -249,7 +277,9 @@ describe("桌宠复盘一句话(工单 06)", () => {
 
     await finishQuickCall(user);
 
-    expect(sendTrigger).toHaveBeenCalledTimes(1);
+    // game-ended 照样发(另有通话中的 card-played 反应触发,工单 16),但不出插槽。
+    const kinds = sendTrigger.mock.calls.map((call) => (call[0] as AgentTriggerInput).kind);
+    expect(kinds).toContain("game-ended");
     expect(screen.queryByRole("heading", { name: "桌宠复盘" })).not.toBeInTheDocument();
   });
 });

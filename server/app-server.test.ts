@@ -6,7 +6,8 @@ import { createProductCore } from "../src/domain/product-core";
 import { InMemoryStorage } from "../src/product/in-process-product-api";
 import { createRequestListener } from "./app-server";
 import { createHttpProductCore } from "../src/product/http-product-api";
-import { createAgentCore, DemoWorker } from "./agent/core";
+import { createAgentCore } from "./agent/core";
+import { DemoWorker } from "./agent/workers/demo";
 import { InMemoryLedgerStorage } from "./agent/storage";
 
 /** http 层契约(审计 C5):错误码由领域错误类型驱动,浏览器与进程内看到同一语义。 */

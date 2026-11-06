@@ -22,8 +22,8 @@ describe("演示脚本数据(工单 10)", () => {
     }
   });
 
-  it("脚本全程不依赖真实模型:驱动动作只有命令/触发/放权/表情/舞台", () => {
-    const allowed = new Set(["pet", "manager-move", "command", "trigger", "annotate-last-drop", "policy", "focus", "scene"]);
+  it("脚本全程不依赖真实模型:驱动动作只有命令/对话/触发/放权/表情/舞台", () => {
+    const allowed = new Set(["pet", "manager-move", "command", "chat", "trigger", "annotate-last-drop", "policy", "focus", "scene"]);
     for (const action of DEMO_STEPS.flatMap((step) => step.actions)) {
       expect(allowed.has(action.kind)).toBe(true);
     }

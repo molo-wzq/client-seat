@@ -90,6 +90,8 @@ npm run dev
 
 打开 `http://localhost:5173`，点击“快速开始一通”，即可使用内置场景体验完整流程。未配置模型密钥时，项目会以**演示模式**运行：理财经理由内置脚本扮演，应答是固定的预设台词，仅用于走通流程与演示界面，不代表真实模型水平。
 
+点击桌宠或按 Ctrl+K 打开小贝。可以查历史对局、已发布策略卡和已收录的投研资料，展开回复查看出处，或保存为练习笔记。笔记保存在当前浏览器，选择「用这条练」可以在对话里继续陪练。有模型时，小贝可以组合检索和多轮陪练，无模型时仍可使用本地检索。往期投研的结构化 JSON 放在 `data/reports/`，每期使用独立的报告 ID，字段与 `current-sections.json` 相同。
+
 如需接入真实模型，请在仓库根目录创建 `.env.local`：
 
 ```env
@@ -106,6 +108,52 @@ MIMO_MODEL=mimo-v2.6-pro
 `MIMO_BASE_URL` 和 `MIMO_MODEL` 可以省略，系统会使用默认值。密钥只在本地服务端读取，不会发送到浏览器。配置密钥后，理财经理由真实模型扮演，会根据策略卡与你的对话动态应答。
 
 模型按角色分两组配置：**对话组**（`MIMO_*`：理财经理对话、素材文案分析、转写后的说话人整理）与**转写组**（`ASR_*`：录音转文字）。转写组未配置时自动复用对话组的密钥与地址，只换用转写模型；填上 `ASR_*` 三项即可把转写切换到另一家供应商。
+
+## 多模型注册表（models.config.json，可选）
+
+要接多家供应商、或给不同角色配不同模型时，在仓库根目录创建 `models.config.json`：先登记 provider（协议、地址、密钥环境变量名、模型清单与能力），再按角色配 `"providerId:model"` 的有序链。链上主模型失败（网关 5xx、连接失败、超时且话术未流出）时自动切到下一个。**密钥只从环境变量读取，绝不写进这个文件**。下面示例接智谱 GLM 与 DeepSeek 两家：
+
+```json
+{
+  "providers": [
+    {
+      "id": "zhipu",
+      "protocol": "openai-chat",
+      "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+      "apiKeyEnv": "ZHIPU_API_KEY",
+      "models": ["glm-4.6", "glm-4.6-air"],
+      "capabilities": { "stream": true, "tools": true, "json": true, "audio": false }
+    },
+    {
+      "id": "deepseek",
+      "protocol": "openai-chat",
+      "baseUrl": "https://api.deepseek.com/v1",
+      "apiKeyEnv": "DEEPSEEK_API_KEY",
+      "models": ["deepseek-chat", "deepseek-reasoner"],
+      "capabilities": { "stream": true, "tools": true, "json": true, "audio": false }
+    }
+  ],
+  "roles": {
+    "manager": ["zhipu:glm-4.6", "deepseek:deepseek-chat"],
+    "judge": "deepseek:deepseek-chat",
+    "copywriting": "zhipu:glm-4.6",
+    "agent.chat": ["zhipu:glm-4.6-air", "deepseek:deepseek-chat"],
+    "agent.worker": "deepseek:deepseek-reasoner"
+  }
+}
+```
+
+密钥写进 `.env.local`（文件里 `apiKeyEnv` 指向的变量必须已设置，否则启动直接报错，不会静默降级）：
+
+```env
+ZHIPU_API_KEY=你的智谱密钥
+DEEPSEEK_API_KEY=你的 DeepSeek 密钥
+```
+
+- **角色**：`manager`（经理对话）、`judge`（裁判元数据提取）、`copywriting`（素材分析与说话人整理）、`asr`（录音转写）、`agent.router` / `agent.worker` / `agent.chat`（桌宠 Agent）。值可以是单个 `"providerId:model"`，也可以是数组——fallback 链，按序切换。`agent.chat` 未配置时继承 `agent.router` 的链；`judge` 未配置时不单独成链——裁判跟着链上实际出话的模型走（各项自裁），主模型挂掉后元数据提取不会再请求它。
+- **能力是硬校验**：`agent.*` 要求 `stream`，`judge` 与 `copywriting` 要求 `json`，`asr` 要求 `audio`；声明不满足时启动即报错。`protocol` 本期只实现 `openai-chat`，引用 `anthropic-messages` 的角色会得到明确的「尚未实现」报错（协议字段已预留）。
+- **兼容**：不创建这个文件、或某角色没写在文件里时，沿用 `MIMO_*` / `ASR_*` / `LLM_FALLBACK_*` / `AGENT_*` 环境变量——旧的 `.env.local` 一个字都不用改。
+- 启动时逐角色打印实际使用的 provider:model 链（不打印密钥），形如 `[phone-coach] 模型 manager: zhipu/glm-4.6 → deepseek/deepseek-chat`；未配密钥的角色标 `demo(未配密钥)`，演示模式完整可用。
 
 ## 对话存储上限
 

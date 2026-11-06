@@ -44,8 +44,13 @@ class FakeEventSource {
 
   /** 模拟服务端写出一条 SSE 事件。 */
   emit(name: string, payload: unknown): void {
+    this.emitRaw(name, JSON.stringify(payload));
+  }
+
+  /** 模拟服务端写出的原始 data(审查 R11:坏帧不炸监听器)。 */
+  emitRaw(name: string, data: string): void {
     for (const listener of this.listeners.get(name) ?? []) {
-      listener({ data: JSON.stringify(payload) });
+      listener({ data });
     }
   }
 }
@@ -157,5 +162,40 @@ describe("agent 客户端 onEvent", () => {
 
     unsubscribe();
     expect(source.closed).toBe(true);
+  });
+
+  it("delta SSE 事件(工单 11 流式对话)翻译给监听者:ticketId + 文本片段", () => {
+    FakeEventSource.instances = [];
+    const client = createAgentClient({ EventSource: FakeEventSource as unknown as typeof EventSource });
+    const events: unknown[] = [];
+
+    const unsubscribe = client.onEvent((event) => events.push(event));
+    const source = FakeEventSource.instances[0];
+
+    source.emit("delta", { delta: { ticketId: "t1", text: "来了来" } });
+    source.emit("delta", { delta: { ticketId: "t1", text: "了，我听着呢。" } });
+    expect(events).toEqual([
+      { type: "delta", ticketId: "t1", text: "来了来" },
+      { type: "delta", ticketId: "t1", text: "了，我听着呢。" },
+    ]);
+
+    unsubscribe();
+    expect(source.closed).toBe(true);
+  });
+
+  it("SSE 坏帧(非法 JSON)被丢弃:不抛异常、不给监听者发事件(审查 R11)", () => {
+    FakeEventSource.instances = [];
+    const client = createAgentClient({ EventSource: FakeEventSource as unknown as typeof EventSource });
+    const events: unknown[] = [];
+    client.onEvent((event) => events.push(event));
+    const source = FakeEventSource.instances[0];
+
+    expect(() => source.emitRaw("report", "{oops")).not.toThrow();
+    expect(() => source.emitRaw("delta", "not-json")).not.toThrow();
+    expect(events).toEqual([]);
+
+    // 坏帧之后好帧照常翻译,连接不受影响。
+    source.emit("report", { report: { ticketId: "t1", status: "ready", text: "收到，马上办" } });
+    expect(events).toHaveLength(1);
   });
 });

@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { loadEnvFile } from "./env";
-import { readAsrConfig, readLlmConfig } from "./model-config";
+import { readModelsConfigFile, resolveModelRegistry } from "./model-registry";
 import {
   MAX_AUDIO_BYTES,
   MimoAudioTranscriber,
@@ -77,25 +77,27 @@ async function main(): Promise<void> {
     process.exitCode = 1;
     return;
   }
-  // 转写(ASR)与说话人整理(LLM)分开配置:转写可整体换供应商,整理是文本任务留在 LLM 组。
-  const asr = readAsrConfig(process.env);
-  const llm = readLlmConfig(process.env);
-  if (!asr.apiKey) throw new Error("缺少转写模型密钥:配 ASR_API_KEY,或共用对话配置 MIMO_API_KEY");
-  if (!llm.apiKey) throw new Error("缺少说话人整理模型密钥:配 MIMO_API_KEY");
+  // 转写(ASR)与说话人整理(copywriting)按注册表角色取模型(工单 13):
+  // models.config.json 配了对应角色就用它,否则沿用旧环境变量映射。
+  const registry = resolveModelRegistry({ config: readModelsConfigFile(ROOT), env: process.env });
+  const asr = registry.roles.asr[0];
+  const diarize = registry.roles.copywriting[0];
+  if (!asr) throw new Error("缺少转写模型密钥:配 ASR_API_KEY,或共用对话配置 MIMO_API_KEY");
+  if (!diarize) throw new Error("缺少说话人整理模型密钥:配 MIMO_API_KEY");
 
   console.log(`开始后台转写:${path.basename(audioPath)}(耗时可能为数分钟)`);
   const outputPath = await ingestAudio({
     audioPath,
     outputPath: optionValue(args, "--out"),
     transcriber: new MimoAudioTranscriber({
-      apiKey: asr.apiKey,
+      apiKey: asr.apiKey!,
       baseUrl: asr.baseUrl,
       model: asr.model,
     }),
     diarizer: new MimoSpeakerDiarizer({
-      apiKey: llm.apiKey,
-      baseUrl: llm.baseUrl,
-      model: llm.model,
+      apiKey: diarize.apiKey!,
+      baseUrl: diarize.baseUrl,
+      model: diarize.model,
     }),
   });
   console.log(`转写完成:${outputPath}`);

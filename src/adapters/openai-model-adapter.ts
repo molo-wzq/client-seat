@@ -3,6 +3,27 @@ import {
   assembleManagerMetaPrompt,
   assembleManagerSystemPrompt,
 } from "./prompts";
+import { errorMessage, maskModelSecrets } from "./model-errors";
+import type { ToolCallShape, ToolCompletionShape } from "./failover-model-adapter";
+
+type CompletionMessage = {
+  role: string;
+  content: string;
+  toolCalls?: ToolCallShape[];
+  toolCallId?: string;
+  name?: string;
+};
+
+function toWireMessages(messages: CompletionMessage[]) {
+  return messages.map(({ role, content, toolCalls, toolCallId }) => ({
+    role,
+    content,
+    ...(toolCalls ? { tool_calls: toolCalls.map(({ id, name, arguments: args }) => ({
+      id, type: "function", function: { name, arguments: args },
+    })) } : {}),
+    ...(role === "tool" && toolCallId ? { tool_call_id: toolCallId } : {}),
+  }));
+}
 import { cleanReplyText, sanitizeCustomerText } from "../domain/reply-text";
 import { DEFAULT_ROLE_CARD, roleDemoMessages, roleTailReminder } from "../domain/role-card";
 import { PROMPT_TUNING_ENV, tuningDisabled, tuningEnabled } from "../domain/prompt-tuning";
@@ -58,7 +79,11 @@ export const DEFAULT_MODEL_BASE_URL = "https://token-plan-cn.xiaomimimo.com/v1";
 export const DEFAULT_MODEL_NAME = "mimo-v2.6-pro";
 
 export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePort {
-  constructor(private readonly config: ModelAdapterConfig) {}
+  constructor(
+    private readonly config: ModelAdapterConfig,
+    /** 裁判元数据提取可换模型(注册表 judge 角色,工单 13);缺省复用本适配器(现状行为)。 */
+    private readonly judge?: OpenAICompatibleModelAdapter,
+  ) {}
 
   async analyzeTranscript(transcript: string): Promise<TranscriptAnalysis> {
     const { content, reasoning } = await this.chat(
@@ -126,7 +151,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     const meta = await this.extractManagerMeta(input, reply).catch((error) => {
       // 降级而非失败:话术已经生成且播给用户,此时抛错会回滚整轮;
       // 丢的只是策略卡高亮与自动收口信号,12 轮硬上限仍然兜底。
-      console.warn("[adapter] 元数据提取失败,本轮降级为无元数据:", (error as Error).message);
+      console.warn("[adapter] 元数据提取失败,本轮降级为无元数据:", maskModelSecrets(errorMessage(error)));
       return null;
     });
     if (!meta) return { reply, ...withReasoning };
@@ -150,7 +175,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
       `客户:${sanitizeCustomerText(input.customerText)}`,
       `经理(刚说):${reply}`,
     ].join("\n");
-    const { content, reasoning } = await this.chat(
+    const { content, reasoning } = await (this.judge ?? this).chat(
       [
         { role: "system", content: assembleManagerMetaPrompt(input) },
         { role: "user", content: `对话记录:\n${dialogue}\n\n请输出元数据 JSON。` },
@@ -183,11 +208,87 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
   }
 
   /**
+   * 通用流式补全(工单 11:桌宠 Agent 的模型端口):复用同一条 OpenAI 兼容
+   * SSE 链路,但不带经理话术的首部清洗、称谓剥除与元数据裁判——调用方
+   * (server/agent/workers.ts)自行处理表情前缀等协议。
+   */
+  async completeStream(
+    messages: CompletionMessage[],
+    onDelta?: (delta: string) => void,
+  ): Promise<string> {
+    const { content } = await this.chatStream(messages, onDelta);
+    return content;
+  }
+
+  /**
+   * 带工具的非流式补全(工单 16:桌宠只读工具):assistant 的 toolCalls 映射成
+   * 线格式 tool_calls,tool 消息带 tool_call_id;返回扁平的调用形状给调用方。
+   * 非流式——工具调用没有"半截增量"顾虑,失败可由链上层直接切备用。
+   */
+  async completeWithTools(
+    messages: CompletionMessage[],
+    tools: Array<{ type: "function"; function: { name: string; description: string; parameters: Record<string, unknown> } }>,
+  ): Promise<ToolCompletionShape> {
+    let response: Response;
+    try {
+      response = await fetch(`${this.config.baseUrl}/chat/completions`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${this.config.apiKey}`,
+        },
+        signal: AbortSignal.timeout(120_000),
+        body: JSON.stringify({
+          model: this.config.model,
+          messages: toWireMessages(messages),
+          temperature: 0.7,
+          max_tokens: 16384,
+          frequency_penalty: 0,
+          presence_penalty: 0,
+          tools,
+        }),
+      });
+    } catch (error) {
+      if (error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")) {
+        throw new Error("语言模型调用超时(120 秒)");
+      }
+      throw error;
+    }
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      throw new Error(`语言模型调用失败(HTTP ${response.status}):${body.slice(0, 300)}`);
+    }
+    const data = (await response.json()) as {
+      choices?: Array<{
+        message?: {
+          content?: string;
+          tool_calls?: Array<{ id?: string; function?: { name?: string; arguments?: string } }>;
+        };
+      }>;
+    };
+    const choice = data.choices?.[0];
+    const calls = (choice?.message?.tool_calls ?? [])
+      .filter((call) => typeof call.id === "string" && typeof call.function?.name === "string")
+      .map((call) => ({
+        id: call.id as string,
+        name: call.function!.name!,
+        arguments: typeof call.function?.arguments === "string" ? call.function.arguments : "{}",
+      }));
+    if (calls.length > 0) return { type: "tool_calls", calls };
+    const content = choice?.message?.content ?? "";
+    if (!content.trim()) {
+      console.warn("[adapter] 带工具补全返回为空:", maskModelSecrets(JSON.stringify(data).slice(0, 400)));
+      throw new Error("语言模型返回为空");
+    }
+    return { type: "text", text: content };
+  }
+
+  /**
    * 流式话术调用:stream=true 读 SSE,reasoning_content 增量只累计不回调
    * (思维链绝不能当话术播出),content 增量逐段交给 onReplyDelta。
    */
   private async chatStream(
-    messages: Array<{ role: string; content: string }>,
+    messages: CompletionMessage[],
     onReplyDelta?: (delta: string) => void,
   ): Promise<{ content: string; reasoning: string }> {
     let response: Response;
@@ -201,7 +302,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
         signal: AbortSignal.timeout(120_000),
         body: JSON.stringify({
           model: this.config.model,
-          messages,
+          messages: toWireMessages(messages),
           temperature: 0.7,
           max_tokens: 16384,
           // 显式关掉重复惩罚:垫字与口癖要的就是反复出现(p13)。
@@ -335,7 +436,7 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     const content = choice?.message?.content ?? "";
     const reasoning = choice?.message?.reasoning_content ?? "";
     if (!content.trim() && !reasoning.trim()) {
-      console.warn("[adapter] 语言模型返回缺少内容:", JSON.stringify(data).slice(0, 400));
+      console.warn("[adapter] 语言模型返回缺少内容:", maskModelSecrets(JSON.stringify(data).slice(0, 400)));
       throw new Error("语言模型返回为空");
     }
     if (choice?.finish_reason === "length") {
