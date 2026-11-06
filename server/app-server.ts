@@ -8,6 +8,8 @@ import type { ConversationStartOptions, MaterialDraftPatch, PlayerObservation } 
 import type { AgentCore } from "./agent/core";
 import type { AcceptMode, AgentTriggerInput } from "./agent/types";
 import { loadCurrentResearchReport } from "./report-parser";
+import { parseBotInput, type createPetBot } from "./agent/pet-bot";
+import type { BotChatEvent } from "../src/shared/pet-bot-contract";
 
 /** 领域之外的 http 层错误:请求体超过大小上限,映射为 413。 */
 class BodyTooLargeError extends Error {}
@@ -21,8 +23,9 @@ export function createRequestListener(deps: {
   core: ProductCore;
   staticRoot: string;
   agent: AgentCore;
+  petBot?: ReturnType<typeof createPetBot>;
 }): (req: http.IncomingMessage, res: http.ServerResponse) => void {
-  const { core, staticRoot, agent } = deps;
+  const { core, staticRoot, agent, petBot } = deps;
 
   return (req, res) => {
     void handle(req, res);
@@ -205,9 +208,32 @@ export function createRequestListener(deps: {
       fs.createReadStream(reportFile).pipe(res);
       return;
     }
-    // 桌宠 Agent(工单 02):命令触发入口;source/kind 合法性由核心校验(ValidationError→400)。
+    if (req.method === "POST" && pathname === "/api/agent/chat" && petBot) {
+      const input = parseBotInput(body);
+      res.writeHead(200, {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-store, no-transform",
+        "X-Accel-Buffering": "no",
+      });
+      res.flushHeaders();
+      const emit = (event: BotChatEvent) => {
+        if (!res.destroyed && !res.writableEnded) res.write(JSON.stringify(event) + "\n");
+      };
+      try {
+        await petBot(input, emit);
+      } catch {
+        emit({ type: "error", text: "小贝暂时读不到资料，请稍后再试。" });
+      } finally {
+        if (!res.destroyed && !res.writableEnded) res.end();
+      }
+      return;
+    }
+    // 共享工单仍用于既有桌宠事件，聊天内容只走当前请求。
     if (req.method === "POST" && pathname === "/api/agent/triggers") {
       const input = body as { source?: unknown; kind?: unknown; data?: unknown };
+      if (petBot && (input.kind === "chat" || input.kind === "research-due" || input.kind === "cards-published")) {
+        throw new ValidationError("此操作不接受共享触发，请在小贝对话中发起。");
+      }
       const outcome = await agent.emitTrigger({
         source: input.source as AgentTriggerInput["source"],
         kind: (input.kind as AgentTriggerInput["kind"]) || "command",
@@ -221,7 +247,8 @@ export function createRequestListener(deps: {
     }
     // 桌宠 Agent(工单 05):只读工单视图(账本折叠出的每张工单最新状态)。
     if (req.method === "GET" && pathname === "/api/agent/tickets") {
-      respondJson(res, 200, await agent.tickets());
+      const tickets = await agent.tickets();
+      respondJson(res, 200, petBot ? tickets.filter((ticket) => ticket.worker !== "对话") : tickets);
       return;
     }
     // 桌宠 Agent(工单 08):放权模式查询与切换;模式合法性由核心校验(ValidationError→400)。

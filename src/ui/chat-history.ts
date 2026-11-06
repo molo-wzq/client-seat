@@ -4,6 +4,8 @@
  * 渲染层拿到的永远是形状合法的消息,不会因坏数据崩掉整个应用。
  */
 import { QUICK_RING } from "./pet-reactions";
+import type { BotEvidence } from "../shared/pet-bot-contract";
+import { readBotEvidence } from "./bot-notes";
 
 /** 本地对话历史上限:渲染与存储同一口径(最近 50 条)。 */
 export const CHAT_HISTORY_MAX = 50;
@@ -24,6 +26,7 @@ export interface PetChatMessage {
   streaming?: boolean;
   /** 快捷动作建议(工单 11/12):渲染成按钮,点了才执行。 */
   quickActions?: string[];
+  bot?: { evidence: BotEvidence[]; steps: string[] };
 }
 
 /** 存量条目的合法说话人。 */
@@ -56,7 +59,7 @@ export function loadChatHistory(raw: string | null): PetChatMessage[] {
   if (!Array.isArray(parsed)) return [];
   return parsed
     .filter(
-      (item): item is { speaker: "player" | "pet"; text: string; quickActions?: unknown } =>
+      (item): item is { speaker: "player" | "pet"; text: string; quickActions?: unknown; bot?: { evidence?: unknown; steps?: unknown } } =>
         typeof item === "object" && item !== null && isSpeaker((item as { speaker?: unknown }).speaker) && typeof (item as { text?: unknown }).text === "string",
     )
     .slice(-CHAT_HISTORY_MAX)
@@ -67,6 +70,14 @@ export function loadChatHistory(raw: string | null): PetChatMessage[] {
         speaker: item.speaker,
         text: item.text,
         ...(quickActions ? { quickActions } : {}),
+        ...(item.speaker === "pet" && item.bot && typeof item.bot === "object" ? {
+          bot: {
+            evidence: readBotEvidence(item.bot.evidence),
+            steps: Array.isArray(item.bot.steps)
+              ? item.bot.steps.filter((step): step is string => typeof step === "string").slice(0, 12)
+              : [],
+          },
+        } : {}),
       };
     });
 }
@@ -80,10 +91,11 @@ export function serializeChat(messages: PetChatMessage[]): string {
     messages
       .filter((message) => !message.streaming)
       .slice(-CHAT_HISTORY_MAX)
-      .map(({ speaker, text, quickActions }) => ({
+      .map(({ speaker, text, quickActions, bot }) => ({
         speaker,
         text,
         ...(quickActions && quickActions.length > 0 ? { quickActions } : {}),
+        ...(bot ? { bot } : {}),
       })),
   );
 }

@@ -9,6 +9,7 @@ import { WorkLog } from "./WorkLog";
 import { PetMenu } from "./PetMenu";
 import { TicketCard } from "./TicketCard";
 import type { PetVariant } from "./DeskPet";
+import type { BotNote } from "../shared/pet-bot-contract";
 
 /** 消息形状迁去纯模块(工单 15),这里转发导出兼容既有引用。 */
 export type { PetChatMessage } from "./chat-history";
@@ -23,6 +24,7 @@ export type { PetChatMessage } from "./chat-history";
  */
 export function PetChatPanel({
   messages,
+  notebook,
   awaitingReply,
   tickets,
   annotating,
@@ -50,6 +52,13 @@ export function PetChatPanel({
 }: {
   /** 对话记录(最近 50 条由 useChatSession 截断持久化)。 */
   messages: PetChatMessage[];
+  notebook?: {
+    notes: BotNote[];
+    save: (message: PetChatMessage) => boolean;
+    remove: (id: string) => void;
+    activeStep?: string;
+    showAgentControls: boolean;
+  };
   /** 已发出还没见到回音:显示「…」打字指示。 */
   awaitingReply: boolean;
   /** waiting/blocked 工单:以待拍板卡/只读卡插进对话流(工单 15)。 */
@@ -85,6 +94,7 @@ export function PetChatPanel({
   onToggleLog: () => void;
 }) {
   const [draft, setDraft] = useState("");
+  const [noteStatus, setNoteStatus] = useState("");
   const [slashIndex, setSlashIndex] = useState(0);
   /** Esc 关掉过补全,继续打字(或重进命令态)再弹出。 */
   const [slashDismissed, setSlashDismissed] = useState(false);
@@ -181,9 +191,9 @@ export function PetChatPanel({
 
   return (
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- 对话面板要能 Esc 收起(审查 S7)
-    <div className="desk-pet-chat" role="region" aria-label="对话面板" onKeyDown={onRootKeyDown}>
+    <div className="desk-pet-chat" data-bot={notebook ? true : undefined} role="region" aria-label="对话面板" onKeyDown={onRootKeyDown}>
       <div className="desk-pet-chat-head">
-        <span className="desk-pet-chat-title">跟桌宠聊</span>
+        <span className="desk-pet-chat-title">{notebook ? "小贝 · 知识库与陪练" : "跟桌宠聊"}</span>
         <button
           type="button"
           className="desk-pet-chat-menu-toggle"
@@ -203,28 +213,46 @@ export function PetChatPanel({
       {menuOpen && (
         <PetMenu
           variant={variant}
-          policy={policy}
+          policy={notebook?.showAgentControls === false ? null : policy}
           onSwitchVariant={onSwitchVariant}
           onDnd={onDnd}
           onSetMode={onSetMode}
         />
       )}
-      <AgentStatusBar
+      {notebook?.showAgentControls !== false && <AgentStatusBar
         awaitingReply={awaitingReply}
         runningCount={runningCount}
         policy={policy}
         onSetMode={onSetMode}
         onToggleLog={onToggleLog}
         logOpen={logOpen}
-      />
-      {logOpen && <WorkLog items={workLog} highlightTicketId={logHighlightTicketId} />}
+      />}
+      {logOpen && notebook?.showAgentControls !== false && <WorkLog items={workLog} highlightTicketId={logHighlightTicketId} />}
+      {notebook && (
+        <details className="desk-pet-notebook">
+          <summary>练习笔记（{notebook.notes.length}）</summary>
+          {notebook.notes.length === 0 && <p>可以把小贝的回复存成笔记，之后再找回来练。</p>}
+          {notebook.notes.slice().reverse().map((note) => (
+            <article key={note.id}>
+              <p>{note.text}</p>
+              {note.evidence.length > 0 && <small>{note.evidence.map((entry) => entry.title).join(" · ")}</small>}
+              <div>
+                <button type="button" onClick={() => onSend(`用这条练习笔记陪我练一次：\n${note.text.slice(0, 1800)}`)}>用这条练</button>
+                <button type="button" onClick={() => notebook.remove(note.id)}>删除笔记</button>
+              </div>
+            </article>
+          ))}
+        </details>
+      )}
       <div className="desk-pet-chat-list" ref={listRef} role="log" aria-label="对话记录">
         {messages.length === 0 && !awaitingReply && tickets.length === 0 && (
           <>
-            <p className="desk-pet-chat-empty">点头像或按 Ctrl+K,随时叫我。</p>
+            <p className="desk-pet-chat-empty">{notebook
+              ? "想查哪段资料、对比哪几局，或从哪句开始练？直接告诉我。"
+              : "点头像或按 Ctrl+K,随时叫我。"}</p>
             {/* 空对话的 2 个开场建议(工单 15):点了作为一句话发出;之后只剩模型本轮建议动作。 */}
             <div className="desk-pet-chat-chips" role="group" aria-label="开场建议">
-              {OPENING_SUGGESTIONS.map((text) => (
+              {(notebook ? ["查找不同对局里怎么回应客户犹豫", "找一张应对存款到期的策略卡，陪我练一次"] : OPENING_SUGGESTIONS).map((text) => (
                 <button key={text} type="button" className="desk-pet-chip" onClick={() => onSend(text)}>
                   {text}
                 </button>
@@ -266,6 +294,23 @@ export function PetChatPanel({
               <p className="desk-pet-chat-bubble" data-streaming={message.streaming || undefined} aria-busy={message.streaming || undefined}>
                 {message.text}
               </p>
+              {message.bot && (
+                <div className="desk-pet-bot-meta">
+                  {message.bot.steps.length > 0 && <details>
+                    <summary>做了什么</summary>
+                    <ol>{message.bot.steps.map((step, i) => <li key={i}>{step}</li>)}</ol>
+                  </details>}
+                  {message.bot.evidence.length > 0 && <details>
+                    <summary>查到的资料（{message.bot.evidence.length}）</summary>
+                    <ol>{message.bot.evidence.map((entry) => <li key={entry.id}>
+                      <strong>{entry.title}</strong><p>{entry.excerpt}</p>
+                    </li>)}</ol>
+                  </details>}
+                  {notebook && <button type="button" onClick={() => {
+                    setNoteStatus(notebook.save(message) ? "已保存到练习笔记。" : "无法保存练习笔记。");
+                  }}>存为练习笔记</button>}
+                </div>
+              )}
               {message.quickActions?.map((label) => (
                 // 动态建议(工单 16):模型按牌局给的建议动作,点了作为一句话发给桌宠,
                 // 不再走快捷环导航(那条路留给 / 命令与开场芯片)。
@@ -286,6 +331,8 @@ export function PetChatPanel({
             quoting={ticket.ticketId === annotating}
           />
         ))}
+        {notebook?.activeStep && <p className="desk-pet-bot-step" role="status">{notebook.activeStep}</p>}
+        {noteStatus && <p className="desk-pet-bot-step" role="status">{noteStatus}</p>}
         {awaitingReply && !messages.some((message) => message.streaming) && (
           <div className="desk-pet-chat-msg" data-speaker="pet">
             <p className="desk-pet-chat-bubble desk-pet-typing" role="status" aria-label="正在输入">

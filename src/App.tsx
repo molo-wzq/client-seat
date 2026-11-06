@@ -373,7 +373,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
                   // 亲手翻开隐藏牌→发 table 触发,Worker 落 cheer(工单 16:表情由事件驱动)。
                   if (choice === "flip") {
                     void agent
-                      .sendTrigger({ source: "table", kind: "hidden-revealed", data: { gameId: conversation.id, item } })
+                      .sendTrigger({ source: "table", kind: "hidden-revealed", data: { gameId: conversation.id } })
                       .catch(() => undefined);
                   }
                 }}
@@ -468,6 +468,8 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
         onOpenDemo={() => setDemoOpen(true)}
         view={view}
         chatContext={petChatContext}
+        gameId={view === "table" || view === "postgame" ? conversation?.id : undefined}
+        showDemoControls={demoOpen}
         demoExpression={demoExpression}
       />
     </div>

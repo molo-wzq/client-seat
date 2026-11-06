@@ -261,12 +261,44 @@
 .desk-pet-chat-msg[data-speaker="player"] { align-items: flex-end; }
 .desk-pet-chat-msg[data-speaker="pet"] { align-items: flex-start; }
 .desk-pet-chat-bubble {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   margin: 0;
   max-width: 88%;
   padding: 5px 10px;
   border-radius: 10px;
   font-size: 12px;
   line-height: 1.6;
+}
+.desk-pet-notebook {
+  max-height: 10rem;
+  overflow: auto;
+  padding: .3rem .75rem;
+}
+.desk-pet-chat[data-bot] {
+  width: min(420px, calc(100vw - 46px));
+  max-height: min(620px, calc(100dvh - 130px));
+}
+.desk-pet-chat[data-bot] .desk-pet-chat-list {
+  max-height: 420px;
+}
+.desk-pet-notebook article + article {
+  border-top: 1px solid currentColor;
+  margin-top: .5rem;
+}
+.desk-pet-notebook article p,
+.desk-pet-bot-meta p {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.desk-pet-bot-meta,
+.desk-pet-bot-step,
+.desk-pet-notebook {
+  font-size: .78rem;
+}
+.desk-pet-bot-meta summary,
+.desk-pet-notebook summary {
+  cursor: pointer;
 }
 .desk-pet-chat-msg[data-speaker="player"] .desk-pet-chat-bubble {
   background: #4d3624e0;

@@ -600,11 +600,6 @@ export interface ApprovalSinks {
   queueBlindspot(draft: string): void | Promise<void>;
 }
 
-const noApprovals: ApprovalSinks = {
-  fileResearch: () => undefined,
-  queueBlindspot: () => undefined,
-};
-
 /** 决议命令(工单 15→16):「同意/驳回 [工单号] [理由]」,理由可选。 */
 const DECISION_COMMAND = /^(同意|驳回)\s*(\S+)?(?:\s+(.+))?$/;
 
@@ -620,7 +615,7 @@ export function isDecisionCommand(text: string): boolean {
  * 找目标与失效保护沿用 demo 决议的口径(显式 ID 失效不误审另一张)。
  */
 class DecisionWorker implements AgentWorker {
-  constructor(private readonly deps: { approvals: ApprovalSinks }) {}
+  constructor(private readonly deps: { approvals?: ApprovalSinks }) {}
 
   async run(ticket: AgentTicket, trigger: AgentTrigger, options: WorkerRunOptions): Promise<AgentReport> {
     const { onReport, context = { tickets: async () => [] } } = options;
@@ -646,13 +641,16 @@ class DecisionWorker implements AgentWorker {
       return { ticketId: ticket.id, status: "ready", text: "已驳回，草稿归档。" };
     }
     // 同意:按目标来源闭环(工单视图的 worker 名,来源=触发类型)。
+    if ((target.worker === "投研" || target.worker === "盲区") && !this.deps.approvals) {
+      return { ticketId: ticket.id, status: "failed", text: "共享档案写入未开放，草稿仍待审。" };
+    }
     if (target.worker === "投研") {
-      await this.deps.approvals.fileResearch(target.text);
+      await this.deps.approvals?.fileResearch(target.text);
       await onReport({ ticketId: target.ticketId, status: "ready", text: "已放进本周档案夹（桌宠起草·已审）。" });
       return { ticketId: ticket.id, status: "ready", text: "已放进本周档案夹，随时能查。" };
     }
     if (target.worker === "盲区") {
-      await this.deps.approvals.queueBlindspot(target.text);
+      await this.deps.approvals?.queueBlindspot(target.text);
       await onReport({ ticketId: target.ticketId, status: "ready", text: "已进策略卡人审队列，上不上牌仍由人定。" });
       return { ticketId: ticket.id, status: "ready", text: "已进人审队列，过了人工这关才上牌。" };
     }
@@ -690,7 +688,7 @@ export function createModelWorkers(deps: {
 }): AgentWorker {
   const demo = new DemoWorker(deps.demoSleep ? { sleep: deps.demoSleep } : undefined);
   const persona = deps.persona ?? DEFAULT_PET_PERSONA;
-  const decision = new DecisionWorker({ approvals: deps.approvals ?? noApprovals });
+  const decision = new DecisionWorker({ approvals: deps.approvals });
   const chat = new ChatWorker({
     model: deps.routerModel,
     persona,

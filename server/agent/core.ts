@@ -153,6 +153,9 @@ export function createAgentCore(deps: {
         throw new ValidationError(`触发来源与类型不匹配:${input.kind} 只能来自 ${KIND_SOURCES[input.kind].join("/")}`);
       }
       const trigger: AgentTrigger = { ...input, id: randomId(), data: sanitizeTriggerData(input.data) };
+      if (trigger.kind === "hidden-revealed" || trigger.kind === "hidden-raised") {
+        trigger.data = { gameId: trigger.data.gameId };
+      }
       // 账本里的触发再剔一层 context(工单 16):牌局快照含隐藏牌,只活在本次执行,
       // 不落账、不进任何只读视图;Worker 拿到的仍是上面的 trigger(含 context)。
       const ledgerTrigger: AgentTrigger = { ...trigger, data: sanitizeLedgerTriggerData(trigger.data) };

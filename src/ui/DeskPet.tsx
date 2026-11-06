@@ -71,6 +71,8 @@ export function DeskPet({
   onOpenDemo,
   view,
   chatContext = null,
+  gameId,
+  showDemoControls = false,
   demoExpression = null,
   ref,
 }: {
@@ -85,6 +87,8 @@ export function DeskPet({
   view?: string;
   /** 牌局快照(工单 16):App 组装,随 chat 触发给桌宠(只进桌宠提示词,落账前剔除)。 */
   chatContext?: ChatContext | null;
+  gameId?: string;
+  showDemoControls?: boolean;
   /** 演示接管的表情(审查 B1):非空时压过一切内部状态;null 表示还回去。 */
   demoExpression?: PetExpression | null;
   ref?: Ref<DeskPetHandle>;
@@ -102,7 +106,9 @@ export function DeskPet({
   const avatarRef = useRef<HTMLButtonElement>(null);
   const panelOpenRef = useRef(false);
 
-  const session = useChatSession({ agent, view, chatContext, onOpenDemo });
+  const session = useChatSession({ agent, view, chatContext, gameId, onOpenDemo });
+  const botMode = Boolean(agent.sendBotChat);
+  const showAgentControls = !botMode || showDemoControls;
   const mood = usePetMood({ onSingleClick: () => (panelOpenRef.current ? closePanel() : openPanel()) });
   const position = usePetPosition({ rootRef, onInteract: mood.wake });
   const agentView = useAgentView(agent);
@@ -287,8 +293,12 @@ export function DeskPet({
       {panelOpen && !dnd && (
         <PetChatPanel
           messages={session.messages}
+          notebook={botMode ? {
+            notes: session.notes, save: session.saveNote, remove: session.deleteNote,
+            activeStep: session.activeStep, showAgentControls,
+          } : undefined}
           awaitingReply={session.awaitingReply}
-          tickets={pendingTickets}
+          tickets={showAgentControls ? pendingTickets : []}
           annotating={session.annotating}
           policy={agentView.policy}
           runningCount={runningCount}
@@ -350,12 +360,14 @@ export function DeskPet({
       data-reduced-motion={reducedMotion() || undefined}
       style={anchored}
       onDragOver={(e) => {
+        if (!showAgentControls) return;
         e.preventDefault(); // 允许松手
         setDropHover(true);
       }}
       onDragLeave={() => setDropHover(false)}
       onDrop={(e) => {
         e.preventDefault();
+        if (!showAgentControls) return;
         setDropHover(false);
         const files = Array.from(e.dataTransfer?.files ?? []);
         agentView.sendDroppedFiles(files);
