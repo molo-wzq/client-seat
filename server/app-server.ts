@@ -10,6 +10,14 @@ import type { AcceptMode, AgentTriggerInput } from "./agent/types";
 import { loadCurrentResearchReport } from "./report-parser";
 import { parseBotInput, type createPetBot } from "./agent/pet-bot";
 import type { BotChatEvent } from "../src/shared/pet-bot-contract";
+import type { OpenAICompatibleModelAdapter } from "../src/adapters/openai-model-adapter";
+import {
+  PET_COACH_HISTORY_LIMIT,
+  PET_COACH_QUESTION_LIMIT,
+  PET_COACH_REPLY_LIMIT,
+  type PetCoachRequest,
+  type PetCoachResponse,
+} from "../src/shared/pet-coach-contract";
 
 /** 领域之外的 http 层错误:请求体超过大小上限,映射为 413。 */
 class BodyTooLargeError extends Error {}
@@ -24,6 +32,8 @@ export function createRequestListener(deps: {
   staticRoot: string;
   agent: AgentCore;
   petBot?: ReturnType<typeof createPetBot>;
+  petCoachModels?: Pick<OpenAICompatibleModelAdapter, "answerPetCoach">[];
+  llmSwitch?: { isLlmEnabled: () => boolean };
 }): (req: http.IncomingMessage, res: http.ServerResponse) => void {
   const { core, staticRoot, agent, petBot } = deps;
 
@@ -112,6 +122,52 @@ export function createRequestListener(deps: {
       res.write(`event: ${event.type}\ndata: ${JSON.stringify(payload)}\n\n`);
     });
     req.on("close", unsubscribe);
+  }
+
+  async function respondPetCoach(res: http.ServerResponse, id: string, body: Record<string, unknown>) {
+    const input = readPetCoachRequest(body);
+    const conversation = await core.getConversation(id);
+    const turn = [...conversation.turns].reverse().find((item) => item.speaker === "manager");
+    if (
+      conversation.status !== "ongoing" ||
+      !turn ||
+      turn.number !== input.turnNumber ||
+      (input.revision !== undefined && conversation.revision !== input.revision)
+    ) {
+      respondJson(res, 409, { error: "经理回复已更新，请刷新对局后再问桌宠。" });
+      return;
+    }
+    const models = deps.petCoachModels ?? [];
+    if ((deps.llmSwitch && !deps.llmSwitch.isLlmEnabled()) || models.length === 0) {
+      respondJson(res, 200, { mode: "demo" } satisfies PetCoachResponse);
+      return;
+    }
+    if (res.destroyed) return;
+    const controller = new AbortController();
+    const cancel = () => controller.abort();
+    res.once("close", cancel);
+    try {
+      for (const model of models) {
+        try {
+          const reply = await model.answerPetCoach({
+            managerReply: turn.text,
+            productFacts: conversation.productFacts,
+            question: input.question,
+            history: input.history,
+            signal: controller.signal,
+          });
+          if (!controller.signal.aborted) {
+            respondJson(res, 200, { mode: "model", reply } satisfies PetCoachResponse);
+          }
+          return;
+        } catch {
+          if (controller.signal.aborted) return;
+        }
+      }
+      respondJson(res, 502, { error: "桌宠暂时连不上模型，请重试。" });
+    } finally {
+      res.off("close", cancel);
+    }
   }
 
   async function handleApi(
@@ -289,6 +345,11 @@ export function createRequestListener(deps: {
       respondJson(res, 200, conversation);
       return;
     }
+    const petCoachMatch = pathname.match(/^\/api\/conversations\/([^/]+)\/pet-coach$/);
+    if (req.method === "POST" && petCoachMatch) {
+      await respondPetCoach(res, safeDecodeSegment(petCoachMatch[1]), body);
+      return;
+    }
     // 流式轮次(票 29):SSE 增量上屏。必须先于 /turns 正则匹配(它也能匹配此路径的父段)。
     const turnStreamMatch = pathname.match(/^\/api\/conversations\/([^/]+)\/turns\/stream$/);
     if (req.method === "POST" && turnStreamMatch) {
@@ -452,4 +513,39 @@ function serveStatic(req: http.IncomingMessage, res: http.ServerResponse, pathna
   }
   res.writeHead(200, headers);
   source.pipe(res);
+}
+
+function readPetCoachRequest(body: Record<string, unknown>): PetCoachRequest {
+  const { turnNumber, revision, history } = body;
+  const question = typeof body.question === "string" ? body.question.trim() : "";
+  if (
+    typeof turnNumber !== "number" ||
+    !Number.isSafeInteger(turnNumber) ||
+    turnNumber < 1 ||
+    (revision !== undefined && (typeof revision !== "number" || !Number.isSafeInteger(revision) || revision < 0)) ||
+    !question ||
+    question.length > PET_COACH_QUESTION_LIMIT ||
+    !Array.isArray(history) ||
+    history.length > PET_COACH_HISTORY_LIMIT
+  ) {
+    throw new ValidationError("桌宠问题或轮次无效。");
+  }
+  const exchanges = history.map((entry: unknown) => {
+    if (
+      !entry ||
+      typeof entry !== "object" ||
+      !("question" in entry) ||
+      !("reply" in entry) ||
+      typeof (entry as { question: unknown }).question !== "string" ||
+      typeof (entry as { reply: unknown }).reply !== "string" ||
+      !(entry as { question: string }).question.trim() ||
+      !(entry as { reply: string }).reply.trim() ||
+      (entry as { question: string }).question.length > PET_COACH_QUESTION_LIMIT ||
+      (entry as { reply: string }).reply.length > PET_COACH_REPLY_LIMIT
+    ) {
+      throw new ValidationError("桌宠私聊记录无效。");
+    }
+    return { question: (entry as { question: string }).question, reply: (entry as { reply: string }).reply };
+  });
+  return { turnNumber, revision, question, history: exchanges };
 }

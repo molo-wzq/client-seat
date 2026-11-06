@@ -12,6 +12,8 @@ import { DeskPet, type DeskPetHandle } from "./DeskPet";
 import { IDLE_SLEEP_MS, POKE_LINES } from "./pet-reactions";
 import { AVATAR_CLICK_DELAY_MS, BUBBLE_HOLD_MS } from "./use-pet-mood";
 import type { AgentClient } from "./agent-client";
+import type { Conversation } from "../domain/types";
+import { SEED_PRODUCT_CARD } from "../domain/seed";
 
 // 桌宠把版式、位置、对话历史都记在 localStorage,测试间互不串扰。
 beforeEach(() => {
@@ -996,5 +998,42 @@ describe("命令接口:App 驱动桌宠(工单 15)", () => {
     // 演示把表情还回去后,才轮到对话情绪。
     view.rerender(<DeskPet agent={agent} demoExpression={null} ref={(instance) => undefined} />);
     expect(screen.getByRole("img", { name: /欢呼/ })).toBeInTheDocument();
+  });
+});
+
+describe("桌宠局内私聊", () => {
+  it("展示本轮依据、脚本追问和产品卡，并在重生成时收起旧内容", async () => {
+    const user = userEvent.setup();
+    const agent = fakeAgent();
+    const coachCall: Pick<Conversation, "id" | "turns" | "productFacts"> = {
+      id: "call-a",
+      turns: [{ number: 2, speaker: "manager", text: "20万档有150元立减金。" }],
+      productFacts: SEED_PRODUCT_CARD,
+    };
+    const { rerender } = render(<DeskPet agent={agent} inCall coachCall={coachCall} />);
+    expect(screen.getByRole("status")).toHaveTextContent("活动权益");
+    await user.click(screen.getByRole("button", { name: "桌宠有一条提示" }));
+    expect(screen.getByRole("region", { name: "桌宠私聊" })).toHaveTextContent("20万档有150元立减金。");
+    await user.click(screen.getByRole("button", { name: "核对本局产品卡" }));
+    expect(screen.getByRole("log")).toHaveTextContent("20万档为微信立减金150元");
+    await user.type(screen.getByRole("textbox", { name: "问桌宠" }), "怎么婉拒？{Enter}");
+    expect(screen.getByRole("log")).toHaveTextContent("今天不提供资金情况");
+    expect(agent.sendCommand).not.toHaveBeenCalled();
+    expect(agent.sendTrigger).not.toHaveBeenCalled();
+
+    rerender(
+      <DeskPet
+        agent={agent}
+        inCall
+        coachCall={{
+          ...coachCall,
+          turns: [{ number: 2, speaker: "manager", text: "方便聊两句吗？" }],
+        }}
+      />,
+    );
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "桌宠私聊" }));
+    expect(screen.getByRole("region", { name: "桌宠私聊" })).toHaveTextContent("方便聊两句吗？");
+    expect(screen.getByRole("log")).toBeEmptyDOMElement();
   });
 });

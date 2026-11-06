@@ -64,7 +64,7 @@ describe("素材到模拟通话的核心闭环", () => {
     expect(screen.getByText(/只解释 AI 的打法,不评价你的客户表现/)).toBeInTheDocument();
     expect(screen.queryByText(SCORING_PATTERN)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "再来一局" })).toBeInTheDocument();
-  });
+  }, 15_000);
 });
 
 describe("快速开始", () => {

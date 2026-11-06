@@ -14,6 +14,7 @@ import type {
   AgentTriggerInput,
 } from "../shared/agent-contract";
 import type { BotChatEvent, BotChatInput } from "../shared/pet-bot-contract";
+import type { PetCoachRequest, PetCoachResponse } from "../shared/pet-coach-contract";
 
 /** 注入缝:测试传假 fetch / 假 EventSource;缺省回落浏览器全局。 */
 export interface AgentClientDeps {
@@ -24,6 +25,7 @@ export interface AgentClientDeps {
 
 export interface AgentClient {
   sendBotChat?(input: BotChatInput, onEvent: (event: BotChatEvent) => void): Promise<void>;
+  askPetCoach?(conversationId: string, input: PetCoachRequest, signal?: AbortSignal): Promise<PetCoachResponse>;
   /** 把一句命令作为 pet 触发给 Router;失败抛错误消息(UI 层展示)。 */
   sendCommand(text: string): Promise<void>;
   /** 发任意触发并拿回链路结果(工单 06:结算页自动发 game-ended,读最终 Report);失败抛错误消息。 */
@@ -92,6 +94,24 @@ export function createAgentClient(deps: AgentClientDeps = {}): AgentClient {
         throw new Error(body?.error || `触发发送失败(HTTP ${response.status})`);
       }
       return (await response.json()) as EmitOutcome;
+    },
+
+    async askPetCoach(conversationId, input, signal) {
+      const doFetch = deps.fetch ?? globalThis.fetch.bind(globalThis);
+      const response = await doFetch(
+        `${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/pet-coach`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(input),
+          signal,
+        },
+      );
+      if (!response.ok) {
+        const payload = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(payload.error || `桌宠私聊失败(${response.status})`);
+      }
+      return (await response.json()) as PetCoachResponse;
     },
 
     async tickets() {

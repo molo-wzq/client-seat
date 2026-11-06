@@ -139,8 +139,11 @@ if (purgedIds.length > 0) {
   console.log(`[phone-coach] 已按存储上限清理 ${purgedIds.length} 通过期对话(上限:${retention.maxCount ?? "不限"} 通 / ${retention.maxAgeMs !== null ? `${retention.maxAgeMs / 86400000} 天` : "不限"})`);
 }
 
+const petCoachEntries = chatChain.length > 0 ? chatChain : registry.roles.manager;
+const petCoachModels = petCoachEntries.map((entry) => buildModel(entry));
+
 const server = http.createServer(
-  createRequestListener({ core, staticRoot: path.join(ROOT, "dist"), agent, petBot }),
+  createRequestListener({ core, staticRoot: path.join(ROOT, "dist"), agent, petBot, petCoachModels }),
 );
 server.listen(PORT, HOST, () => {
   console.log(`[phone-coach] API 服务已启动:http://${HOST}:${PORT}(数据文件:${DATA_FILE})`);

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { FakeModelAdapter } from "../src/adapters/fake-model-adapter";
@@ -14,6 +14,8 @@ import { InMemoryLedgerStorage } from "./agent/storage";
 
 let server: http.Server;
 let base = "";
+let coachEnabled = false;
+const answerPetCoach = vi.fn(async () => "先请经理说明活动资格和资金门槛。");
 
 beforeAll(async () => {
   const core = createProductCore({
@@ -22,7 +24,15 @@ beforeAll(async () => {
     storage: new InMemoryStorage(),
   });
   const agent = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
-  server = http.createServer(createRequestListener({ core, staticRoot: "", agent }));
+  server = http.createServer(
+    createRequestListener({
+      core,
+      staticRoot: "",
+      agent,
+      llmSwitch: { isLlmEnabled: () => coachEnabled },
+      petCoachModels: [{ answerPetCoach }],
+    }),
+  );
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -38,6 +48,44 @@ async function request(apiPath: string, method = "GET", body?: unknown) {
   const json = (await response.json().catch(() => null)) as { error?: string } | null;
   return { status: response.status, json, headers: response.headers };
 }
+
+it("桌宠私聊沿用模型开关，只发送本轮依据，并拒绝旧轮次版本", async () => {
+  const api = createHttpProductCore(base);
+  const call = await api.quickStart();
+  const updated = await api.sendCustomerTurn(call.id, "喂");
+  const route = `/api/conversations/${call.id}/pet-coach`;
+  const input = {
+    turnNumber: 2,
+    revision: updated.revision,
+    question: "那我应该先问什么？",
+    history: [{ question: "他想让我报名吗？", reply: "他提到了活动。" }],
+  };
+  expect(await request(route, "POST", input)).toMatchObject({ status: 200, json: { mode: "demo" } });
+  expect(answerPetCoach).not.toHaveBeenCalled();
+  coachEnabled = true;
+  try {
+    expect(await request(route, "POST", input)).toMatchObject({
+      status: 200,
+      json: { mode: "model", reply: "先请经理说明活动资格和资金门槛。" },
+    });
+    expect(answerPetCoach).toHaveBeenCalledWith({
+      managerReply: updated.turns[1].text,
+      productFacts: updated.productFacts,
+      question: input.question,
+      history: input.history,
+      signal: expect.any(AbortSignal),
+    });
+    expect(await request(route, "POST", { ...input, revision: 0 })).toMatchObject({ status: 409 });
+    expect(answerPetCoach).toHaveBeenCalledTimes(1);
+    answerPetCoach.mockRejectedValueOnce(new Error("upstream error with internal details"));
+    expect(await request(route, "POST", input)).toMatchObject({
+      status: 502,
+      json: { error: "桌宠暂时连不上模型，请重试。" },
+    });
+  } finally {
+    coachEnabled = false;
+  }
+});
 
 describe("http 契约:成功与业务错误码", () => {
   it('浏览器接口持久保存判断并创建可靠关键轮分支，非法输入返回400', async () => {

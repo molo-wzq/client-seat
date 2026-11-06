@@ -10,6 +10,8 @@ import { usePetPosition } from "./use-pet-position";
 import { useAgentView } from "./use-agent-view";
 import { buildTraceSteps, mergeWorkLog, type TraceStep } from "./agent-trace";
 import type { ChatContext, PetEmotion } from "../shared/agent-contract";
+import type { Conversation } from "../domain/types";
+import { PetCoach } from "./PetCoach";
 import "./desk-pet.css";
 
 /** 桌宠版式:女版 / 男版。 */
@@ -66,6 +68,7 @@ function loadVariant(): PetVariant {
 export function DeskPet({
   expression = "wave",
   inCall = false,
+  coachCall,
   agent = defaultAgent,
   onQuickAction,
   onOpenDemo,
@@ -78,6 +81,7 @@ export function DeskPet({
 }: {
   expression?: PetExpression;
   inCall?: boolean;
+  coachCall?: Pick<Conversation, "id" | "turns" | "productFacts" | "revision">;
   agent?: AgentClient;
   /** 快捷芯片跳转(工单 10):回话照发,App 按动作跳到对应视图。 */
   onQuickAction?: (action: QuickRingAction) => void;
@@ -281,6 +285,10 @@ export function DeskPet({
   const anchored = position.pos ? { left: position.pos.left, top: position.pos.top, right: "auto", bottom: "auto" } : undefined;
   const avatarAlt = `桌宠·${variantLabel[variant]}·${expressionLabel[shownExpression]}`;
 
+  const coachRound = inCall && coachCall
+    ? [...coachCall.turns].reverse().find((turn) => turn.speaker === "manager")
+    : undefined;
+
   // 头顶悬浮栈:气泡在上、面板贴身,右对齐不遮主内容。
   const popovers = (
     <div className="desk-pet-popovers">
@@ -289,6 +297,16 @@ export function DeskPet({
         <p className="desk-pet-bubble" role="status" aria-label="桌宠气泡">
           {mood.bubble}
         </p>
+      )}
+      {!dnd && coachCall && coachRound && (
+        <PetCoach
+          key={JSON.stringify([coachCall.id, coachRound.number, coachRound.text])}
+          conversationId={coachCall.id}
+          revision={coachCall.revision}
+          round={{ number: coachRound.number, text: coachRound.text }}
+          facts={coachCall.productFacts}
+          askModel={agent.askPetCoach}
+        />
       )}
       {panelOpen && !dnd && (
         <PetChatPanel

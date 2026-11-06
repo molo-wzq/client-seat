@@ -464,6 +464,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
         ref={petRef}
         agent={agent}
         inCall={view === "table" && conversation?.status === "ongoing"}
+        coachCall={view === "table" ? conversation ?? undefined : undefined}
         onQuickAction={handleQuickAction}
         onOpenDemo={() => setDemoOpen(true)}
         view={view}
