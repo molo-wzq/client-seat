@@ -387,16 +387,27 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
                   const played = newlyPlayedCard(next.turns, next.resources?.cards ?? []);
                   const seen = seenManagerTurnsRef.current;
                   if (next.status === "ongoing" && seen.id === next.id) {
-                    if (managerTurnCount(next.turns) > seen.count && played) {
+                    const nextCount = managerTurnCount(next.turns);
+                    if (nextCount > seen.count) {
+                      // R6:经理这一轮落定。不拿 card-played / hidden-* 来判定。
                       void agent
                         .sendTrigger({
                           source: "table",
-                          kind: "card-played",
-                          data: { gameId: next.id, cardId: played.cardId, cardName: played.cardName },
+                          kind: "turn-ended",
+                          data: { gameId: next.id, turnNumber: nextCount },
                         })
                         .catch(() => undefined);
+                      if (played) {
+                        void agent
+                          .sendTrigger({
+                            source: "table",
+                            kind: "card-played",
+                            data: { gameId: next.id, cardId: played.cardId, cardName: played.cardName },
+                          })
+                          .catch(() => undefined);
+                      }
                     }
-                    seenManagerTurnsRef.current = { id: next.id, count: managerTurnCount(next.turns) };
+                    seenManagerTurnsRef.current = { id: next.id, count: nextCount };
                   } else {
                     seenManagerTurnsRef.current = { id: next.id, count: managerTurnCount(next.turns) };
                   }
@@ -464,7 +475,6 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
         ref={petRef}
         agent={agent}
         inCall={view === "table" && conversation?.status === "ongoing"}
-        coachCall={view === "table" ? conversation ?? undefined : undefined}
         onQuickAction={handleQuickAction}
         onOpenDemo={() => setDemoOpen(true)}
         view={view}

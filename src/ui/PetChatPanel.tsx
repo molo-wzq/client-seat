@@ -1,15 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from "react";
-import { OPENING_SUGGESTIONS } from "./pet-reactions";
 import { resolveSlashCommand, slashCandidates } from "./slash-commands";
 import type { PetChatMessage } from "./chat-history";
-import type { AcceptMode, AgentPolicy, AgentTicketView } from "../shared/agent-contract";
+import type { AcceptMode, AgentPolicy, AgentTicketView, XiaobeiNote } from "../shared/agent-contract";
 import type { TraceStep, WorkLogItem } from "./agent-trace";
 import { AgentStatusBar } from "./AgentStatusBar";
 import { WorkLog } from "./WorkLog";
 import { PetMenu } from "./PetMenu";
 import { TicketCard } from "./TicketCard";
 import type { PetVariant } from "./DeskPet";
-import type { BotNote } from "../shared/pet-bot-contract";
 
 /** 消息形状迁去纯模块(工单 15),这里转发导出兼容既有引用。 */
 export type { PetChatMessage } from "./chat-history";
@@ -49,11 +47,13 @@ export function PetChatPanel({
   onSwitchVariant,
   onDnd,
   onToggleLog,
+  /** 通话中当前经理原话。点开头像打开的是同一个面板,这句话标在顶上。 */
+  focusTurn,
 }: {
   /** 对话记录(最近 50 条由 useChatSession 截断持久化)。 */
   messages: PetChatMessage[];
   notebook?: {
-    notes: BotNote[];
+    notes: XiaobeiNote[];
     save: (message: PetChatMessage) => boolean;
     remove: (id: string) => void;
     activeStep?: string;
@@ -92,6 +92,7 @@ export function PetChatPanel({
   onSwitchVariant: () => void;
   onDnd: () => void;
   onToggleLog: () => void;
+  focusTurn?: { turnNumber: number; text: string };
 }) {
   const [draft, setDraft] = useState("");
   const [noteStatus, setNoteStatus] = useState("");
@@ -193,7 +194,7 @@ export function PetChatPanel({
     // eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- 对话面板要能 Esc 收起(审查 S7)
     <div className="desk-pet-chat" data-bot={notebook ? true : undefined} role="region" aria-label="对话面板" onKeyDown={onRootKeyDown}>
       <div className="desk-pet-chat-head">
-        <span className="desk-pet-chat-title">{notebook ? "小贝 · 知识库与陪练" : "跟桌宠聊"}</span>
+        <span className="desk-pet-chat-title">小贝</span>
         <button
           type="button"
           className="desk-pet-chat-menu-toggle"
@@ -237,7 +238,6 @@ export function PetChatPanel({
               <p>{note.text}</p>
               {note.evidence.length > 0 && <small>{note.evidence.map((entry) => entry.title).join(" · ")}</small>}
               <div>
-                <button type="button" onClick={() => onSend(`用这条练习笔记陪我练一次：\n${note.text.slice(0, 1800)}`)}>用这条练</button>
                 <button type="button" onClick={() => notebook.remove(note.id)}>删除笔记</button>
               </div>
             </article>
@@ -245,20 +245,14 @@ export function PetChatPanel({
         </details>
       )}
       <div className="desk-pet-chat-list" ref={listRef} role="log" aria-label="对话记录">
+        {focusTurn && (
+          <blockquote className="desk-pet-focus">
+            <p>第 {focusTurn.turnNumber} 轮 · 经理原话</p>
+            <p>{focusTurn.text}</p>
+          </blockquote>
+        )}
         {messages.length === 0 && !awaitingReply && tickets.length === 0 && (
-          <>
-            <p className="desk-pet-chat-empty">{notebook
-              ? "想查哪段资料、对比哪几局，或从哪句开始练？直接告诉我。"
-              : "点头像或按 Ctrl+K,随时叫我。"}</p>
-            {/* 空对话的 2 个开场建议(工单 15):点了作为一句话发出;之后只剩模型本轮建议动作。 */}
-            <div className="desk-pet-chat-chips" role="group" aria-label="开场建议">
-              {(notebook ? ["查找不同对局里怎么回应客户犹豫", "找一张应对存款到期的策略卡，陪我练一次"] : OPENING_SUGGESTIONS).map((text) => (
-                <button key={text} type="button" className="desk-pet-chip" onClick={() => onSend(text)}>
-                  {text}
-                </button>
-              ))}
-            </div>
-          </>
+          <p className="desk-pet-chat-empty">直接说就行。想查资料、复盘或陪练，说出来；/ 是同一件事的快捷方式。</p>
         )}
         {messages.map((message) => {
           const trace = message.speaker === "pet" ? traces.find((item) => item.ticketId === message.ticketId) : undefined;
@@ -311,13 +305,6 @@ export function PetChatPanel({
                   }}>存为练习笔记</button>}
                 </div>
               )}
-              {message.quickActions?.map((label) => (
-                // 动态建议(工单 16):模型按牌局给的建议动作,点了作为一句话发给桌宠,
-                // 不再走快捷环导航(那条路留给 / 命令与开场芯片)。
-                <button key={label} type="button" className="desk-pet-chat-action" onClick={() => onSend(label)}>
-                  {label}
-                </button>
-              ))}
             </div>
           );
         })}

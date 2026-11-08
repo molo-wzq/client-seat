@@ -1,18 +1,16 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { createAgentCore } from "./core";
-import { createModelWorkers, type AgentModelMessage, type AgentModelPort } from "./workers";
-import { InMemoryLedgerStorage } from "./storage";
-import type { LedgerEntry } from "./types";
 import type { ChatContext } from "../../src/shared/agent-contract";
+import { assemblePetSystemPrompt, DEFAULT_PET_PERSONA } from "./pet-persona";
+import { createPetBot } from "./pet-bot";
+import { renderChatContext } from "./workers";
+import type { AgentModelMessage, AgentModelPort } from "./workers";
 
 /**
- * 牌局快照上下文(工单 16)的隔离测试缝:一律用假模型端口,不发网络请求。
- * - context 只进桌宠对话 Worker 的提示词(客户侧,可含隐藏牌,ADR 0007);
- * - 落账前整个剔除(S4 同一机制):账本任何条目都不含 context 与隐藏牌原文;
- * - 不在牌局时快照换成所处幕与最近一局摘要。
+ * 牌局快照只进小贝这一侧的提示词,不进触发账本。
+ * 玩家的话不再走 emitTrigger,所以隐藏牌不会随着对话触发落账。
  */
 
-/** 假模型端口:捕获进模型的全部提示词,回一句固定回复(不流式分拍,隔离测试不看节奏)。 */
 class CapturingModelPort implements AgentModelPort {
   readonly prompts: string[] = [];
 
@@ -22,7 +20,6 @@ class CapturingModelPort implements AgentModelPort {
   }
 }
 
-/** 牌局进行中的样例快照:含客户公开面、玩家隐藏牌、最近轮次、经理用卡与进度。 */
 const gameContext: ChatContext = {
   phase: "game",
   customer: { name: "陈建国", visible: ["存款 80 万", "反感推销"] },
@@ -35,72 +32,67 @@ const gameContext: ChatContext = {
   turnNumber: 3,
   maxTurns: 12,
   revealedHidden: 1,
+  focusTurn: { turnNumber: 3, text: "最近行里有个新活动，您感兴趣吗？" },
 };
 
-/** 经核心跑一通 chat 触发,拿回账本与模型看到的提示词。 */
-async function runChat(context: ChatContext) {
-  const model = new CapturingModelPort();
-  const storage = new InMemoryLedgerStorage();
-  const core = createAgentCore({ storage, worker: createModelWorkers({ routerModel: model }) });
-  const outcome = await core.emitTrigger({
-    source: "pet",
-    kind: "chat",
-    data: { text: "经理这句什么意思", history: [], context },
-  });
-  const entries: LedgerEntry[] = await storage.listLedgerEntries();
-  return { model, outcome, entries };
-}
-
-describe("牌局快照上下文(工单 16)", () => {
-  it("context 进入桌宠提示词:公开面、隐藏牌、轮次进度与经理用卡都在系统提示里", async () => {
-    const { model, outcome } = await runChat(gameContext);
+describe("牌局快照只进小贝提示词", () => {
+  it("context 进入小贝提示词,含隐藏牌与当前经理原话,且人格卡里没有建议清单", async () => {
+    const model = new CapturingModelPort();
+    const opened: unknown[] = [];
+    const bot = createPetBot({
+      archive: () => ({
+        search: () => [],
+        periods: [],
+      }) as unknown as ReturnType<Parameters<typeof createPetBot>[0]["archive"]>,
+      model,
+      openWork: async (input) => {
+        opened.push(input);
+        return { triggerId: "no", admitted: false, ticket: null, report: null };
+      },
+    });
+    const events: unknown[] = [];
+    await bot({
+      sessionId: "s-1",
+      text: "经理这句什么意思",
+      history: [],
+      notes: [],
+      context: gameContext,
+    }, (event) => events.push(event));
 
     const prompt = model.prompts.join("\n");
-    // 客户公开面与隐藏牌:桌宠坐客户一侧,帮玩家推演用的牌都在提示词里。
     expect(prompt).toContain("陈建国");
     expect(prompt).toContain("存款 80 万");
     expect(prompt).toContain("儿子留学要用 40 万");
-    // 最近轮次按经理/玩家区分,当前回合进度与已揭示数同在。
     expect(prompt).toContain("最近行里有个新活动");
-    expect(prompt).toContain("先说说是什么");
     expect(prompt).toContain("3/12");
-    expect(prompt).toContain("1");
-    // 经理已出的策略卡及其出处。
     expect(prompt).toContain("存款搬家");
-    expect(prompt).toContain("外呼录音A T01–T02");
-    // 对话照常收口:ready Report 带表情。
-    expect(outcome.report).toMatchObject({ status: "ready", emotion: "wave" });
+    expect(prompt).toContain(assemblePetSystemPrompt(DEFAULT_PET_PERSONA).slice(0, 12));
+    expect(prompt).not.toContain("【建议】");
+    expect(prompt).not.toContain("不加表情协议标签");
+    expect(opened).toEqual([]);
+    const done = events.at(-1) as { type: string; message: { emotion?: string; ticketId?: string } };
+    expect(done).toMatchObject({ type: "done", message: { emotion: "wave" } });
+    expect(done.message.ticketId).toBeUndefined();
   });
 
-  it("落账前整个剔除:账本任何条目都不含 context 键与隐藏牌原文(S4 同一机制)", async () => {
-    const { entries } = await runChat({
-      ...gameContext,
-      // 顺手塞一条冒名的顶层 hidden:照旧在进链路前丢弃(既有 S4 行为不回退)。
-    } as ChatContext);
-
-    const ledgerJson = JSON.stringify(entries);
-    expect(ledgerJson).not.toContain("儿子留学要用 40 万");
-    expect(ledgerJson).not.toContain("存款搬家");
-    expect(ledgerJson).not.toContain("context");
-    // 触发条目仍保留对话正文本身(剔的是 context,不是整条 data)。
-    const triggerEntry = entries.find((entry) => entry.type === "trigger");
-    expect(JSON.stringify(triggerEntry)).toContain("经理这句什么意思");
+  it("renderChatContext 把当前经理原话写进客户侧快照", () => {
+    const text = renderChatContext(gameContext);
+    expect(text).toContain("当前经理原话");
+    expect(text).toContain("儿子留学要用 40 万");
   });
 
-  it("不在牌局时:快照换成所处幕与最近一局摘要", async () => {
+  it("不在牌局时快照换成所处幕与最近一局摘要", async () => {
     const model = new CapturingModelPort();
-    const core = createAgentCore({
-      storage: new InMemoryLedgerStorage(),
-      worker: createModelWorkers({ routerModel: model }),
+    const bot = createPetBot({
+      archive: () => ({ search: () => [], periods: [] }) as unknown as ReturnType<Parameters<typeof createPetBot>[0]["archive"]>,
+      model,
     });
     const context: ChatContext = {
       phase: "idle",
       act: "复盘",
       lastGame: { summary: "上一局第 2 轮用「存款搬家」收口成功" },
     };
-
-    await core.emitTrigger({ source: "pet", kind: "chat", data: { text: "上局哪里值得学", context } });
-
+    await bot({ sessionId: "s-1", text: "上局哪里值得学", history: [], notes: [], context }, () => undefined);
     const prompt = model.prompts.join("\n");
     expect(prompt).toContain("复盘");
     expect(prompt).toContain("上一局第 2 轮用「存款搬家」收口成功");

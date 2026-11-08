@@ -56,22 +56,23 @@ describe("mergeDelta(工单 15,审查 R2)", () => {
 describe("applyChatReport(工单 15,审查 S1/S2)", () => {
   it("没有 delta 直接到 ready:原位落成定稿消息,不丢回复(审查 S1)", () => {
     let messages = appendCapped([], msg("player", "在吗"));
-    messages = applyChatReport(messages, report("t-1", "ready", "我在呢，你说。", { quickActions: ["换个客户"] }), () => "k1");
+    messages = applyChatReport(messages, report("t-1", "ready", "我在呢，你说。", { emotion: "wave" }), () => "k1");
     expect(messages.at(-1)).toEqual({
       key: expect.any(String),
       ticketId: "t-1",
       speaker: "pet",
       text: "我在呢，你说。",
-      quickActions: ["换个客户"],
+      emotion: "wave",
     });
   });
 
-  it("ready 用服务端权威全文定稿流式条目,带上建议;重复 ready 不再改动", () => {
+  it("ready 用服务端权威全文定稿流式条目;重复 ready 不再改动。建议动作不上消息", () => {
     let messages = appendCapped([], msg("player", "在吗"));
     messages = mergeDelta(messages, "t-1", "我在", () => "k1");
     messages = applyChatReport(messages, report("t-1", "ready", "我在呢，你说。", { quickActions: ["换个客户"] }), () => "k2");
     const finalized = messages.find((message) => message.ticketId === "t-1");
-    expect(finalized).toMatchObject({ text: "我在呢，你说。", streaming: undefined, quickActions: ["换个客户"] });
+    expect(finalized).toMatchObject({ text: "我在呢，你说。", streaming: undefined });
+    expect(finalized).not.toHaveProperty("quickActions");
 
     const again = applyChatReport(messages, report("t-1", "ready", "我在呢，你说。"), () => "k3");
     expect(again).toBe(messages); // 幂等:同一条 ready 不产生新消息

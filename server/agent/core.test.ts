@@ -175,7 +175,7 @@ describe("Agent 核心(工单 02)", () => {
 
     await core.emitTrigger({
       source: "pet",
-      kind: "chat",
+      kind: "command",
       data: { text: "跟你说个秘密", hidden: [secret] },
     });
 
@@ -745,5 +745,41 @@ describe("放权模式与评估记录(工单 08)", () => {
     await expect(core.setAcceptMode("turbo" as unknown as AcceptMode)).rejects.toThrow("放权模式不合法");
     expect((await core.policy()).version).toBe(1);
     expect((await core.policy()).acceptMode).toBe("observe");
+  });
+});
+
+describe("小贝对话不走触发,R6 接 turn-ended", () => {
+  it("kind chat 不写账、不开 commandId 线程、不另立工单", async () => {
+    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+    await expect(
+      core.emitTrigger({ source: "pet", kind: "chat", data: { text: "在吗", context: { phase: "idle", act: "布置" } } }),
+    ).rejects.toThrow("不走触发");
+    expect(await core.ledger()).toEqual([]);
+    expect(await core.tickets()).toEqual([]);
+  });
+
+  it("turn-ended 在缺省 observe 下命中 R6 只记录;card-played 与 hidden-* 不命中 R6", async () => {
+    const core = createAgentCore({
+      storage: new InMemoryLedgerStorage(),
+      worker: new DemoWorker({ sleep: async () => undefined }),
+    });
+    const outcome = await core.emitTrigger({ source: "table", kind: "turn-ended", data: { gameId: "g-1", turnNumber: 2 } });
+    expect(outcome.admitted).toBe(false);
+    expect(outcome.ticket).toBeNull();
+    expect(await core.evals()).toMatchObject([{ ruleId: "R6", outcome: "observed", wouldDo: expect.stringContaining("隐藏信息") }]);
+
+    await core.emitTrigger({ source: "table", kind: "card-played", data: { gameId: "g-1", cardId: "sc-1" } });
+    await core.emitTrigger({ source: "table", kind: "hidden-raised", data: { gameId: "g-1" } });
+    await core.emitTrigger({ source: "table", kind: "hidden-revealed", data: { gameId: "g-1" } });
+    const rules = (await core.evals()).map((record) => record.ruleId);
+    expect(rules).toEqual(["R6"]);
+  });
+
+  it("turn-ended 缺轮次不立项,也不记 R6", async () => {
+    const core = createAgentCore({ storage: new InMemoryLedgerStorage(), worker: new DemoWorker() });
+    const outcome = await core.emitTrigger({ source: "table", kind: "turn-ended", data: { gameId: "g-1" } });
+    expect(outcome.admitted).toBe(false);
+    expect(outcome.ticket).toBeNull();
+    expect(await core.evals()).toEqual([]);
   });
 });

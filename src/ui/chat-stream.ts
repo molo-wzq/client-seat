@@ -48,8 +48,6 @@ export function applyChatReport(
   nextKey: () => string,
 ): PetChatMessage[] {
   if (report.status !== "ready" && report.status !== "failed" && report.status !== "dropped") return prev;
-  const quickActions =
-    report.quickActions && report.quickActions.length > 0 ? { quickActions: report.quickActions } : {};
   const index = findLastTicketIndex(prev, report.ticketId);
   if (index < 0) {
     return appendCapped(prev, {
@@ -57,13 +55,18 @@ export function applyChatReport(
       ticketId: report.ticketId,
       speaker: "pet",
       text: report.text,
-      ...quickActions,
+      ...(report.emotion ? { emotion: report.emotion } : {}),
     });
   }
   const existing = prev[index]!;
-  if (!existing.streaming && existing.text === report.text && !quickActions.quickActions) return prev;
+  if (!existing.streaming && existing.text === report.text) return prev;
   const next = [...prev];
-  next[index] = { ...existing, text: report.text, streaming: undefined, ...quickActions };
+  next[index] = {
+    ...existing,
+    text: report.text,
+    streaming: undefined,
+    ...(report.emotion ? { emotion: report.emotion } : {}),
+  };
   return next;
 }
 

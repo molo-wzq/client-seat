@@ -10,8 +10,8 @@ import { usePetPosition } from "./use-pet-position";
 import { useAgentView } from "./use-agent-view";
 import { buildTraceSteps, mergeWorkLog, type TraceStep } from "./agent-trace";
 import type { ChatContext, PetEmotion } from "../shared/agent-contract";
-import type { Conversation } from "../domain/types";
-import { PetCoach } from "./PetCoach";
+import { XIAOBEI_BUBBLE_CHARS } from "../shared/agent-contract";
+import { shortcutFromUtterance } from "./slash-commands";
 import "./desk-pet.css";
 
 /** 桌宠版式:女版 / 男版。 */
@@ -63,12 +63,11 @@ function loadVariant(): PetVariant {
  * 顶部 Agent 状态条(两档放权+工作日志),待拍板卡插进对话流,⋯ 菜单收编常驻按钮。
  * 消息状态在 useChatSession,互动感在 usePetMood,位置在 usePetPosition,
  * 工单/放权数据在 useAgentView,App 经 DeskPetHandle 发命令。
- * 通话中照样能聊(桌宠站客户一侧,消息不进经理上下文),但不主动弹面板/气泡。
+ * 通话中玩家点头像打开同一块面板,顶上引用当前经理原话;不主动弹面板或气泡。
  */
 export function DeskPet({
   expression = "wave",
   inCall = false,
-  coachCall,
   agent = defaultAgent,
   onQuickAction,
   onOpenDemo,
@@ -81,7 +80,6 @@ export function DeskPet({
 }: {
   expression?: PetExpression;
   inCall?: boolean;
-  coachCall?: Pick<Conversation, "id" | "turns" | "productFacts" | "revision">;
   agent?: AgentClient;
   /** 快捷芯片跳转(工单 10):回话照发,App 按动作跳到对应视图。 */
   onQuickAction?: (action: QuickRingAction) => void;
@@ -110,17 +108,28 @@ export function DeskPet({
   const avatarRef = useRef<HTMLButtonElement>(null);
   const panelOpenRef = useRef(false);
 
-  const session = useChatSession({ agent, view, chatContext, gameId, onOpenDemo });
-  const botMode = Boolean(agent.sendBotChat);
-  const showAgentControls = !botMode || showDemoControls;
   const mood = usePetMood({ onSingleClick: () => (panelOpenRef.current ? closePanel() : openPanel()) });
   const position = usePetPosition({ rootRef, onInteract: mood.wake });
+  const sayRef = useRef(mood.say);
+  const inCallRef = useRef(inCall);
+  const session = useChatSession({
+    agent,
+    view,
+    chatContext,
+    gameId,
+    onOpenDemo,
+    onPetReply: (message) => {
+      if (!panelOpenRef.current && !inCallRef.current) {
+        sayRef.current([...message.body].slice(0, XIAOBEI_BUBBLE_CHARS).join(""));
+      }
+    },
+  });
+  const showAgentControls = true;
+  void showDemoControls;
   const agentView = useAgentView(agent);
   // 事件回调经 ref 取最新实现(会话/情绪/视图每次渲染都是新对象),订阅 effect 才能只依赖 agent。
   const sessionRef = useRef(session);
-  const sayRef = useRef(mood.say);
   const expressRef = useRef(mood.express);
-  const inCallRef = useRef(inCall);
   const upsertReportRef = useRef(agentView.upsertReport);
   useEffect(() => {
     sessionRef.current = session;
@@ -168,11 +177,11 @@ export function DeskPet({
     if (!next) setLogHighlight(null);
   }
 
-  /** 快捷芯片与回复建议:回话照发、跳转照跳,点完收起面板。 */
+  /** / 命令:同一句话进会话,并做对应的跳转。不另开一张对话工单。 */
   function runQuickAction(label: string) {
     mood.wake();
-    agentView.sendCommand(label);
-    onQuickAction?.(label as QuickRingAction); // 建议文案即芯片文案(服务端意图表同一份)
+    session.send(label);
+    onQuickAction?.(label as QuickRingAction);
     closePanel();
   }
 
@@ -285,9 +294,7 @@ export function DeskPet({
   const anchored = position.pos ? { left: position.pos.left, top: position.pos.top, right: "auto", bottom: "auto" } : undefined;
   const avatarAlt = `桌宠·${variantLabel[variant]}·${expressionLabel[shownExpression]}`;
 
-  const coachRound = inCall && coachCall
-    ? [...coachCall.turns].reverse().find((turn) => turn.speaker === "manager")
-    : undefined;
+  const focusTurn = chatContext?.phase === "game" ? chatContext.focusTurn : undefined;
 
   // 头顶悬浮栈:气泡在上、面板贴身,右对齐不遮主内容。
   const popovers = (
@@ -298,23 +305,14 @@ export function DeskPet({
           {mood.bubble}
         </p>
       )}
-      {!dnd && coachCall && coachRound && (
-        <PetCoach
-          key={JSON.stringify([coachCall.id, coachRound.number, coachRound.text])}
-          conversationId={coachCall.id}
-          revision={coachCall.revision}
-          round={{ number: coachRound.number, text: coachRound.text }}
-          facts={coachCall.productFacts}
-          askModel={agent.askPetCoach}
-        />
-      )}
       {panelOpen && !dnd && (
         <PetChatPanel
           messages={session.messages}
-          notebook={botMode ? {
+          focusTurn={focusTurn}
+          notebook={{
             notes: session.notes, save: session.saveNote, remove: session.deleteNote,
             activeStep: session.activeStep, showAgentControls,
-          } : undefined}
+          }}
           awaitingReply={session.awaitingReply}
           tickets={showAgentControls ? pendingTickets : []}
           annotating={session.annotating}
@@ -329,6 +327,8 @@ export function DeskPet({
           onSend={(text) => {
             mood.wake();
             session.send(text);
+            const shortcut = shortcutFromUtterance(text);
+            if (shortcut) onQuickAction?.(shortcut);
           }}
           onClose={closePanel}
           onClear={session.clearHistory}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { SLASH_COMMANDS, isSlashActive, resolveSlashCommand, slashCandidates } from "./slash-commands";
+import { SLASH_COMMANDS, isSlashActive, resolveSlashCommand, shortcutFromUtterance, slashCandidates } from "./slash-commands";
 
 /** 工单 15 测试缝(纯函数):「/」命令补全的候选过滤与解析。 */
 
@@ -32,5 +32,11 @@ describe("slash-commands(工单 15)", () => {
     expect(resolveSlashCommand("/投研 ")).toBeNull();
     expect(resolveSlashCommand("在吗")).toBeNull();
     expect(resolveSlashCommand("/不认识")).toBeNull();
+  });
+
+  it("自然语言换客户 / 再来一局是同一组快捷动作,长句子不算", () => {
+    expect(shortcutFromUtterance("换个客户")).toBe("换个客户");
+    expect(shortcutFromUtterance("帮我再来一局")).toBe("再来一局");
+    expect(shortcutFromUtterance("经理这句是想换个客户吗")).toBeNull();
   });
 });

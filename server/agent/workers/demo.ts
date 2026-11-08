@@ -9,7 +9,7 @@ import type { AgentReport, AgentTicket, AgentTrigger, PetEmotion, PostgameBasis 
  * 工单 06 起:对局结束事件(game-ended)由复盘脚本起草一句话。
  * 工单 07 起:拖文件到桌宠(dropped)走素材草稿脚本,停在 waiting 草稿待审。
  * 工单 16 起:牌局事件(经理出卡/隐藏牌被问到/玩家揭示)落成带表情的
- * dropped Report——对局中不说话,只用表情(spec 故事 3),前端据此驱动微反应。
+ * dropped Report,只驱动微反应。玩家在通话里开口时,小贝在同一段会话里回答。
  */
 
 /** 牌局事件(工单 16):是否桌上的反应类触发。 */
@@ -64,6 +64,14 @@ export class DemoWorker implements AgentWorker {
   async run(ticket: AgentTicket, trigger: AgentTrigger, options: WorkerRunOptions): Promise<AgentReport> {
     const { onReport, context = { tickets: async () => [] } } = options;
     if (trigger?.kind === "game-ended") return this.runPostgameReview(ticket, trigger);
+    if (trigger?.kind === "turn-ended") {
+      // R6 的嘴:缺省 observe 不会执行到这里。自动放权时也不把隐藏牌写进汇报。
+      return {
+        ticketId: ticket.id,
+        status: "dropped",
+        text: "这一轮只核对经理有没有问到隐藏信息，不在这里开口。",
+      };
+    }
     if (isTableReaction(trigger?.kind)) return runTableReaction(ticket, trigger.kind);
     if (trigger?.kind === "dropped") return this.runMaterialDraft(ticket, onReport);
     if (trigger?.kind === "annotate") return this.runAnnotate(ticket, trigger, onReport, context);

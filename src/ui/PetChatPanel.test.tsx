@@ -102,46 +102,26 @@ describe("对话面板(工单 12/15)", () => {
     expect(props.onSend).not.toHaveBeenCalled();
   });
 
-  it("空对话显示 2 个开场建议:点击即作为一句话发出(工单 15:固定芯片已删)", async () => {
-    const user = userEvent.setup();
-    const props = renderPanel();
-    const suggestions = within(screen.getByRole("group", { name: "开场建议" })).getAllByRole("button");
-    expect(suggestions).toHaveLength(2);
-    await user.click(suggestions[0]!);
-    expect(props.onSend).toHaveBeenCalledWith(suggestions[0]!.textContent);
+  it("空对话不给开场芯片,只留一句可以说的提示", () => {
+    renderPanel();
+    expect(screen.queryByRole("group", { name: "开场建议" })).not.toBeInTheDocument();
+    expect(screen.getByText(/直接说就行/)).toBeInTheDocument();
   });
 
-  it("有对话后不再显示开场建议,只留模型本轮给出的建议动作(工单 15)", () => {
+  it("回复上不渲染建议动作按钮;通话中只引用经理原话", () => {
     renderPanel({
       messages: [
-        msg("player", "在吗"),
-        msg("pet", "我在呢。", { quickActions: ["本周投研"] }),
-      ],
-    });
-    expect(screen.queryByRole("group", { name: "开场建议" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("group", { name: "快捷芯片" })).not.toBeInTheDocument();
-    expect(
-      within(screen.getByRole("log", { name: "对话记录" })).getByRole("button", { name: "本周投研" }),
-    ).toBeInTheDocument();
-  });
-
-  it("消息按说话人排开;回复带的建议动作渲染成按钮,点了作为一句话发出(工单 16)", async () => {
-    const user = userEvent.setup();
-    const props = renderPanel({
-      messages: [
         msg("player", "经理这句什么意思"),
-        msg("pet", "他在探你的底。", { quickActions: ["他在探我底？", "帮我想个推托的说法"] }),
+        msg("pet", "他在探你的底。"),
       ],
+      focusTurn: { turnNumber: 2, text: "您那笔钱大概什么时候用？" },
     });
-
     const list = screen.getByRole("log", { name: "对话记录" });
     expect(list).toHaveTextContent("他在探你的底。");
-    expect(props.onQuickAction).not.toHaveBeenCalled();
-    // 动态建议是对话式提示:点了发给桌宠,不走快捷环导航。
-    await user.click(within(list).getByRole("button", { name: "他在探我底？" }));
-    expect(props.onSend).toHaveBeenCalledWith("他在探我底？");
-    await user.click(within(list).getByRole("button", { name: "帮我想个推托的说法" }));
-    expect(props.onSend).toHaveBeenCalledWith("帮我想个推托的说法");
+    expect(list).toHaveTextContent("您那笔钱大概什么时候用？");
+    expect(within(list).queryByRole("button", { name: "他在探我底？" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "解释这句" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "核对本局产品卡" })).not.toBeInTheDocument();
   });
 
   it("等待回复时显示「…」;流式正文开始上屏后「…」让位", () => {
@@ -225,7 +205,7 @@ describe("对话面板(工单 12/15)", () => {
 
   it("空对话给开场文案", () => {
     renderPanel();
-    expect(screen.getByRole("log", { name: "对话记录" })).toHaveTextContent(/随时叫我/);
+    expect(screen.getByRole("log", { name: "对话记录" })).toHaveTextContent(/直接说就行/);
   });
 });
 

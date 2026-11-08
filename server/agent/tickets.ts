@@ -15,6 +15,7 @@ const WORKER_LABELS: Record<AgentTrigger["kind"], string> = {
   "card-played": "牌局",
   "hidden-raised": "牌局",
   "hidden-revealed": "牌局",
+  "turn-ended": "轮次",
   dropped: "素材",
   "cards-published": "盲区",
   "model-error": "报错处置",

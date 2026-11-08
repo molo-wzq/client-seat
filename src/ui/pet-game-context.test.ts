@@ -73,6 +73,7 @@ describe("牌局快照组装(工单 16)", () => {
       turnNumber: 1,
       maxTurns: 12,
       revealedHidden: 0,
+      focusTurn: { turnNumber: 1, text: "最近行里有个新活动，您感兴趣吗？" },
     });
   });
 

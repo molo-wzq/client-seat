@@ -17,8 +17,9 @@ import type {
 export const DEFAULT_ACCEPT_MODE: AcceptMode = "observe";
 
 /**
- * 主动规则 R1–R7:R1–R3 对应当前已上线的触发类型(game-ended/dropped/annotate);
- * R4–R7 的触发类型由后续工单补上,规则先入册,类型一到即可命中。
+ * 主动规则 R1–R7。R6 匹配 table + turn-ended(经理一轮落定后由对局发出),
+ * 判定这一轮经理有没有问到隐藏信息。card-played / hidden-raised / hidden-revealed
+ * 只驱动表情,不命中 R6。缺省放权仍是 observe:命中只记评估,不自动立项。
  */
 export const POLICY_RULES: readonly AgentPolicyRule[] = [
   {

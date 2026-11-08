@@ -736,51 +736,17 @@
   font-weight: 700;
 }
 
-.desk-pet-coach {
-  display: grid;
-  justify-items: end;
-  gap: 6px;
-  width: min(280px, calc(100vw - 36px));
-}
-
-.desk-pet-coach-hint,
-.desk-pet-coach-panel {
-  box-sizing: border-box;
-  width: 100%;
-  margin: 0;
-  padding: 10px 12px;
-  border: 1px solid #b28c52;
-  border-radius: 12px 12px 3px 12px;
+.desk-pet-focus {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-left: 2px solid #b28c52;
   background: #f4ecdc;
   color: #4d3624;
-  box-shadow: 0 4px 12px #0003;
-  font-size: 13px;
-  overflow-wrap: anywhere;
+  font-size: 12px;
 }
 
-.desk-pet-coach-panel {
-  max-height: min(360px, 48vh);
-  overflow: auto;
-}
-
-.desk-pet-coach-panel p { margin: 6px 0; }
-.desk-pet-coach-panel blockquote {
-  margin: 6px 0;
-  padding-left: 8px;
-  border-left: 2px solid #b28c52;
-}
-
-.desk-pet-coach-prompts,
-.desk-pet-coach-panel form {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.desk-pet-coach-panel form { margin-top: 8px; }
-.desk-pet-coach-panel input { flex: 1; min-width: 0; }
-.desk-pet-coach-message { border-top: 1px solid #b28c5266; margin-top: 6px; }
-.desk-pet-coach-message p { white-space: pre-wrap; }
+.desk-pet-focus p { margin: 0; }
+.desk-pet-focus p + p { margin-top: 4px; }
 
 /* 所有动效尊重 prefers-reduced-motion(工单 12;审查 R4:块放文件末尾,
    之后新增的 animation 规则别再写在它后面,免得同优先级盖掉这里的 none)。 */

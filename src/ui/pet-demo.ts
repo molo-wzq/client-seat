@@ -134,7 +134,7 @@ export const DEMO_STEPS: readonly DemoStep[] = [
     { kind: "focus", panel: "chat" },
     { kind: "chat", text: "小贝，跟观众打个招呼" },
   ] },
-  // ② 陪看对局:经理出招,桌宠只用表情回应(spec 故事 3,不说话)
+  // ② 陪看对局:玩家没问时桌宠只用表情;问了就在同一段会话里答
   { act: 2, note: "第②幕·陪看:经理用『钱有窗口』问季度奖,桌宠点头", holdMs: 2400, actions: [
     { kind: "scene", scene: "table" },
     { kind: "manager-move", move: "王经理：您那笔季度奖到账了吧？放活期可惜了。", cardName: "钱有窗口", reaction: "wave", reactionLabel: "点头" },

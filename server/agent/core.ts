@@ -152,6 +152,10 @@ export function createAgentCore(deps: {
       if (!KIND_SOURCES[input.kind].includes(input.source)) {
         throw new ValidationError(`触发来源与类型不匹配:${input.kind} 只能来自 ${KIND_SOURCES[input.kind].join("/")}`);
       }
+      // 玩家对小贝说的话不进触发链:不写账、不开 commandId 线程、不另立一张对话工单。
+      if (input.kind === "chat") {
+        throw new ValidationError("对小贝说的话不走触发，请改走 /api/agent/chat");
+      }
       const trigger: AgentTrigger = { ...input, id: randomId(), data: sanitizeTriggerData(input.data) };
       if (trigger.kind === "hidden-revealed" || trigger.kind === "hidden-raised") {
         trigger.data = { gameId: trigger.data.gameId };
@@ -286,6 +290,19 @@ function evaluate(trigger: AgentTrigger): AgentDecision {
       ? { triggerId: trigger.id, admitted: true, reason: "对局结束,准予复盘立项" }
       : { triggerId: trigger.id, admitted: false, reason: "对局结束事件不完整(缺对局号或轮次),不立项" };
   }
+  if (trigger.kind === "turn-ended") {
+    const gameId = trigger.data.gameId;
+    const turnNumber = trigger.data.turnNumber;
+    const complete =
+      typeof gameId === "string" &&
+      gameId !== "" &&
+      typeof turnNumber === "number" &&
+      Number.isInteger(turnNumber) &&
+      turnNumber >= 1;
+    return complete
+      ? { triggerId: trigger.id, admitted: true, reason: "经理轮次落定,准予核对是否问到隐藏信息" }
+      : { triggerId: trigger.id, admitted: false, reason: "轮次结束事件不完整(缺对局号或轮次),不立项" };
+  }
   if (trigger.kind === "card-played" || trigger.kind === "hidden-raised" || trigger.kind === "hidden-revealed") {
     // 牌局事件(工单 16):只做反应,须带对局号;缺了不立项(与 game-ended 同口径)。
     const gameId = trigger.data.gameId;
@@ -341,7 +358,8 @@ function threadOf(trigger: AgentTrigger): AgentThread {
     trigger.kind === "game-ended" ||
     trigger.kind === "card-played" ||
     trigger.kind === "hidden-raised" ||
-    trigger.kind === "hidden-revealed"
+    trigger.kind === "hidden-revealed" ||
+    trigger.kind === "turn-ended"
   ) {
     return { kind: "gameId", key: typeof trigger.data.gameId === "string" ? trigger.data.gameId : "" };
   }
@@ -386,6 +404,7 @@ const KIND_SOURCES: Record<AgentTrigger["kind"], AgentTrigger["source"][]> = {
   "card-played": ["table"],
   "hidden-raised": ["table"],
   "hidden-revealed": ["table"],
+  "turn-ended": ["table"],
   dropped: ["materials"],
   "cards-published": ["materials"],
   "model-error": ["system"],
@@ -405,6 +424,7 @@ const TRIGGER_KINDS: AgentTrigger["kind"][] = [
   "card-played",
   "hidden-raised",
   "hidden-revealed",
+  "turn-ended",
 ];
 
 /** 拖入文件的类型白名单(工单 07):录音 / 生客画像 JSON / 角色卡。 */

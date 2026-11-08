@@ -15,12 +15,6 @@ export const QUICK_RING = ["换个客户", "再来一局", "上局复盘", "本�
 /** 快捷动作(工单 10→15):回话之外还要跳转,App 按动作决定去哪个视图。 */
 export type QuickRingAction = (typeof QUICK_RING)[number];
 
-/** 空对话的 2 个开场建议(工单 15:固定芯片已删,开场之外只显示模型本轮建议动作)。 */
-export const OPENING_SUGGESTIONS: readonly string[] = [
-  "这周投研帮我划重点",
-  "陪我看看上局哪里值得学",
-];
-
 /** 对话输入「演示」(工单 10):唤出一键演示控制条,不进 Agent 链路。 */
 export const DEMO_COMMAND = "演示";
 
