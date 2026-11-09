@@ -199,7 +199,7 @@ export function createPetBot(deps: {
       const name = clip(result.label.trim() || ticketId, 40);
       done(decision.verb === "同意"
         ? `[cheer]已同意 ${ticketId}：${name}`
-        : `[think]已驳回 ${ticketId}：${name}`);
+        : `[think]已驳回 ${ticketId}：${name}`, ticketId);
       return;
     }
 

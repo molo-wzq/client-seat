@@ -173,8 +173,10 @@ it("同一段会话里追问不另开工单;审批才跟踪,复盘只引用资�
   await deciding({ sessionId: "same-session", text: "同意", history: [], notes: [], targetTicketId: "t-work" }, (event) => approval.push(event));
   expect(decided).toEqual([{ verb: "同意", ticketId: "t-work" }]);
   expect(opened).toEqual([]);
-  expect(approval.at(-1)).toMatchObject({ type: "done", message: { body: "已同意 t-work：本周投研先押 AI 还是消费" } });
-  expect((approval.at(-1) as { message: { ticketId?: string } }).message.ticketId).toBeUndefined();
+  expect(approval.at(-1)).toMatchObject({
+    type: "done",
+    message: { ticketId: "t-work", body: "已同意 t-work：本周投研先押 AI 还是消费" },
+  });
 });
 
 it("聊天里没点名的同意不动任何待审卡,点名了也只改那一张、不另开工单", async () => {
@@ -232,8 +234,10 @@ it("聊天里没点名的同意不动任何待审卡,点名了也只改那一张
   expect(await ticketCount()).toBe(2);
 
   const approved = await ask("同意", older);
-  expect(approved).toMatchObject({ type: "done" });
-  expect(JSON.stringify(approved)).toContain(older);
+  expect(approved).toMatchObject({
+    type: "done",
+    message: { ticketId: older, body: expect.stringContaining(older) },
+  });
   expect(JSON.stringify(approved)).toContain("本周投研");
   expect(JSON.stringify(approved)).not.toContain("好，已照办");
   expect(await status(older)).toBe("ready");
@@ -241,7 +245,11 @@ it("聊天里没点名的同意不动任何待审卡,点名了也只改那一张
   expect(await ticketCount()).toBe(2);
 
   const rejected = await ask("驳回", newer);
-  expect(JSON.stringify(rejected)).toContain(newer);
+  expect(rejected).toMatchObject({
+    type: "done",
+    message: { ticketId: newer, body: expect.stringContaining(newer) },
+  });
+  expect(JSON.stringify(rejected)).toContain("本周投研");
   expect(await status(newer)).toBe("dropped");
   expect(await status(older)).toBe("ready");
   expect(await ticketCount()).toBe(2);
