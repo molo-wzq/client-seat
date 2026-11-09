@@ -5,16 +5,19 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { expect, it } from "vitest";
+import { assemblePetSystemPrompt, DEFAULT_PET_PERSONA } from "./pet-persona";
+import type { AgentTriggerInput } from "../../src/shared/agent-contract";
 import { FakeModelAdapter } from "../../src/adapters/fake-model-adapter";
 import { createProductCore } from "../../src/domain/product-core";
 import { InMemoryStorage } from "../../src/product/in-process-product-api";
 import { createAgentClient } from "../../src/ui/agent-client";
-import type { BotChatEvent } from "../../src/shared/pet-bot-contract";
+import type { XiaobeiChatEvent } from "../../src/shared/agent-contract";
 import { createRequestListener } from "../app-server";
 import { buildDefaultResearchReport } from "../report-parser";
 import { createBotArchive, loadBotReports } from "./bot-archive";
 import { createAgentCore } from "./core";
 import { createPetBot } from "./pet-bot";
+import { createModelWorkers, runDecisionOnTicket } from "./workers";
 import { InMemoryLedgerStorage } from "./storage";
 import { DemoWorker } from "./workers/demo";
 
@@ -63,8 +66,8 @@ it("通过实际 HTTP 跨局、跨期查证据，个人笔记和回复不进共�
     if (!address || typeof address === "string") throw new Error("HTTP server is not listening");
     const base = `http://127.0.0.1:${address.port}`;
     const run = async (client: ReturnType<typeof createAgentClient>, notes: { id: string; text: string; evidence: [] }[]) => {
-      const events: BotChatEvent[] = [];
-      await client.sendBotChat?.({ text: "比较两场，再看历期周报和笔记", notes, history: [] }, (event) => events.push(event));
+      const events: XiaobeiChatEvent[] = [];
+      await client.sendChat({ sessionId: "session-a", text: "比较两场，再看历期周报和笔记", notes, history: [] }, (event) => events.push(event));
       return events;
     };
     const [own, other] = await Promise.all([
@@ -73,11 +76,11 @@ it("通过实际 HTTP 跨局、跨期查证据，个人笔记和回复不进共�
     ]);
     expect(own.map(({ type }) => type)).toEqual(["step", "step", "delta", "delta", "done"]);
     const done = own.at(-1);
-    expect(done).toMatchObject({ type: "done", text: "找到了你的笔记。" });
+    expect(done).toMatchObject({ type: "done", message: { body: "找到了你的笔记。", speaker: "pet" } });
     expect(JSON.stringify(done)).toContain("第一期");
     expect(JSON.stringify(done)).toContain("第二期");
     expect(JSON.stringify(other)).not.toContain("合成私有笔记");
-    expect(other.at(-1)).toMatchObject({ type: "done", text: "没有找到个人笔记。" });
+    expect(other.at(-1)).toMatchObject({ type: "done", message: { body: "没有找到个人笔记。" } });
     expect(broadcast).toEqual([]);
     expect(await agent.ledger()).toEqual([]);
     for (const [source, kind] of [["pet", "chat"], ["research", "research-due"], ["materials", "cards-published"]]) {
@@ -94,4 +97,160 @@ it("通过实际 HTTP 跨局、跨期查证据，个人笔记和回复不进共�
     }
     await rm(directory, { recursive: true, force: true });
   }
+});
+
+it("同一段会话里追问不另开工单;审批才跟踪,复盘只引用资料", async () => {
+  const prompts: string[] = [];
+  const opened: AgentTriggerInput[] = [];
+  const model = {
+    async completeStream(messages: import("./workers").AgentModelMessage[], delta?: (piece: string) => void) {
+      prompts.push(messages.map((message) => message.content).join("\n"));
+      const text = "[wave]经理这句是在探安排,你可以先问条件,我不定你怎么接。";
+      delta?.(text);
+      return text;
+    },
+  };
+  const petBot = createPetBot({
+    archive: () => ({
+      search: () => [{ id: "game:1", title: "上局", excerpt: "经理先接住了到期的话。" }],
+      periods: [],
+    }) as unknown as ReturnType<Parameters<typeof createPetBot>[0]["archive"]>,
+    model,
+    openWork: async (input) => {
+      opened.push(input);
+      return {
+        triggerId: "tr-work",
+        admitted: true,
+        ticket: { id: "t-work", triggerId: "tr-work", thread: { kind: "commandId", key: "tr-work" } },
+        report: { ticketId: "t-work", status: "ready", text: "好，已照办。" },
+      };
+    },
+  });
+  const first: import("../../src/shared/agent-contract").XiaobeiChatEvent[] = [];
+  await petBot({ sessionId: "same-session", text: "在吗", history: [], notes: [] }, (event) => first.push(event));
+  const follow: typeof first = [];
+  await petBot({
+    sessionId: "same-session",
+    text: "那经理这句呢",
+    history: [
+      { speaker: "player", body: "在吗" },
+      { speaker: "pet", body: "我在呢" },
+    ],
+    notes: [],
+  }, (event) => follow.push(event));
+  expect(prompts.at(-1)).toContain("在吗");
+  expect(prompts.at(-1)).toContain("我在呢");
+  expect(assemblePetSystemPrompt(DEFAULT_PET_PERSONA)).not.toContain("【建议】");
+  expect(opened.filter((input) => input.kind === "chat")).toEqual([]);
+
+  opened.length = 0;
+  const review: typeof first = [];
+  await petBot({ sessionId: "same-session", text: "帮我看看上局复盘", history: [], notes: [] }, (event) => review.push(event));
+  const reviewDone = review.at(-1);
+  expect(reviewDone).toMatchObject({ type: "done" });
+  expect(JSON.stringify(reviewDone)).toContain("经理先接住了到期的话");
+  expect(opened).toEqual([]);
+
+  const decided: Array<{ verb: string; ticketId: string }> = [];
+  const deciding = createPetBot({
+    archive: () => ({ search: () => [], periods: [] }) as unknown as ReturnType<Parameters<typeof createPetBot>[0]["archive"]>,
+    openWork: async (input) => {
+      opened.push(input);
+      return { triggerId: "tr-work", admitted: false, ticket: null, report: null };
+    },
+    decideCard: async (input) => {
+      decided.push({ verb: input.verb, ticketId: input.ticketId });
+      return { acted: true, label: "本周投研先押 AI 还是消费", detail: "好，已照办。" };
+    },
+  });
+  const bare: typeof first = [];
+  await deciding({ sessionId: "same-session", text: "同意", history: [], notes: [] }, (event) => bare.push(event));
+  expect(decided).toEqual([]);
+  expect(opened).toEqual([]);
+  expect(bare.at(-1)).toMatchObject({ type: "done", message: { body: "你是说同意哪张？" } });
+
+  const approval: typeof first = [];
+  await deciding({ sessionId: "same-session", text: "同意", history: [], notes: [], targetTicketId: "t-work" }, (event) => approval.push(event));
+  expect(decided).toEqual([{ verb: "同意", ticketId: "t-work" }]);
+  expect(opened).toEqual([]);
+  expect(approval.at(-1)).toMatchObject({
+    type: "done",
+    message: { ticketId: "t-work", body: "已同意 t-work：本周投研先押 AI 还是消费" },
+  });
+});
+
+it("聊天里没点名的同意不动任何待审卡,点名了也只改那一张、不另开工单", async () => {
+  const core = createAgentCore({
+    storage: new InMemoryLedgerStorage(),
+    worker: createModelWorkers({ demoSleep: async () => undefined }),
+  });
+  const ticketCount = async () => (await core.ledger()).filter((entry) => entry.type === "ticket").length;
+  const openDraft = () => core.emitTrigger({ source: "pet", kind: "command", data: { text: "本周投研" } });
+  const first = await openDraft();
+  const older = first.ticket!.id;
+  expect(await ticketCount()).toBe(1);
+
+  const bot = createPetBot({
+    archive: () => ({ search: () => [], periods: [] }) as unknown as ReturnType<Parameters<typeof createPetBot>[0]["archive"]>,
+    openWork: (input) => core.emitTrigger(input),
+    decideCard: async (input) => {
+      const card = (await core.tickets()).find((ticket) => ticket.ticketId === input.ticketId);
+      const result = await runDecisionOnTicket({
+        tickets: () => core.tickets(),
+        writeReport: (report) => core.appendSystemReport(report),
+        verb: input.verb,
+        ticketId: input.ticketId,
+        ...(input.reason ? { reason: input.reason } : {}),
+      });
+      return { acted: result.acted, label: card?.text?.trim() || input.ticketId, detail: result.reply };
+    },
+  });
+  const ask = async (text: string, targetTicketId?: string) => {
+    const events: XiaobeiChatEvent[] = [];
+    await bot({
+      sessionId: "s",
+      text,
+      history: [],
+      notes: [],
+      ...(targetTicketId ? { targetTicketId } : {}),
+    }, (event) => events.push(event));
+    return events.at(-1);
+  };
+  const status = async (id: string) => (await core.tickets()).find((ticket) => ticket.ticketId === id)?.status;
+
+  const alone = await ask("同意");
+  expect(alone).toMatchObject({ type: "done", message: { body: "你是说同意哪张？" } });
+  expect(await status(older)).toBe("waiting");
+  expect(await ticketCount()).toBe(1);
+
+  const second = await openDraft();
+  const newer = second.ticket!.id;
+  expect(await ticketCount()).toBe(2);
+
+  const untargeted = await ask("同意");
+  expect(untargeted).toMatchObject({ type: "done", message: { body: "你是说同意哪张？" } });
+  expect(await status(older)).toBe("waiting");
+  expect(await status(newer)).toBe("waiting");
+  expect(await ticketCount()).toBe(2);
+
+  const approved = await ask("同意", older);
+  expect(approved).toMatchObject({
+    type: "done",
+    message: { ticketId: older, body: expect.stringContaining(older) },
+  });
+  expect(JSON.stringify(approved)).toContain("本周投研");
+  expect(JSON.stringify(approved)).not.toContain("好，已照办");
+  expect(await status(older)).toBe("ready");
+  expect(await status(newer)).toBe("waiting");
+  expect(await ticketCount()).toBe(2);
+
+  const rejected = await ask("驳回", newer);
+  expect(rejected).toMatchObject({
+    type: "done",
+    message: { ticketId: newer, body: expect.stringContaining(newer) },
+  });
+  expect(JSON.stringify(rejected)).toContain("本周投研");
+  expect(await status(newer)).toBe("dropped");
+  expect(await status(older)).toBe("ready");
+  expect(await ticketCount()).toBe(2);
 });

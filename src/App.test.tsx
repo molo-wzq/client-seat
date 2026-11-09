@@ -251,6 +251,12 @@ describe("桌宠复盘一句话(工单 06)", () => {
       .find((input) => input.kind === "card-played");
     expect(cardPlayed).toMatchObject({ source: "table" });
     expect(typeof cardPlayed?.data.cardName).toBe("string");
+    const turnEnded = sendTrigger.mock.calls
+      .map((call) => call[0] as AgentTriggerInput)
+      .find((input) => input.kind === "turn-ended");
+    expect(turnEnded).toMatchObject({ source: "table", data: { turnNumber: 1 } });
+    expect(typeof turnEnded?.data.gameId).toBe("string");
+    expect(turnEnded?.kind).not.toBe("card-played");
 
     // 结算页插槽:一句话 + 展开依据(第 1 轮 · 策略卡)。
     expect(screen.getByRole("heading", { name: "桌宠复盘" })).toBeInTheDocument();

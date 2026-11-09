@@ -12,9 +12,9 @@ import type {
   AgentPolicy,
   AgentTicketView,
   AgentTriggerInput,
+  XiaobeiChatEvent,
+  XiaobeiChatInput,
 } from "../shared/agent-contract";
-import type { BotChatEvent, BotChatInput } from "../shared/pet-bot-contract";
-import type { PetCoachRequest, PetCoachResponse } from "../shared/pet-coach-contract";
 
 /** 注入缝:测试传假 fetch / 假 EventSource;缺省回落浏览器全局。 */
 export interface AgentClientDeps {
@@ -24,8 +24,8 @@ export interface AgentClientDeps {
 }
 
 export interface AgentClient {
-  sendBotChat?(input: BotChatInput, onEvent: (event: BotChatEvent) => void): Promise<void>;
-  askPetCoach?(conversationId: string, input: PetCoachRequest, signal?: AbortSignal): Promise<PetCoachResponse>;
+  /** 对小贝说话的唯一入口:POST /api/agent/chat。不经 emitTrigger。 */
+  sendChat(input: XiaobeiChatInput, onEvent: (event: XiaobeiChatEvent) => void): Promise<void>;
   /** 把一句命令作为 pet 触发给 Router;失败抛错误消息(UI 层展示)。 */
   sendCommand(text: string): Promise<void>;
   /** 发任意触发并拿回链路结果(工单 06:结算页自动发 game-ended,读最终 Report);失败抛错误消息。 */
@@ -46,7 +46,7 @@ export function createAgentClient(deps: AgentClientDeps = {}): AgentClient {
   const { baseUrl = "" } = deps;
 
   return {
-    async sendBotChat(input, onEvent) {
+    async sendChat(input, onEvent) {
       const doFetch = deps.fetch ?? globalThis.fetch.bind(globalThis);
       const response = await doFetch(`${baseUrl}/api/agent/chat`, {
         method: "POST",
@@ -67,7 +67,7 @@ export function createAgentClient(deps: AgentClientDeps = {}): AgentClient {
             const line = buffer.slice(0, newline);
             buffer = buffer.slice(newline + 1);
             if (!line) continue;
-            const event = JSON.parse(line) as BotChatEvent;
+            const event = JSON.parse(line) as XiaobeiChatEvent;
             if (event.type === "error") throw new Error(event.text);
             onEvent(event);
             if (event.type === "done") return;
@@ -94,24 +94,6 @@ export function createAgentClient(deps: AgentClientDeps = {}): AgentClient {
         throw new Error(body?.error || `触发发送失败(HTTP ${response.status})`);
       }
       return (await response.json()) as EmitOutcome;
-    },
-
-    async askPetCoach(conversationId, input, signal) {
-      const doFetch = deps.fetch ?? globalThis.fetch.bind(globalThis);
-      const response = await doFetch(
-        `${baseUrl}/api/conversations/${encodeURIComponent(conversationId)}/pet-coach`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(input),
-          signal,
-        },
-      );
-      if (!response.ok) {
-        const payload = (await response.json().catch(() => ({}))) as { error?: string };
-        throw new Error(payload.error || `桌宠私聊失败(${response.status})`);
-      }
-      return (await response.json()) as PetCoachResponse;
     },
 
     async tickets() {

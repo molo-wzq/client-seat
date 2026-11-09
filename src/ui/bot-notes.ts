@@ -1,9 +1,9 @@
-import type { BotEvidence, BotNote } from "../shared/pet-bot-contract";
+import type { XiaobeiEvidence, XiaobeiNote } from "../shared/agent-contract";
 
 export const BOT_NOTES_KEY = "desk-pet-notes";
 export const BOT_NOTES_LIMIT = 30;
 
-export function readBotEvidence(value: unknown): BotEvidence[] {
+export function readBotEvidence(value: unknown): XiaobeiEvidence[] {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 20).flatMap((item) => {
     if (!item || typeof item !== "object") return [];
@@ -14,7 +14,7 @@ export function readBotEvidence(value: unknown): BotEvidence[] {
   });
 }
 
-export function loadBotNotes(): BotNote[] {
+export function loadBotNotes(): XiaobeiNote[] {
   try {
     const value: unknown = JSON.parse(window.localStorage.getItem(BOT_NOTES_KEY) ?? "[]");
     if (!Array.isArray(value)) return [];

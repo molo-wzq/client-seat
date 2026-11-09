@@ -27,3 +27,16 @@ export function slashCandidates(draft: string): ReadonlyArray<{ command: string;
 export function resolveSlashCommand(text: string): QuickRingAction | null {
   return SLASH_COMMANDS.find((item) => item.command === text)?.action ?? null;
 }
+
+/**
+ * 自然语言里的同一组快捷动作。只认整句就是这件事,
+ * 长问题里顺带出现这些词不算,避免把正在说的话截走。
+ */
+export function shortcutFromUtterance(text: string): QuickRingAction | null {
+  const trimmed = text.trim().replace(/[。！!？?]$/u, "");
+  if (/^(?:请|帮我|我想)?(?:换个客户|换客户|换一位客户)$/.test(trimmed)) return "换个客户";
+  if (/^(?:请|帮我|我想)?再来一局$/.test(trimmed)) return "再来一局";
+  if (/^(?:请|帮我|我想)?(?:看看)?上局复盘$/.test(trimmed)) return "上局复盘";
+  if (/^(?:请|帮我|我想)?(?:看看)?本周投研$/.test(trimmed)) return "本周投研";
+  return null;
+}

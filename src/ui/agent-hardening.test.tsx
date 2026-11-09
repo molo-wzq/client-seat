@@ -16,6 +16,7 @@ it('spec story 3: incoming channel must stay silent during a call', async () => 
     async policy() { return {version:1,acceptMode:'observe',rules:[]}; },
     async setAcceptMode(mode) { return {version:2,acceptMode:mode,rules:[]}; },
     async evals() { return []; },
+    async sendChat() {},
   };
   render(<DeskPet inCall agent={agent} />);
   await act(async () => {
@@ -39,6 +40,7 @@ it('existing bubble is hidden when entering a call', async () => {
     async policy() { return {version:1,acceptMode:'observe',rules:[]}; },
     async setAcceptMode(mode) { return {version:2,acceptMode:mode,rules:[]}; },
     async evals() { return []; },
+    async sendChat() {},
   };
   const { rerender } = render(<DeskPet agent={agent} />);
   await act(async () => {

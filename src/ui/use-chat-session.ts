@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import type { AgentClient } from "./agent-client";
-import type { AgentEvent, AgentReport, ChatContext, PetEmotion } from "../shared/agent-contract";
+import type { AgentEvent, AgentReport, ChatContext, PetEmotion, XiaobeiMessage } from "../shared/agent-contract";
 import { CHAT_KEY, loadChatHistory, serializeChat, type PetChatMessage } from "./chat-history";
 import { appendCapped, applyChatReport as reportToMessages, mergeDelta } from "./chat-stream";
 import { DEMO_COMMAND, type QuickRingAction } from "./pet-reactions";
 import { BOT_NOTES_KEY, BOT_NOTES_LIMIT, loadBotNotes } from "./bot-notes";
+
+const SESSION_KEY = "xiaobei-session-id";
 
 /** 进模型的对话历史轮数(spec:history 最近 N 轮;一轮 = 玩家 + 桌宠各一句)。 */
 const CHAT_HISTORY_MESSAGES = 16;
@@ -23,6 +25,7 @@ export function useChatSession({
   chatContext,
   gameId,
   onOpenDemo,
+  onPetReply,
 }: {
   agent: AgentClient;
   /** 当前页面名:进对话上下文,桌宠回话结合所在页。 */
@@ -32,6 +35,8 @@ export function useChatSession({
   gameId?: string;
   /** 对话输入「演示」时唤出一键演示(工单 15:分流在上层,面板不识别命令词)。 */
   onOpenDemo?: () => void;
+  /** 小贝这句说完:面板关着、又不在通话里时,用来出 40 字气泡。 */
+  onPetReply?: (message: XiaobeiMessage) => void;
 }) {
   const [messages, setMessages] = useState<PetChatMessage[]>(loadSessionChat);
   const [notes, setNotes] = useState(loadBotNotes);
@@ -54,6 +59,7 @@ export function useChatSession({
   const messageKeyRef = useRef(0);
   /** 上次写盘的串(R1):相同就不写。 */
   const lastSavedRef = useRef<string | null>(null);
+  const sessionIdRef = useRef(loadSessionId());
 
   function nextMessageKey(): string {
     messageKeyRef.current += 1;
@@ -77,25 +83,13 @@ export function useChatSession({
   }
 
   /** 面板 onSubmit 的唯一出口(工单 15):「演示」分流、引用态走批注、其余走对话。 */
-  function send(text: string, quickAction?: QuickRingAction): void {
+  function send(text: string): void {
     if (text === DEMO_COMMAND) {
       onOpenDemo?.();
       return;
     }
-    if (quickAction) {
-      void agent.sendCommand(quickAction).catch(() => undefined);
-      return;
-    }
     const noteFor = annotating;
-    if (noteFor) {
-      // 引用态:这句话是给待拍板卡的批注(工单 15,批注表单已删)。
-      setAnnotating(null);
-      setMessages((prev) => appendCapped(prev, { key: nextMessageKey(), speaker: "player", text }));
-      void agent
-        .sendTrigger({ source: "pet", kind: "annotate", data: { ticketId: noteFor, note: text } })
-        .catch(() => undefined);
-      return;
-    }
+    if (noteFor) setAnnotating(null);
     setChatEmotion("think"); // 回复期间表情切 think(工单 12)
     pendingRef.current += 1;
     setPending(pendingRef.current);
@@ -104,73 +98,73 @@ export function useChatSession({
       .slice(-CHAT_HISTORY_MESSAGES)
       .map(({ speaker, text: messageText }) => ({ speaker, text: messageText }));
     setMessages((prev) => appendCapped(prev, { key: nextMessageKey(), speaker: "player", text }));
-    if (agent.sendBotChat) {
-      const runId = `bot-${++nextRun.current}`;
-      const version = generation.current;
-      void agent.sendBotChat({ text, history, notes, gameId }, (event) => {
-        if (version !== generation.current) return;
-        if (event.type === "step") {
-          setActiveSteps((prev) => ({ ...prev, [runId]: event.text }));
-        } else if (event.type === "delta") {
-          setMessages((prev) => mergeDelta(prev, runId, event.text, nextMessageKey));
-        } else if (event.type === "done") {
-          const report: AgentReport = { ticketId: runId, status: "ready", text: event.text };
-          setMessages((prev) => reportToMessages(prev, report, nextMessageKey).map((message) =>
-            message.ticketId === runId ? { ...message, bot: { evidence: event.evidence, steps: event.steps } } : message,
-          ));
-        }
-      }).catch(() => {
-        if (version !== generation.current) return;
-        setMessages((prev) => reportToMessages(prev, {
-          ticketId: runId, status: "failed", text: "刚才的回复中断了。你可以再发一次。",
-        }, nextMessageKey));
-      }).finally(() => {
-        if (version !== generation.current) return;
-        setActiveSteps((prev) => {
-          const next = { ...prev };
-          delete next[runId];
-          return next;
-        });
-        settle(runId);
+    const runId = `xb-${++nextRun.current}`;
+    const version = generation.current;
+    let readyReport: AgentReport | undefined;
+    let streamed = false;
+    void agent.sendChat({
+      sessionId: sessionIdRef.current,
+      text,
+      history: history.map((message) => ({ speaker: message.speaker, body: message.text })),
+      notes,
+      ...(gameId ? { gameId } : {}),
+      ...(view ? { view } : {}),
+      ...(chatContext ? { context: chatContext } : {}),
+      ...(noteFor ? { annotateTicketId: noteFor, targetTicketId: noteFor } : {}),
+    }, (event) => {
+      if (version !== generation.current) return;
+      if (event.type === "step") {
+        setActiveSteps((prev) => ({ ...prev, [runId]: event.text }));
+      } else if (event.type === "delta") {
+        streamed = true;
+        setMessages((prev) => mergeDelta(prev, runId, event.text, nextMessageKey));
+      } else if (event.type === "done") {
+        const message = event.message;
+        const report: AgentReport = {
+          ticketId: runId,
+          status: "ready",
+          text: message.body,
+          ...(message.emotion ? { emotion: message.emotion } : {}),
+        };
+        setMessages((prev) => reportToMessages(prev, report, nextMessageKey).map((item) =>
+          item.ticketId === runId
+            ? {
+                ...item,
+                ticketId: message.ticketId,
+                emotion: message.emotion,
+                bot: { evidence: message.evidence ?? [], steps: message.steps ?? [] },
+              }
+            : item,
+        ));
+        if (message.ticketId) chatTicketsRef.current.add(message.ticketId);
+        readyReport = report;
+        onPetReply?.(message);
+      }
+    }).catch(() => {
+      if (version !== generation.current) return;
+      const failed: AgentReport = {
+        ticketId: runId,
+        status: "failed",
+        text: streamed ? "刚才的回复中断了。你可以再发一次。" : "网络不顺，刚那句没发出去，再说一遍？",
+      };
+      readyReport = failed;
+      setMessages((prev) => reportToMessages(prev, failed, nextMessageKey));
+    }).finally(() => {
+      if (version !== generation.current) return;
+      setActiveSteps((prev) => {
+        const next = { ...prev };
+        delete next[runId];
+        return next;
       });
-      return;
-    }
-    agent
-      .sendTrigger({
-        source: "pet",
-        kind: "chat",
-        data: { text, history, ...(view ? { view } : {}), ...(chatContext ? { context: chatContext } : {}) },
-      })
-      .then((outcome) => {
-        // 回执先登记(审查 S1):回执自带的最终 Report 直接落消息,不依赖 SSE。
-        if (outcome.ticket) chatTicketsRef.current.add(outcome.ticket.id);
-        if (outcome.report) {
-          setMessages((prev) => reportToMessages(prev, outcome.report!, nextMessageKey));
-          if (outcome.ticket) settle(outcome.ticket.id, outcome.report);
-        } else if (outcome.ticket) {
-          chatTicketsRef.current.add(outcome.ticket.id);
-        } else {
-          // 没立上工单(未准入):别让「…」挂着。
-          pendingRef.current = Math.max(0, pendingRef.current - 1);
-          setPending(pendingRef.current);
-          if (pendingRef.current === 0) setChatEmotion(null);
-        }
-      })
-      .catch(() => {
-        pendingRef.current = Math.max(0, pendingRef.current - 1);
-        setPending(pendingRef.current);
-        if (pendingRef.current === 0) setChatEmotion(null);
-        setMessages((prev) =>
-          appendCapped(prev, { key: nextMessageKey(), speaker: "pet", text: "网络不顺，刚那句没发出去，再说一遍？" }),
-        );
-      });
+      settle(runId, readyReport);
+    });
   }
 
   /** SSE 事件里的对话部分:delta 拼接、终态 Report 落消息(非对话工单不管)。 */
   function applyEvent(event: AgentEvent): void {
-    if (agent.sendBotChat) return;
+    // 玩家的话不再从触发流里长出来。这里只接已经跟踪的工单后续汇报。
     if (event.type === "delta") {
-      chatTicketsRef.current.add(event.ticketId);
+      if (!chatTicketsRef.current.has(event.ticketId)) return;
       setMessages((prev) => mergeDelta(prev, event.ticketId, event.text, nextMessageKey));
       if (!panelVisibleRef.current) setChatDot(true);
       return;
@@ -216,13 +210,11 @@ export function useChatSession({
   }
 
   function clearHistory(): void {
-    if (agent.sendBotChat) {
-      generation.current += 1;
-      pendingRef.current = 0;
-      setPending(0);
-      setChatEmotion(null);
-      setActiveSteps({});
-    }
+    generation.current += 1;
+    pendingRef.current = 0;
+    setPending(0);
+    setChatEmotion(null);
+    setActiveSteps({});
     setMessages([]);
     setChatDot(false);
   }
@@ -267,6 +259,7 @@ export function useChatSession({
   }, [messages]);
 
   return {
+    sessionId: sessionIdRef.current,
     messages,
     notes,
     saveNote,
@@ -277,7 +270,7 @@ export function useChatSession({
     chatDot,
     annotating,
     send,
-    sendQuickAction: (action: QuickRingAction) => send(action, action),
+    sendQuickAction: (action: QuickRingAction) => send(action),
     attachFiles,
     applyEvent,
     /** 这张工单是否本面板的对话工单(工单 16):非对话工单的表情由桌宠直接表达。 */
@@ -288,6 +281,19 @@ export function useChatSession({
     cancelQuote,
     clearHistory,
   };
+}
+
+/** 同一段小贝会话的稳定 id。清空消息也不换 id。 */
+function loadSessionId(): string {
+  try {
+    const existing = window.localStorage.getItem(SESSION_KEY);
+    if (existing) return existing;
+    const id = globalThis.crypto?.randomUUID?.() ?? `xiaobei-${Date.now()}`;
+    window.localStorage.setItem(SESSION_KEY, id);
+    return id;
+  } catch {
+    return "xiaobei-local";
+  }
 }
 
 /** 读盘包 try(存储被禁用不崩,审查 R10),校验截断在纯模块。 */

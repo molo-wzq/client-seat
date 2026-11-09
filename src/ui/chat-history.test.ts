@@ -30,20 +30,21 @@ describe("loadChatHistory(工单 15,审查 S6)", () => {
     ]);
   });
 
-  it("quickActions 只留快捷动作文案里的字符串项,其余连同未知字段一并丢弃(不原样展开)", () => {
+  it("旧的建议动作按钮不读回来,未知字段一并丢弃", () => {
     const raw = JSON.stringify([
       {
         speaker: "pet",
         text: "好，这就去安排。",
-        quickActions: ["换个客户", 42, "再来一局", "不在表里的动作"],
+        quickActions: ["换个客户", "再来一局"],
+        actions: ["换个客户"],
         key: "inject",
         ticketId: "t-x",
         streaming: true,
       },
-      { speaker: "pet", text: "x", quickActions: "boom" },
+      { speaker: "pet", text: "x" },
     ]);
     expect(loadChatHistory(raw)).toEqual([
-      { key: "h0", speaker: "pet", text: "好，这就去安排。", quickActions: ["换个客户", "再来一局"] },
+      { key: "h0", speaker: "pet", text: "好，这就去安排。" },
       { key: "h1", speaker: "pet", text: "x" },
     ]);
   });
@@ -65,11 +66,11 @@ describe("serializeChat(工单 15,R1)", () => {
     return { key: `${speaker}-${text}`, speaker, text, ...extra };
   }
 
-  it("只存说话人与正文:流式标记、工单号、key 一律不落;quickActions 空数组不落", () => {
+  it("只存说话人与正文:流式标记、工单号、key 一律不落", () => {
     const out = serializeChat([
       msg("player", "在吗"),
       { key: "s", ticketId: "t-1", speaker: "pet", text: "还在逐字到", streaming: true },
-      msg("pet", "我在呢", { ticketId: "t-1", quickActions: [] }),
+      msg("pet", "我在呢", { ticketId: "t-1" }),
     ]);
     expect(JSON.parse(out)).toEqual([
       { speaker: "player", text: "在吗" },
@@ -77,13 +78,12 @@ describe("serializeChat(工单 15,R1)", () => {
     ]);
   });
 
-  it("quickActions 非空才落,字段顺序稳定;同样只取最近 50 条", () => {
+  it("同样只取最近 50 条,建议动作不落盘", () => {
     const many: PetChatMessage[] = Array.from({ length: 55 }, (_, index) => msg("player", `话${index}`));
-    many.push(msg("pet", "好，这就去安排。", { quickActions: ["换个客户"] }));
+    many.push(msg("pet", "好，这就去安排。"));
     const out = JSON.parse(serializeChat(many)) as Array<Record<string, unknown>>;
-    // 56 条截到 50:最旧 6 条(话0–话5)被截掉。
     expect(out).toHaveLength(CHAT_HISTORY_MAX);
     expect(out[0]).toEqual({ speaker: "player", text: "话6" });
-    expect(out.at(-1)).toEqual({ speaker: "pet", text: "好，这就去安排。", quickActions: ["换个客户"] });
+    expect(out.at(-1)).toEqual({ speaker: "pet", text: "好，这就去安排。" });
   });
 });

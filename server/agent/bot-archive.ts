@@ -1,12 +1,12 @@
 import type { ProductCore } from "../../src/domain/product-core";
-import type { BotEvidence, BotNote } from "../../src/shared/pet-bot-contract";
+import type { XiaobeiEvidence, XiaobeiNote } from "../../src/shared/agent-contract";
 import type { CurrentResearchReport } from "../../src/domain/research-report";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 
 export const archiveKinds = ["games", "cards", "research", "notes"] as const;
 export type ArchiveKind = (typeof archiveKinds)[number];
-type ArchiveEntry = BotEvidence & { kind: ArchiveKind };
+type ArchiveEntry = XiaobeiEvidence & { kind: ArchiveKind };
 
 export async function loadBotReports(directory: string): Promise<CurrentResearchReport[]> {
   const names = await readdir(directory).catch(() => []);
@@ -36,7 +36,7 @@ export function createBotArchive(
   core: Pick<ProductCore, "listConversations" | "listMaterials">,
   readReports: () => Promise<CurrentResearchReport[]>,
 ) {
-  return async (notes: BotNote[]) => {
+  return async (notes: XiaobeiNote[]) => {
     const [games, materials, reports] = await Promise.all([
       core.listConversations(), core.listMaterials(), readReports(),
     ]);
@@ -84,7 +84,7 @@ export function createBotArchive(
     ];
     return {
       periods: [...new Set(reports.map((report) => report.period))],
-      search(query: string, kinds: readonly ArchiveKind[], gameId?: string): BotEvidence[] {
+      search(query: string, kinds: readonly ArchiveKind[], gameId?: string): XiaobeiEvidence[] {
         const normalized = query.toLowerCase().trim();
         const words = normalized.match(/[a-z0-9]{2,}|[\u3400-\u9fff]+/g) ?? [];
         const terms = [...new Set(words.flatMap((word) => /^[\u3400-\u9fff]{3,}$/.test(word)
@@ -101,7 +101,7 @@ export function createBotArchive(
             })
             .filter(({ score }) => score > 0)
             .sort((a, b) => b.score - a.score);
-          const results: BotEvidence[] = [];
+          const results: XiaobeiEvidence[] = [];
           const sources = new Map<string, number>();
           const diversify = (kind === "games" && !gameId) || kind === "research";
           for (const { entry: { id, title, excerpt } } of matches) {

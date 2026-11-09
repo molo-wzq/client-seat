@@ -9,7 +9,7 @@ import { createProductCore } from "../src/domain/product-core";
 import { purgeExpiredConversations } from "../src/domain/conversation-retention";
 import { createRequestListener } from "./app-server";
 import { createAgentCore } from "./agent/core";
-import { createModelWorkers } from "./agent/workers";
+import { createModelWorkers, runDecisionOnTicket } from "./agent/workers";
 import { createWatchdog } from "./agent/watchdog";
 import { createBotArchive, loadBotReports } from "./agent/bot-archive";
 import { createPetBot } from "./agent/pet-bot";
@@ -120,6 +120,18 @@ const petBot = createPetBot({
     completeStream: chatModel.completeStream.bind(chatModel),
     completeWithTools: toolModel?.completeWithTools.bind(toolModel),
   },
+  openWork: (input) => agent.emitTrigger(input),
+  decideCard: async (input) => {
+    const card = (await agent.tickets()).find((ticket) => ticket.ticketId === input.ticketId);
+    const result = await runDecisionOnTicket({
+      tickets: () => agent.tickets(),
+      writeReport: (report) => agent.appendSystemReport(report),
+      verb: input.verb,
+      ticketId: input.ticketId,
+      ...(input.reason ? { reason: input.reason } : {}),
+    });
+    return { acted: result.acted, label: card?.text?.trim() || input.ticketId, detail: result.reply };
+  },
 });
 if (chatChain.length === 0 && draftChain.length === 0) {
   console.warn("[phone-coach] 桌宠 Agent 未配置任何模型角色(AGENT_*/MIMO_*/models.config.json),对话与草稿走 demo 演示");
@@ -139,11 +151,8 @@ if (purgedIds.length > 0) {
   console.log(`[phone-coach] 已按存储上限清理 ${purgedIds.length} 通过期对话(上限:${retention.maxCount ?? "不限"} 通 / ${retention.maxAgeMs !== null ? `${retention.maxAgeMs / 86400000} 天` : "不限"})`);
 }
 
-const petCoachEntries = chatChain.length > 0 ? chatChain : registry.roles.manager;
-const petCoachModels = petCoachEntries.map((entry) => buildModel(entry));
-
 const server = http.createServer(
-  createRequestListener({ core, staticRoot: path.join(ROOT, "dist"), agent, petBot, petCoachModels }),
+  createRequestListener({ core, staticRoot: path.join(ROOT, "dist"), agent, petBot }),
 );
 server.listen(PORT, HOST, () => {
   console.log(`[phone-coach] API 服务已启动:http://${HOST}:${PORT}(数据文件:${DATA_FILE})`);

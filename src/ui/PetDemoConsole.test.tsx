@@ -54,6 +54,7 @@ function fakeAgent(): AgentClient {
     policy: vi.fn(() => Promise.resolve({ version: 1, acceptMode: "observe" as const, rules: [] })),
     setAcceptMode: vi.fn(() => Promise.resolve({ version: 2, acceptMode: "auto" as const, rules: [] })),
     evals: vi.fn(() => Promise.resolve([])),
+    sendChat: vi.fn(() => Promise.resolve()),
   };
 }
 

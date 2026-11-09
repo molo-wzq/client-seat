@@ -11,10 +11,12 @@ export type AgentSource = "table" | "materials" | "research" | "pet" | "system";
  * 触发类型:同一来源下的事件类别——pet 命令条为 "command",对局结束为 "game-ended"(工单 06),
  * 拖文件到桌宠为 "dropped"(data:{fileName,fileKind}),待审批注为 "annotate"(data:{ticketId,note})(工单 07),
  * 模型报错为 "model-error"(工单 10 补上类型,R5 规则自此可命中;data:{error} 可选),
- * 桌宠对话为 "chat"(工单 11;data:{text,history,view},工单 16 起另带 context:ChatContext,落账前剔除),
+ * 玩家对小贝说的话不再使用 "chat" 触发:那种 kind 若还被送进 emitTrigger,必须拒绝,
+ * 不立项、不按 commandId 开线程。人话只走 POST /api/agent/chat 的同一段会话。
  * 周报到期为 "research-due"(工单 11;data:{weekId}),策略卡发布为 "cards-published"(工单 11;data:{materialId,cardIds}),
- * 牌局事件为 "card-played" / "hidden-raised" / "hidden-revealed"(工单 16;data:{gameId,cardId?,cardName?,item?},
- * 由反应 Worker 落成带表情的 dropped Report,驱动桌宠微反应)。
+ * 牌局反应为 "card-played" / "hidden-raised" / "hidden-revealed"(工单 16;data:{gameId,cardId?,cardName?,item?},
+ * 只驱动表情,不拿来判定 R6)。
+ * 经理一轮落定后为 "turn-ended"(data:{gameId,turnNumber}),R6 只匹配这一对 source+kind。
  * 每个 kind 只认所属域的 source(如 research-due 只来自 research),冒名即拒绝。
  */
 export type AgentTriggerKind =
@@ -28,7 +30,8 @@ export type AgentTriggerKind =
   | "cards-published"
   | "card-played"
   | "hidden-raised"
-  | "hidden-revealed";
+  | "hidden-revealed"
+  | "turn-ended";
 
 /** 触发:一次可感知的事件或命令,进入链路的唯一输入。 */
 export interface AgentTrigger {
@@ -202,6 +205,11 @@ export interface GameChatContext {
   maxTurns: number;
   /** 已揭示的隐藏牌数(x/N 的 x;N 为 hiddenCards 总数)。 */
   revealedHidden: number;
+  /**
+   * 当前经理原话。通话中玩家点开小贝时,面板顶上引用这一句;
+   * 取代原先另开的桌宠私聊窗口。没有经理轮时缺省。
+   */
+  focusTurn?: { turnNumber: number; text: string };
 }
 
 /** 不在牌局时的快照:所处幕与最近一局摘要。 */
@@ -226,6 +234,75 @@ export const CHAT_CONTEXT_LIMITS = {
   /** 经理已出策略卡条数上限(最近的在前也只带这么多)。 */
   cardsPlayed: 12,
 } as const;
+
+/** 小贝气泡字数。引用了检索出处的回复可以更长,气泡本身仍只取前这么多字。 */
+export const XIAOBEI_BUBBLE_CHARS = 40;
+/** 没有检索引用时,面板里的回复不超过这么多字。 */
+export const XIAOBEI_PLAIN_REPLY_CHARS = 120;
+/** 带检索引用的回复可以写长,到这里截断。 */
+export const XIAOBEI_CITED_REPLY_CHARS = 4800;
+
+/**
+ * 一条检索出处。回复引用了资料时带上,面板可以展开看原文。
+ */
+export interface XiaobeiEvidence {
+  id: string;
+  title: string;
+  excerpt: string;
+}
+
+/** 玩家从回复里留下的笔记,跟会话走,不进经理上下文。 */
+export interface XiaobeiNote {
+  id: string;
+  text: string;
+  evidence: XiaobeiEvidence[];
+}
+
+/**
+ * 会话里的一句话。`actions` 留在类型上,是原先切口的建议动作字段;
+ * 面板不渲染它,对话也不靠点选推进。
+ * `ticketId` 只在这句真的打开或办了要跟踪的工作时才有。
+ */
+export interface XiaobeiMessage {
+  speaker: "player" | "pet";
+  body: string;
+  emotion?: PetEmotion;
+  evidence?: XiaobeiEvidence[];
+  steps?: string[];
+  actions?: string[];
+  ticketId?: string;
+}
+
+/** 小贝的一段连续会话:稳定 id、消息、笔记。不再按每句话一张工单活着。 */
+export interface XiaobeiSession {
+  id: string;
+  messages: XiaobeiMessage[];
+  notes: XiaobeiNote[];
+}
+
+/** POST /api/agent/chat 的一问。history 是这条会话里已经说过的话。 */
+export interface XiaobeiChatInput {
+  sessionId: string;
+  text: string;
+  history: Array<{ speaker: "player" | "pet"; body: string }>;
+  notes: XiaobeiNote[];
+  gameId?: string;
+  view?: string;
+  context?: ChatContext;
+  /** 玩家正在给这张待审工单写批注时带上;这句话本身仍走对话口。 */
+  annotateTicketId?: string;
+  /**
+   * 面板正在引用的那张待审卡。
+   * 聊天里的「同意 / 驳回」只有带上这张卡,或原话里写了工单号,才算拍板。
+   */
+  targetTicketId?: string;
+}
+
+export type XiaobeiChatEvent =
+  | { type: "step"; text: string }
+  | { type: "delta"; text: string }
+  | { type: "done"; message: XiaobeiMessage }
+  | { type: "error"; text: string };
 
 /** 呈现通道:本期只有桌宠气泡(硬上限 40 字);后续票扩展翻牌动画、待办面板等。 */
 export interface AgentChannel {

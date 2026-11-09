@@ -50,6 +50,14 @@ function recentTurns(conversation: Conversation): GameTurns {
 
 type GameTurns = Array<{ speaker: "manager" | "player"; text: string }>;
 
+/** 当前经理原话:面板顶上引用,也进小贝这一侧的快照。 */
+function focusTurnOf(conversation: Conversation): { focusTurn?: { turnNumber: number; text: string } } {
+  const managers = conversation.turns.filter((turn) => turn.speaker === "manager");
+  const last = managers.at(-1);
+  if (!last?.text) return {};
+  return { focusTurn: { turnNumber: managers.length, text: clampText(last.text, CHAT_CONTEXT_LIMITS.textChars) } };
+}
+
 /** 经理已出的策略卡及其出处:同一张卡只记一次;查不到的卡出处写「未知」(CONTEXT 书写约定)。 */
 function cardsPlayed(conversation: Conversation): Array<{ cardId: string; cardName: string; source: string }> {
   const cards: StrategyCard[] = conversation.resources?.cards ?? [];
@@ -97,6 +105,7 @@ export function buildPetChatContext(input: PetGameContextInput): ChatContext | n
       turnNumber: conversation.turns.filter((turn) => turn.speaker === "manager").length,
       maxTurns: MAX_MANAGER_TURNS,
       revealedHidden: revealedHiddenCount(conversation, hiddenChoices),
+      ...focusTurnOf(conversation),
     };
   }
   const idle: ChatContext = { phase: "idle", act: ACT_LABELS[view] ?? view };
