@@ -9,7 +9,7 @@ import { createProductCore } from "../src/domain/product-core";
 import { purgeExpiredConversations } from "../src/domain/conversation-retention";
 import { createRequestListener } from "./app-server";
 import { createAgentCore } from "./agent/core";
-import { createModelWorkers } from "./agent/workers";
+import { createModelWorkers, runDecisionOnTicket } from "./agent/workers";
 import { createWatchdog } from "./agent/watchdog";
 import { createBotArchive, loadBotReports } from "./agent/bot-archive";
 import { createPetBot } from "./agent/pet-bot";
@@ -121,6 +121,17 @@ const petBot = createPetBot({
     completeWithTools: toolModel?.completeWithTools.bind(toolModel),
   },
   openWork: (input) => agent.emitTrigger(input),
+  decideCard: async (input) => {
+    const card = (await agent.tickets()).find((ticket) => ticket.ticketId === input.ticketId);
+    const result = await runDecisionOnTicket({
+      tickets: () => agent.tickets(),
+      writeReport: (report) => agent.appendSystemReport(report),
+      verb: input.verb,
+      ticketId: input.ticketId,
+      ...(input.reason ? { reason: input.reason } : {}),
+    });
+    return { acted: result.acted, label: card?.text?.trim() || input.ticketId, detail: result.reply };
+  },
 });
 if (chatChain.length === 0 && draftChain.length === 0) {
   console.warn("[phone-coach] 桌宠 Agent 未配置任何模型角色(AGENT_*/MIMO_*/models.config.json),对话与草稿走 demo 演示");

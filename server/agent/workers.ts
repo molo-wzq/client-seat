@@ -1,6 +1,6 @@
 import type { AgentWorker, WorkerRunOptions } from "./core";
 import { DemoWorker } from "./workers/demo";
-import type { AgentReport, AgentTicket, AgentTrigger } from "./types";
+import type { AgentReport, AgentTicket, AgentTicketView, AgentTrigger } from "./types";
 import { classifyModelError, errorMessage, maskModelSecrets } from "../../src/adapters/model-errors";
 import type { PetPersonaCard } from "./pet-persona";
 import { CHAT_CONTEXT_LIMITS, type ChatContext } from "../../src/shared/agent-contract";
@@ -245,6 +245,37 @@ class DecisionWorker implements AgentWorker {
     await onReport({ ticketId: target.ticketId, status: "ready", text: "收到，按你拍板的出结果。" });
     return { ticketId: ticket.id, status: "ready", text: "好，已照办。" };
   }
+}
+
+/**
+ * 聊天里的拍板:只改已经点名的那张卡,不另立一张「同意」工单。
+ * DecisionWorker 本身不改;这里丢掉它回给决定工单的那句,只把落在目标卡上的 Report 写出去。
+ */
+export async function runDecisionOnTicket(deps: {
+  approvals?: ApprovalSinks;
+  tickets: () => Promise<AgentTicketView[]>;
+  writeReport: (report: AgentReport) => Promise<void>;
+  verb: "同意" | "驳回";
+  ticketId: string;
+  reason?: string;
+}): Promise<{ acted: boolean; reply: string }> {
+  const worker = new DecisionWorker({ approvals: deps.approvals });
+  const synthetic = "chat-decision";
+  let acted = false;
+  const text = deps.reason ? `${deps.verb} ${deps.ticketId} ${deps.reason}` : `${deps.verb} ${deps.ticketId}`;
+  const report = await worker.run(
+    { id: synthetic, triggerId: synthetic, thread: { kind: "commandId", key: synthetic } },
+    { id: synthetic, source: "pet", kind: "command", data: { text } },
+    {
+      onReport: async (item) => {
+        if (item.ticketId === synthetic) return;
+        acted = true;
+        await deps.writeReport(item);
+      },
+      context: { tickets: deps.tickets },
+    },
+  );
+  return { acted, reply: report.text };
 }
 
 /** 投研草稿系统提示:产出的只是草稿,上不上桌由人审决定。 */

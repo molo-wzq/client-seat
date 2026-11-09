@@ -13,7 +13,7 @@ import {
 } from "../../src/shared/agent-contract";
 import { archiveKinds, type createBotArchive } from "./bot-archive";
 import { DEFAULT_PET_PERSONA, PET_EMOTIONS, assemblePetSystemPrompt } from "./pet-persona";
-import { isDecisionCommand, renderChatContext, type AgentModelMessage, type AgentToolSpec } from "./workers";
+import { renderChatContext, type AgentModelMessage, type AgentToolSpec } from "./workers";
 
 function record(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
@@ -28,10 +28,21 @@ const SUGGESTION_MARKER = "【建议】";
 /** 玩家这句话想办的事。检索/复盘/陪练/审批都从这句话里认,不另开菜单。 */
 export type XiaobeiIntent = "annotate" | "approval" | "research" | "review" | "practice" | "talk";
 
+/** 聊天里的拍板。没写工单号时 ticketId 为空,不能拿去套最近一张待审卡。 */
+export function readChatDecision(text: string): { verb: "同意" | "驳回"; ticketId?: string; reason?: string } | null {
+  const match = /^(同意|驳回)(?:\s+(\S+))?(?:\s+([\s\S]+))?$/.exec(text.trim());
+  if (!match) return null;
+  const reason = match[3]?.trim();
+  return {
+    verb: match[1] as "同意" | "驳回",
+    ...(match[2] ? { ticketId: match[2] } : {}),
+    ...(reason ? { reason } : {}),
+  };
+}
+
 export function classifyXiaobeiUtterance(text: string, annotateTicketId?: string): XiaobeiIntent {
-  if (annotateTicketId) return "annotate";
+  if (annotateTicketId && !readChatDecision(text)) return "annotate";
   const trimmed = text.trim();
-  if (isDecisionCommand(trimmed)) return "approval";
   if (/^(?:\/投研|本周投研|这周投研)$/.test(trimmed) || /^帮我(?:整理|做|看)?(?:一下)?(?:本周|这周)?投研(?:要点|草稿)?$/.test(trimmed)) {
     return "research";
   }
@@ -65,6 +76,7 @@ export function parseXiaobeiInput(value: unknown): XiaobeiChatInput {
     view: clean(input.view, 40) || undefined,
     ...(context ? { context } : {}),
     annotateTicketId: clean(input.annotateTicketId, 80) || undefined,
+    targetTicketId: clean(input.targetTicketId, 80) || undefined,
   };
 }
 
@@ -130,6 +142,15 @@ export function createPetBot(deps: {
   archive: ReturnType<typeof createBotArchive>;
   model?: import("./workers").AgentModelPort;
   openWork?: (input: AgentTriggerInput) => Promise<EmitOutcome>;
+  /**
+   * 点名的拍板:只改那张已有的卡,不另开工单。
+   * 没点名时不要调用。
+   */
+  decideCard?: (input: { verb: "同意" | "驳回"; ticketId: string; reason?: string }) => Promise<{
+    acted: boolean;
+    label: string;
+    detail: string;
+  }>;
 }) {
   return async (input: XiaobeiChatInput, emit: (event: XiaobeiChatEvent) => void) => {
     const evidence = new Map<string, XiaobeiEvidence>();
@@ -155,18 +176,43 @@ export function createPetBot(deps: {
     const done = (raw: string, ticketId?: string) => {
       emit({ type: "done", message: finishMessage(raw, [...evidence.values()], steps, ticketId) });
     };
+    const decision = readChatDecision(input.text);
+    if (decision) {
+      const ticketId = decision.ticketId ?? input.targetTicketId;
+      if (!ticketId) {
+        done(`[think]你是说${decision.verb}哪张？`);
+        return;
+      }
+      if (!deps.decideCard) {
+        done("[think]这张卡的拍板还没接上，我先不动它。");
+        return;
+      }
+      const result = await deps.decideCard({
+        verb: decision.verb,
+        ticketId,
+        ...(decision.reason ? { reason: decision.reason } : {}),
+      });
+      if (!result.acted) {
+        done(`[think]${result.detail || "这张不在待拍板里。"}`);
+        return;
+      }
+      const name = clip(result.label.trim() || ticketId, 40);
+      done(decision.verb === "同意"
+        ? `[cheer]已同意 ${ticketId}：${name}`
+        : `[think]已驳回 ${ticketId}：${name}`);
+      return;
+    }
+
     const intent = classifyXiaobeiUtterance(input.text, input.annotateTicketId);
 
-    if (intent === "annotate" || intent === "approval" || intent === "research") {
+    if (intent === "annotate" || intent === "research") {
       if (!deps.openWork) {
         done("[think]这件要人跟踪的事还没接上，我先不假装已经立项。");
         return;
       }
       const work: AgentTriggerInput = intent === "annotate"
         ? { source: "pet", kind: "annotate", data: { ticketId: input.annotateTicketId, note: input.text } }
-        : intent === "research"
-          ? { source: "pet", kind: "command", data: { text: "本周投研" } }
-          : { source: "pet", kind: "command", data: { text: input.text.trim() } };
+        : { source: "pet", kind: "command", data: { text: "本周投研" } };
       if (work.kind === "chat") throw new ValidationError("对小贝说的话不走触发，请改走 /api/agent/chat");
       const outcome = await deps.openWork(work);
       const reportText = outcome.report?.text?.trim();

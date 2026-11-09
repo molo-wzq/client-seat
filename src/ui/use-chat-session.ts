@@ -110,7 +110,7 @@ export function useChatSession({
       ...(gameId ? { gameId } : {}),
       ...(view ? { view } : {}),
       ...(chatContext ? { context: chatContext } : {}),
-      ...(noteFor ? { annotateTicketId: noteFor } : {}),
+      ...(noteFor ? { annotateTicketId: noteFor, targetTicketId: noteFor } : {}),
     }, (event) => {
       if (version !== generation.current) return;
       if (event.type === "step") {

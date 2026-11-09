@@ -291,6 +291,11 @@ export interface XiaobeiChatInput {
   context?: ChatContext;
   /** 玩家正在给这张待审工单写批注时带上;这句话本身仍走对话口。 */
   annotateTicketId?: string;
+  /**
+   * 面板正在引用的那张待审卡。
+   * 聊天里的「同意 / 驳回」只有带上这张卡,或原话里写了工单号,才算拍板。
+   */
+  targetTicketId?: string;
 }
 
 export type XiaobeiChatEvent =
