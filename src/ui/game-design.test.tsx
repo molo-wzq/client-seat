@@ -25,7 +25,7 @@ describe("开局与重玩闭环", () => {
     render(<App api={api} />);
     await user.click(await screen.findByRole("button", { name: /到期资金·稳健阿姨/ }));
     expect(screen.getByText(SEED_PERSONA_P02.visible[1])).toBeInTheDocument();
-    await user.click(screen.getByText("查看你的隐藏牌 · 仅你知情"));
+    // 方案 B:底细直接展开显示,不再折叠。
     expect(screen.getByText(SEED_PERSONA_P02.hidden[0])).toBeVisible();
     await user.click(screen.getByRole("button", { name: "接通电话,开始对局" }));
     await screen.findByLabelText("客户回复");

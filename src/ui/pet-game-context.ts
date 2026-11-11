@@ -6,7 +6,7 @@
  */
 import { CHAT_CONTEXT_LIMITS, type ChatContext } from "../shared/agent-contract";
 import { MAX_MANAGER_TURNS } from "../domain/product-core";
-import { deriveHiddenBoard, type HiddenCardChoice } from "./HiddenCards";
+import { deriveHiddenBoard } from "./HiddenCards";
 import type { Conversation, StrategyCard } from "../domain/types";
 
 /** 组装输入:App 现成的状态,不另造数据形状。 */
@@ -15,8 +15,6 @@ export interface PetGameContextInput {
   view: string;
   /** 当前对局(含开局快照 resources:画像与用卡);不在对局时为 null。 */
   conversation: Conversation | null;
-  /** 玩家对举牌的二选一(按局归档,App 的 hiddenChoicesByCall[conversation.id])。 */
-  hiddenChoices: Readonly<Record<string, HiddenCardChoice>>;
   /** 最近一局结局(结算页或历史里取);没有历史时 null。 */
   lastGame: { outcome: string; endReason: string } | null;
 }
@@ -78,18 +76,18 @@ function cardsPlayed(conversation: Conversation): Array<{ cardId: string; cardNa
   return played.slice(-CHAT_CONTEXT_LIMITS.cardsPlayed);
 }
 
-/** 已揭示的隐藏牌数:自动翻牌 + 玩家亲手翻的,都算(x/N 的 x)。 */
-function revealedHiddenCount(conversation: Conversation, choices: Readonly<Record<string, HiddenCardChoice>>): number {
+/** 已被客户说出口的隐藏信息条数(x/N 的 x);方案 B 起没有玩家翻牌操作。 */
+function revealedHiddenCount(conversation: Conversation): number {
   const persona = conversation.resources?.persona;
   if (!persona || persona.hidden.length === 0) return 0;
-  return deriveHiddenBoard(persona.hidden, conversation.turns, conversation.resources?.cards ?? [], choices).filter(
+  return deriveHiddenBoard(persona.hidden, conversation.turns, conversation.resources?.cards ?? []).filter(
     (card) => card.state === "revealed",
   ).length;
 }
 
 /** 组装牌局快照:牌局进行中带牌面与进度;否则换成所处幕与最近一局摘要。 */
 export function buildPetChatContext(input: PetGameContextInput): ChatContext | null {
-  const { view, conversation, hiddenChoices, lastGame } = input;
+  const { view, conversation, lastGame } = input;
   if (view === "table" && conversation?.status === "ongoing") {
     const persona = conversation.resources?.persona;
     if (!persona) return null;
@@ -104,7 +102,7 @@ export function buildPetChatContext(input: PetGameContextInput): ChatContext | n
       cardsPlayed: cardsPlayed(conversation),
       turnNumber: conversation.turns.filter((turn) => turn.speaker === "manager").length,
       maxTurns: MAX_MANAGER_TURNS,
-      revealedHidden: revealedHiddenCount(conversation, hiddenChoices),
+      revealedHidden: revealedHiddenCount(conversation),
       ...focusTurnOf(conversation),
     };
   }

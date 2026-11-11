@@ -29,7 +29,7 @@ export function deriveHiddenBoard(
   items: readonly string[],
   turns: readonly ConversationTurn[],
   cards: readonly StrategyCard[],
-  choices: Readonly<Record<string, HiddenCardChoice>>,
+  choices: Readonly<Record<string, HiddenCardChoice>> = {},
 ): HiddenCardView[] {
   const cardNames = new Map(cards.map((card) => [card.id, card.name]));
   // 每个经理轮配对它回应的客户发言;轮次按经理轮序计(牌面标注「第 N 轮」)。
@@ -87,14 +87,16 @@ export interface HiddenCardSettled {
 }
 
 /**
- * 结算揭晓(spec 故事 6):扣着的牌全部翻开;漏掉的信号只说经理——
+ * 结算揭晓(spec 故事 6):逐条隐藏信息说明经理是否问出——
  * 问到边上没追问 vs 整局没问到。不评价玩家。
+ * 方案 B(2026-11-11)起对局中不再有翻/藏操作,choices 缺省为空:
+ * 经理问到边上而客户没说出的,一律按 edge 结算。
  */
 export function settleHiddenCards(
   items: readonly string[],
   turns: readonly ConversationTurn[],
   cards: readonly StrategyCard[],
-  choices: Readonly<Record<string, HiddenCardChoice>>,
+  choices: Readonly<Record<string, HiddenCardChoice>> = {},
 ): HiddenCardSettled[] {
   return deriveHiddenBoard(items, turns, cards, choices).map((card) => {
     if (card.state === "revealed") {

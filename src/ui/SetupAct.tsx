@@ -70,7 +70,7 @@ export function SetupAct({
           <li>复盘打法，换个回应再试</li>
         </ol>
         <p>不需要配合成交，也不必打满回合；拒绝和提前结束同样能留下有用的复盘。</p>
-        <p>隐藏牌不用一次说完，等聊到相关话题再决定透露。</p>
+        <p>你的底细经理看不到，对局中一直显示在你手边；经理问到了再按画像决定说不说。</p>
         </details>
       </aside>
       <div className="setup-board">
@@ -95,7 +95,7 @@ export function SetupAct({
                     <small>{persona.visible[0] ?? "信息未知"}</small>
                   </span>
                   <span className="roster-code" aria-hidden="true">C-{String(i + 1).padStart(2, "0")}</span>
-                  <span className="badge">{seated?.id === persona.id ? "✓ 已入座" : persona.hidden.length > 0 ? <><UiIcon name="lock" />隐藏牌</> : "点击入座"}</span>
+                  <span className="badge">{seated?.id === persona.id ? "✓ 已入座" : persona.hidden.length > 0 ? <><UiIcon name="lock" />有底细</> : "点击入座"}</span>
                 </button>
               </li>
             ))}
@@ -137,7 +137,7 @@ export function SetupAct({
                     </span>
                     <span className="seated-legend">
                       <i className="dot dot-hid" aria-hidden="true" />
-                      隐藏牌扣着{seated.hidden.length > 0 ? ` · ${seated.hidden.length} 张` : " · 无"}
+                      你的底细{seated.hidden.length > 0 ? ` · ${seated.hidden.length} 条` : " · 无"} · 经理看不到
                     </span>
                   </div>
                   <span className="seat-stamp" aria-hidden="true">已入座</span>
@@ -153,12 +153,10 @@ export function SetupAct({
                   <ul className="info-list">
                     {(seated.visible.length ? seated.visible : ["未知，经理需要通过对话了解"]).map((line, i) => <li key={i}>{line}</li>)}
                   </ul>
-                  <details key={seated.id}>
-                    <summary>查看你的隐藏牌 · 仅你知情</summary>
-                    <ul className="info-list">
-                      {(seated.hidden.length ? seated.hidden : ["本画像没有隐藏信息"]).map((line, i) => <li key={i}>{line}</li>)}
-                    </ul>
-                  </details>
+                  <h4>你的底细 · 经理看不到</h4>
+                  <ul className="info-list">
+                    {(seated.hidden.length ? seated.hidden : ["本画像没有隐藏信息"]).map((line, i) => <li key={i}>{line}</li>)}
+                  </ul>
                 </div>
               </>
             ) : (

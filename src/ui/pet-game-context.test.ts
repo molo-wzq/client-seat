@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import { buildPetChatContext, lastGameOf, managerTurnCount, newlyPlayedCard } from "./pet-game-context";
 import { CHAT_CONTEXT_LIMITS } from "../shared/agent-contract";
 import type { Conversation, Persona, StrategyCard } from "../domain/types";
-import type { HiddenCardChoice } from "./HiddenCards";
 
 /**
  * 牌局快照组装(工单 16)测试缝:纯函数,输入 App 手头的牌局状态,
@@ -56,7 +55,6 @@ describe("牌局快照组装(工单 16)", () => {
         turn(2, "manager", "最近行里有个新活动，您感兴趣吗？", "sc-1"),
         turn(3, "customer", "先说说是什么。"),
       ]),
-      hiddenChoices: {},
       lastGame: null,
     });
 
@@ -77,23 +75,21 @@ describe("牌局快照组装(工单 16)", () => {
     });
   });
 
-  it("只带最近 6 轮;亲手翻开的隐藏牌计入已揭示数;同一张卡重复出只记一次出处", () => {
+  it("只带最近 6 轮;客户说出口的隐藏信息计入已揭示数;同一张卡重复出只记一次出处", () => {
     const turns = [
       turn(1, "customer", "第1句"),
       turn(2, "manager", "第2句", "sc-1"),
       turn(3, "customer", "第3句"),
       turn(4, "manager", "第4句", "sc-1"),
-      turn(5, "customer", "第5句"),
-      turn(6, "manager", "第6句,顺口问了句儿子留学的事"),
+      turn(5, "customer", "第5句,儿子留学要用钱"),
+      turn(6, "manager", "第6句"),
       turn(7, "customer", "第7句"),
       turn(8, "manager", "第8句", "sc-1"),
     ];
-    const choices: Record<string, HiddenCardChoice> = { "儿子留学要用 40 万": "flip" };
 
     const context = buildPetChatContext({
       view: "table",
       conversation: ongoingConversation(turns),
-      hiddenChoices: choices,
       lastGame: null,
     });
 
@@ -105,7 +101,7 @@ describe("牌局快照组装(工单 16)", () => {
     expect(context.turns.at(-1)).toEqual({ speaker: "manager", text: "第8句" });
     // 经理轮序:4 次经理发言(第 2/4/6/8 句)→ 第 4 轮。
     expect(context.turnNumber).toBe(4);
-    // 亲手翻了 1 张 → 已揭示 1/2。
+    // 客户第 5 句说出了 1 条 → 已揭示 1/2。
     expect(context.revealedHidden).toBe(1);
     // 同一张卡出过 3 次,快照只记一次。
     expect(context.cardsPlayed).toHaveLength(1);
@@ -116,7 +112,6 @@ describe("牌局快照组装(工单 16)", () => {
     const context = buildPetChatContext({
       view: "table",
       conversation: ongoingConversation([turn(1, "customer", longText), turn(2, "manager", "短句", "sc-unknown")]),
-      hiddenChoices: {},
       lastGame: null,
     });
 
@@ -130,7 +125,6 @@ describe("牌局快照组装(工单 16)", () => {
     const withHistory = buildPetChatContext({
       view: "postgame",
       conversation: null,
-      hiddenChoices: {},
       lastGame: { outcome: "客户答应下周再来", endReason: "经理主动收口" },
     });
     expect(withHistory).toMatchObject({
@@ -139,14 +133,14 @@ describe("牌局快照组装(工单 16)", () => {
       lastGame: { summary: expect.stringContaining("客户答应下周再来") },
     });
 
-    const noHistory = buildPetChatContext({ view: "setup", conversation: null, hiddenChoices: {}, lastGame: null });
+    const noHistory = buildPetChatContext({ view: "setup", conversation: null, lastGame: null });
     expect(noHistory).toEqual({ phase: "idle", act: "布置" });
     expect("lastGame" in (noHistory ?? {})).toBe(false);
   });
 
   it("对局已结束(即使还在桌面视图):按不在牌局处理", () => {
     const ended: Conversation = { ...ongoingConversation([]), status: "ended" };
-    const context = buildPetChatContext({ view: "table", conversation: ended, hiddenChoices: {}, lastGame: null });
+    const context = buildPetChatContext({ view: "table", conversation: ended, lastGame: null });
     expect(context?.phase).toBe("idle");
   });
 

@@ -3,7 +3,6 @@ import { MAX_MANAGER_TURNS } from "../domain/product-core";
 import type { Conversation, ConversationResult, Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import { CallStep } from "./CallStep";
-import { HiddenCards, type HiddenCardChoice } from "./HiddenCards";
 import { UiIcon } from "./UiIcon";
 import { PersonaAvatar } from "./PersonaAvatar";
 import { StrategyRail } from "./TavernRail";
@@ -16,9 +15,6 @@ export function TableAct({
   conversation,
   persona,
   publishedCards,
-  hiddenChoices = {},
-  onHiddenChoice,
-  onRaisePendingChange,
   onFinished,
   onConversationChange,
 }: {
@@ -27,11 +23,6 @@ export function TableAct({
   conversation: Conversation | null;
   persona: Persona | null;
   publishedCards: StrategyCard[];
-  /** 本局玩家对举牌的「翻/先藏着」决定(客户侧状态,App 持有供结算揭晓用)。 */
-  hiddenChoices?: Readonly<Record<string, HiddenCardChoice>>;
-  onHiddenChoice?: (item: string, choice: HiddenCardChoice) => void;
-  /** 有牌举着待决定时通知桌宠变「拿笔想」表情。 */
-  onRaisePendingChange?: (pending: boolean) => void;
   onFinished: (result: ConversationResult) => void;
   onConversationChange: (conversation: Conversation) => void;
 }) {
@@ -73,17 +64,14 @@ export function TableAct({
               <li key={`${i}-${line}`}>{line}</li>
             ))}
           </ul>
-          <h3><UiIcon name="lock" />隐藏牌(扣着)</h3>
-          <p className="hint">仅你知情,AI 不可见;说到就翻,桌宠会替你盯着经理的问法</p>
-          <HiddenCards
-            items={snapshotPersona?.hidden ?? []}
-            turns={conversation?.turns ?? []}
-            cards={conversation?.resources?.cards ?? publishedCards}
-            choices={hiddenChoices}
-            onChoice={onHiddenChoice}
-            onRaisePendingChange={onRaisePendingChange}
-          />
-          <p className="role-reminder">按画像自然回应；聊到相关话题时，再决定是否透露隐藏信息。</p>
+          <h3><UiIcon name="lock" />你的底细 · 经理看不到</h3>
+          <p className="hint">这是你扮演的客户心里有数的事；经理问到了，可以按画像自然透露，也可以不说。</p>
+          <ul className="info-list hidden-brief" aria-label="你的底细">
+            {(snapshotPersona?.hidden.length ? snapshotPersona.hidden : ["本画像没有隐藏信息"]).map((line, i) => (
+              <li key={`${i}-${line}`}>{line}</li>
+            ))}
+          </ul>
+          <p className="role-reminder">按画像自然回应；结束后复盘会对照经理问出了哪几条。</p>
         </details>
 
         <div className="call-board">

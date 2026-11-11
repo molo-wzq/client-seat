@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { ConversationResult } from "../domain/types";
 import { ResultStep } from "./ResultStep";
 
-/** 三张隐藏牌:对局中翻开的 / 经理问到边上玩家藏住的 / 整局没碰的。 */
+/** 三条隐藏信息:客户说出口的 / 经理问到边上客户没说的 / 整局没碰的。 */
 const HIDDEN = [
   "可动用闲钱约15万,其余在股市",
   "上月刚接到过一次保险推销电话,对银行外呼略有戒心",
@@ -49,45 +49,35 @@ function result(): ConversationResult {
   };
 }
 
-function renderResult(choices?: Record<string, "flip" | "hold">) {
-  return render(
-    <ResultStep result={result()} onRestart={() => {}} hiddenChoices={choices ?? {}} />,
-  );
+function renderResult() {
+  return render(<ResultStep result={result()} onRestart={() => {}} />);
 }
 
-describe("结算揭晓隐藏牌(工单 04)", () => {
-  it("扣着的牌全部翻开,并按局内进度计数", () => {
-    renderResult({ [HIDDEN[1]]: "hold" });
-    expect(screen.getByRole("heading", { name: /隐藏牌揭晓/ })).toBeInTheDocument();
-    expect(screen.getByText(`翻开 1/${HIDDEN.length}`)).toBeInTheDocument();
+describe("结算:经理问出了哪些底细(方案 B,对局中无翻/藏)", () => {
+  it("全部隐藏信息列出,并按客户说出口的条数计数", () => {
+    renderResult();
+    expect(screen.getByRole("heading", { name: /经理问出了哪些底细/ })).toBeInTheDocument();
+    expect(screen.getByText(`问出 1/${HIDDEN.length}`)).toBeInTheDocument();
     for (const item of HIDDEN) {
       expect(screen.getByText(item)).toBeInTheDocument();
     }
   });
 
-  it("经理问到边上没翻开的牌,说明经理漏掉了这个信号", () => {
-    renderResult({ [HIDDEN[1]]: "hold" });
+  it("经理问到边上客户没说出的,说明经理漏掉了这个信号", () => {
+    renderResult();
     expect(screen.getByText("经理问到边上,但没追问下去")).toBeInTheDocument();
   });
 
-  it("整局没碰的牌,说明经理没问到这个信号", () => {
-    renderResult({ [HIDDEN[1]]: "hold" });
+  it("整局没碰的,说明经理没问到这个信号", () => {
+    renderResult();
     expect(screen.getByText("整局都没问到这个信号")).toBeInTheDocument();
   });
 
-  it("对局中翻开的牌只带原归因,不算经理漏掉", () => {
-    renderResult({ [HIDDEN[1]]: "hold" });
+  it("客户说出口的只带原归因,不算经理漏掉", () => {
+    renderResult();
     const played = screen.getByText(HIDDEN[0]).closest("li");
     expect(played).toHaveAttribute("data-revealed", "true");
     expect(played?.textContent).toContain("第 1 轮");
-  });
-
-  it("玩家点过「翻」的举牌按已翻开展示,不计入漏掉", () => {
-    renderResult({ [HIDDEN[1]]: "flip" });
-    const flipped = screen.getByText(HIDDEN[1]).closest("li");
-    expect(flipped).toHaveAttribute("data-revealed", "true");
-    expect(screen.getByText(`翻开 2/${HIDDEN.length}`)).toBeInTheDocument();
-    expect(screen.queryByText("经理问到边上,但没追问下去")).not.toBeInTheDocument();
   });
 });
 

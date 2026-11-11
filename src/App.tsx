@@ -7,7 +7,7 @@ import { BusyHint } from "./ui/BusyHint";
 import { CardsView, HistoryView, MaterialsView, ResearchReportView, RolesView } from "./ui/CatalogViews";
 import { DeskPet, type DeskPetHandle, type PetExpression, type QuickRingAction } from "./ui/DeskPet";
 import { PetDemoConsole } from "./ui/PetDemoConsole";
-import { settleHiddenCards, type HiddenCardChoice } from "./ui/HiddenCards";
+import { settleHiddenCards } from "./ui/HiddenCards";
 import { LeftRail, type AppView } from "./ui/LeftRail";
 import { ResultStep } from "./ui/ResultStep";
 import { SetupAct } from "./ui/SetupAct";
@@ -34,9 +34,6 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
   const [quickBusy, setQuickBusy] = useState(false);
   const [connectBusy, setConnectBusy] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(false);
-  // 隐藏牌(工单 04):玩家「翻/先藏着」的选择只存客户端,按局归档;结算时用于揭晓。
-  const [hiddenChoicesByCall, setHiddenChoicesByCall] = useState<Record<string, Record<string, HiddenCardChoice>>>({});
-  const [raisePending, setRaisePending] = useState(false);
   // 桌宠复盘一句话(工单 06):对局结束发 game-ended 触发后,ready Report 送达即显示;
   // ref 缓存避免同一局来回进出结算时重复触发。
   const [petReview, setPetReview] = useState<PetReviewView | null>(null);
@@ -94,15 +91,6 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
     if (new URLSearchParams(window.location.search).get("demo") === "pet") setDemoOpen(true);
   }, []);
 
-  // 举牌即事件(工单 12→16):有牌举着待决定,发 table 触发由 Worker 落表情(pout)。
-  useEffect(() => {
-    if (raisePending && conversation?.status === "ongoing") {
-      void agent
-        .sendTrigger({ source: "table", kind: "hidden-raised", data: { gameId: conversation.id } })
-        .catch(() => undefined);
-    }
-  }, [raisePending, conversation, agent]);
-
   const publishedCards = useMemo(
     () => materials.flatMap((material) => material.cards.filter((card) => card.status === "published")),
     [materials],
@@ -119,10 +107,9 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
       buildPetChatContext({
         view,
         conversation,
-        hiddenChoices: hiddenChoicesByCall[conversation?.id ?? ""] ?? {},
         lastGame: lastGameOf(result ? { outcome: result.outcome, endReason: result.endReason } : null, conversations),
       }),
-    [view, conversation, hiddenChoicesByCall, result, conversations],
+    [view, conversation, result, conversations],
   );
   // 目录按创建时间倒序;取最近一通进行中的通话,用于离开对局后找回。
   const ongoingCall = conversations.find((c) => c.status === "ongoing") ?? null;
@@ -251,7 +238,7 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
       .filter((turn) => turn.speaker === "manager")
       .map((turn) => ({ managerText: turn.text, ...(turn.usedCardId ? { cardId: turn.usedCardId } : {}) }));
     const hiddenUnrevealedCount = hidden.length
-      ? settleHiddenCards(hidden, next.turns, cards, hiddenChoicesByCall[next.conversationId] ?? {}).filter(
+      ? settleHiddenCards(hidden, next.turns, cards).filter(
           (card) => !card.revealed,
         ).length
       : 0;
@@ -364,20 +351,6 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
                 conversation={conversation}
                 persona={seatedPersona}
                 publishedCards={publishedCards}
-                hiddenChoices={hiddenChoicesByCall[conversation.id] ?? {}}
-                onHiddenChoice={(item, choice) => {
-                  setHiddenChoicesByCall((current) => ({
-                    ...current,
-                    [conversation.id]: { ...(current[conversation.id] ?? {}), [item]: choice },
-                  }));
-                  // 亲手翻开隐藏牌→发 table 触发,Worker 落 cheer(工单 16:表情由事件驱动)。
-                  if (choice === "flip") {
-                    void agent
-                      .sendTrigger({ source: "table", kind: "hidden-revealed", data: { gameId: conversation.id } })
-                      .catch(() => undefined);
-                  }
-                }}
-                onRaisePendingChange={setRaisePending}
                 onConversationChange={(next) => {
                   const accept = (current: Conversation) => next.revision === undefined || current.revision === undefined || next.revision >= current.revision;
                   setConversation((current) => (current?.id === next.id && accept(current) ? next : current));
@@ -431,7 +404,6 @@ export function App({ api, agent = defaultPetAgent }: { api: ProductCore; agent?
               onReplay={seatedPersona ? () => void connect(seatedPersona.id, { replayOfId: result.conversationId }) : undefined}
               replayBusy={entryBusy}
               onBranch={(turnNumber, text) => branch(turnNumber, text)}
-              hiddenChoices={hiddenChoicesByCall[result.conversationId] ?? {}}
               petReview={petReview}
             />}
             {view === "materials" && (
