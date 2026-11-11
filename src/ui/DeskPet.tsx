@@ -376,6 +376,7 @@ export function DeskPet({
       data-dragging={position.dragging || undefined}
       data-drop-hover={dropHover || undefined}
       data-reduced-motion={reducedMotion() || undefined}
+      data-panel-open={(panelOpen && !dnd) || undefined}
       style={anchored}
       onDragOver={(e) => {
         if (!showAgentControls) return;

@@ -49,7 +49,10 @@ export function TableAct({
       <h2 id="table-title">第2幕 · 对局</h2>
       <div className="table-board">
         <details className="player-board" open={profileOpen} onToggle={(e) => setProfileOpen(e.currentTarget.open)}>
-          <summary>你的客户画像 · {snapshotPersona?.name ?? "生客"}</summary>
+          <summary>
+            你的客户画像 · {snapshotPersona?.name ?? "生客"}
+            {snapshotPersona?.hidden.length ? <span className="player-board-count"> · 底细 {snapshotPersona.hidden.length} 条</span> : null}
+          </summary>
           <span className="identity-badge customer-badge">● 客户</span>
           <div className="player-profile">
             <PersonaAvatar personaId={snapshotPersona?.id} name={snapshotPersona?.name ?? "生客"} />

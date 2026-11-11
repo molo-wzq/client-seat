@@ -49,6 +49,8 @@ export function usePetPosition({
     const root = rootRef.current;
     if (!root) return;
     onInteract();
+    // 手机端(≤820px)桌宠固定在顶栏,不支持拖动:手指轻抖超过阈值会吞掉点击(见 mobile.css)。
+    if (window.matchMedia?.("(max-width: 820px)").matches) return;
     const rect = root.getBoundingClientRect();
     const startX = e.clientX;
     const startY = e.clientY;

@@ -427,7 +427,7 @@ export function CallStep({
             placeholder="作为客户回应……"
             aria-describedby="reply-key-hint"
           />
-          <small id="reply-key-hint" className="hint-inline">Enter 发送 · Shift + Enter 换行 · 快捷回复先填入，确认后发送</small>
+          <small id="reply-key-hint" className="hint-inline"><span className="key-hint-keys">Enter 发送 · Shift + Enter 换行 · </span>快捷回复先填入，确认后发送</small>
           {failedDraft && <aside className="failed-draft" aria-label="未发出的回复">
             <p>上一句未发出：{failedDraft}。你正在写的草稿已保留。</p>
             <button type="button" className="ghost" disabled={busy} onClick={() => {

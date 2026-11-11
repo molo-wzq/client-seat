@@ -33,17 +33,52 @@ export function LeftRail({
 }) {
   // 音效开关:状态由 game-feel 持有(localStorage 记忆),这里只留一份渲染镜像。
   const [sfxOn, setSfxOn] = useState(sfxEnabled());
-  const [toolsOpen, setToolsOpen] = useState(() => !window.matchMedia?.("(max-width: 820px)").matches);
+  // 手机端(≤820px)资料与记录收在抽屉里,抽屉内默认展开;桌面端常开。
+  const [toolsOpen, setToolsOpen] = useState(true);
+  // 手机抽屉:顶栏「菜单」打开;点导航项、遮罩或 Esc 关闭。桌面端抽屉层 display:contents,不影响布局。
+  const [drawerOpen, setDrawerOpen] = useState(false);
   useEffect(() => {
-    const media = window.matchMedia?.("(max-width: 820px)");
-    if (!media) return;
-    const update = () => setToolsOpen(!media.matches);
-    media.addEventListener?.("change", update);
-    return () => media.removeEventListener?.("change", update);
-  }, []);
+    if (!drawerOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setDrawerOpen(false);
+    };
+    document.addEventListener("keydown", onKey);
+    document.documentElement.dataset.railDrawer = "open";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      delete document.documentElement.dataset.railDrawer;
+    };
+  }, [drawerOpen]);
 
   return (
-    <aside className="left-rail" aria-label="对练导航">
+    <aside className="left-rail" aria-label="对练导航" data-drawer-open={drawerOpen || undefined}>
+      <div className="rail-mobile-bar">
+        <img className="brand-logo" src={logoMark} alt="" aria-hidden="true" />
+        <strong className="rail-mobile-title">理财经理电话牌桌</strong>
+        <span className="rail-mobile-view">{VIEW_LABELS[view]}</span>
+        <button
+          type="button"
+          className="rail-menu-btn"
+          aria-expanded={drawerOpen}
+          aria-controls="rail-drawer"
+          onClick={() => setDrawerOpen((open) => !open)}
+        >
+          <span className="rail-menu-icon" aria-hidden="true" />
+          {drawerOpen ? "收起" : "菜单"}
+        </button>
+      </div>
+      {drawerOpen && (
+        <button type="button" className="rail-backdrop" aria-label="关闭菜单" onClick={() => setDrawerOpen(false)} />
+      )}
+      <div
+        className="rail-drawer"
+        id="rail-drawer"
+        onClick={(event) => {
+          // 点了导航/快速开始就收起抽屉;音效开关和折叠标题不收。
+          const target = event.target as HTMLElement;
+          if (target.closest("button") && !target.closest(".sfx-toggle")) setDrawerOpen(false);
+        }}
+      >
       <div className="app-header">
         <span className="brand-mark" aria-hidden="true">
           <img className="brand-logo" src={logoMark} alt="" />
@@ -146,6 +181,19 @@ export function LeftRail({
         <span>{sfxOn ? "音效 · 开" : "音效 · 关"}</span>
       </button>
       </details>
+      </div>
     </aside>
   );
 }
+
+/** 手机顶栏右侧显示当前所在页(与桌面左栏导航同名)。 */
+const VIEW_LABELS: Record<AppView, string> = {
+  setup: "对局布置",
+  table: "对局中",
+  postgame: "复盘",
+  materials: "素材库",
+  cards: "策略卡",
+  roles: "经理角色",
+  research: "投研周报",
+  history: "通话记录",
+};
