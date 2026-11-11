@@ -2,7 +2,7 @@ import { buildSeedMaterial, SEED_CARDS, SEED_CARD_IDS, SEED_TRANSCRIPT } from ".
 import { parseTranscriptTurns } from "../domain/transcript";
 import { customerIntent } from '../domain/customer-intent';
 import { applyRoleMacros, DEFAULT_ROLE_CARD } from "../domain/role-card";
-import { MAX_MANAGER_TURNS } from "../domain/product-core";
+import { CUSTOMER_LEFT_FALLBACK, MAX_MANAGER_TURNS } from "../domain/product-core";
 import type {
   CopywritingPort,
   DialoguePort,
@@ -84,7 +84,7 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
 
     if (input.closing === "customer-left" || customerIntent(customerText) === 'leave') {
       return {
-        reply: '好的，先不打扰您了。有需要可以通过银行官方渠道联系我们，再见。',
+        reply: CUSTOMER_LEFT_FALLBACK,
         recognizedSignal: '客户明确离场', currentGoal: '体面收口', shouldEnd: true,
         endReason: '客户明确离场，通话结束', outcomeSummary: '客户结束当前通话，未新增报名或联系授权',
       };

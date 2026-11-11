@@ -37,7 +37,7 @@ import { isMaterialKind, isFeelingStamp } from "./types";
 export const MAX_MANAGER_TURNS = 12;
 
 /** 模型说不出合格告别时的固定句。无模型(伪适配器)时也落在这一句。 */
-const CUSTOMER_LEFT_FALLBACK =
+export const CUSTOMER_LEFT_FALLBACK =
   '好的，先不打扰您了。有需要可以通过银行官方渠道联系我们，再见。';
 
 function numberIdentity(value: { unit: string; canonical: number }): string {
