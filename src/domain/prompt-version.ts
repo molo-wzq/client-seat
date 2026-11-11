@@ -64,4 +64,7 @@
 // LLM_CARD_RETRIEVAL=1:按客户最近发言的字面触发词(triggerKeywords)决定
 // 哪些已发布策略卡上桌,无触发词的卡常驻;开启时经理轮落库 injectedCardIds,
 // 默认关(全量注入不变)。
-export const PROMPT_VERSION = "p16";
+// p17(2026-11-11,客户离场告别):明确离场仍由代码收口;只把告别句交给模型。
+// closing=customer-left 时系统提示词追加一句收口要求。模型失败、说空、
+// 不像告别,或报了先前对话里没有的数字时,落回固定告别句。
+export const PROMPT_VERSION = "p17";

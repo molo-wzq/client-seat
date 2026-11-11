@@ -9,7 +9,7 @@ import {
 import { numberTurns, parseTranscriptTurns, resolveTurnRange } from "./transcript";
 import { PROMPT_VERSION } from "./prompt-version";
 import { detectManagerFarewell } from "./reply-text";
-import { hasOutOfCardNumber, factRelationNotes } from "./product-facts";
+import { extractCardNumbers, hasOutOfCardNumber, factRelationNotes } from "./product-facts";
 import { customerIntent } from "./customer-intent";
 import { selectCardsForTurn } from "./card-retrieval";
 import { PROMPT_TUNING_ENV, tuningEnabled } from "./prompt-tuning";
@@ -35,6 +35,32 @@ import { isMaterialKind, isFeelingStamp } from "./types";
 
 /** 每通电话的经理轮数上限(spec.md:提示词规则+应用层轮数上限)。 */
 export const MAX_MANAGER_TURNS = 12;
+
+/** 模型说不出合格告别时的固定句。无模型(伪适配器)时也落在这一句。 */
+export const CUSTOMER_LEFT_FALLBACK =
+  '好的，先不打扰您了。有需要可以通过银行官方渠道联系我们，再见。';
+
+function numberIdentity(value: { unit: string; canonical: number }): string {
+  return `${value.unit}:${value.canonical}`;
+}
+
+/**
+ * 告别句里的数字必须已经出现在先前对话。
+ * 提取口径与卡外数字相同(带量词的金额/比例/天数),白名单只看来过的对话,不含产品卡里没说过的数。
+ */
+function farewellAddsUnknownNumber(reply: string, priorTranscript: string): boolean {
+  const known = new Set(extractCardNumbers(priorTranscript).map(numberIdentity));
+  return extractCardNumbers(reply).some((value) => !known.has(numberIdentity(value)));
+}
+
+/** 合格的离场告别:非空、最后一句是告别、不引入对话里没有的数字。否则返回 null,由调用方用固定句。 */
+function acceptableCustomerLeftFarewell(reply: string, priorTranscript: string): string | null {
+  const text = reply.trim();
+  if (!text) return null;
+  if (!detectManagerFarewell(text)) return null;
+  if (farewellAddsUnknownNumber(text, priorTranscript)) return null;
+  return text;
+}
 
 /** 领域错误:请求的资源不存在,server 层映射为 404。 */
 export class NotFoundError extends Error {}
@@ -317,24 +343,56 @@ export function createProductCore(deps: {
     const cardRetrieval = tuningEnabled(PROMPT_TUNING_ENV.cardRetrieval);
     const onTableCards = cardRetrieval ? selectCardsForTurn(publishedCards, history, customerTurn.text) : publishedCards;
     const leaving = customerIntent(customerTurn.text) === 'leave';
-    // 明确离场是客户的选择，模型故障或错误归因不能让客户被迫继续。
-    const output: ManagerTurnOutput = leaving ? {
-      reply: '好的，先不打扰您了。有需要可以通过银行官方渠道联系我们，再见。',
-      recognizedSignal: '客户明确表示结束当前通话', currentGoal: '尊重离场意图，体面收口',
-      shouldEnd: true, endReason: '客户明确离场，通话结束', outcomeSummary: '客户明确结束通话；没有据此新增报名或联系授权。',
-    } : await dialogue.generateManagerTurn(
-      {
-        persona,
-        role,
-        publishedCards: structuredClone(onTableCards),
-        ...(cardRetrieval ? { cardRetrieval: true } : {}),
-        product: productFacts,
-        history,
-        customerText: customerTurn.text,
-      },
-      onReplyDelta,
-    );
-    if (leaving) onReplyDelta?.(output.reply);
+    // 明确离场由代码收口:shouldEnd / endReason / outcomeSummary 不交给模型。
+    // 只向模型要一句告别;失败、空话、不像告别、或报了对话里没有的数字,都落回固定句。
+    // 先校验再上屏,被丢弃的句子不会流出去。
+    let output: ManagerTurnOutput;
+    if (leaving) {
+      const priorTranscript = [...history.map((turn) => turn.text), customerTurn.text].join('\n');
+      let reply = CUSTOMER_LEFT_FALLBACK;
+      try {
+        const generated = await dialogue.generateManagerTurn({
+          persona,
+          role,
+          publishedCards: structuredClone(onTableCards),
+          ...(cardRetrieval ? { cardRetrieval: true } : {}),
+          product: productFacts,
+          history,
+          customerText: customerTurn.text,
+          closing: 'customer-left',
+        });
+        const accepted = acceptableCustomerLeftFarewell(generated.reply ?? '', priorTranscript);
+        if (accepted) reply = accepted;
+      } catch (error) {
+        console.warn(
+          '[product-core] 离场告别生成失败,使用固定句:',
+          error instanceof Error ? error.message : error,
+        );
+        reply = CUSTOMER_LEFT_FALLBACK;
+      }
+      output = {
+        reply,
+        recognizedSignal: '客户明确表示结束当前通话',
+        currentGoal: '尊重离场意图，体面收口',
+        shouldEnd: true,
+        endReason: '客户明确离场，通话结束',
+        outcomeSummary: '客户明确结束通话；没有据此新增报名或联系授权。',
+      };
+      onReplyDelta?.(output.reply);
+    } else {
+      output = await dialogue.generateManagerTurn(
+        {
+          persona,
+          role,
+          publishedCards: structuredClone(onTableCards),
+          ...(cardRetrieval ? { cardRetrieval: true } : {}),
+          product: productFacts,
+          history,
+          customerText: customerTurn.text,
+        },
+        onReplyDelta,
+      );
+    }
 
     // 模型声称使用的卡必须是本轮检索到的已发布卡:检索边界落到数据上。
     // 匹配依据只在用卡可信时保留:无卡或卡不在候选集,依据一并丢弃,不伪造。

@@ -6,6 +6,13 @@ import { applyRoleMacros, DEFAULT_ROLE_CARD } from "../domain/role-card";
 
 export { PROMPT_VERSION };
 
+/** 客户已经要离开时追加的一小段:只说一句告别,接住刚说的事,不推销、不编数字。 */
+export function customerLeftClosingSection(): string {
+  return `## 客户明确离场
+
+客户已经要结束这通电话。只说一句告别，接住客户刚刚说的那件事再收住，例如「那您先去跳舞，回头微信上把活动发您，再见」。这一句里要有明确的告别（再见、拜拜、不再打扰或先不打扰）。不要介绍产品，不要追问，不要报先前对话里没有出现过的数字。`;
+}
+
 /**
  * 理财经理系统提示词,按层组装(dialogue-guardrails spec C):
  * ①角色与稳定边界(不随对局变化,来自本局经理角色卡)→②本局画像→
@@ -14,11 +21,12 @@ export { PROMPT_VERSION };
  * p15 硬编码版逐字等价,金样由 prompts.test 钉住。
  * 对话历史与当轮客户发言走 messages,不在系统提示词内复制;首轮不加
  * 每轮规划调用与尾部动态提醒(小样本证据前不引入)。
+ * closing 为 customer-left 时在末尾追加一句离场告别要求。
  */
 export function assembleManagerSystemPrompt(input: Pick<
   ManagerTurnInput,
   "persona" | "publishedCards" | "product"
-> & Partial<Pick<ManagerTurnInput, "role" | "cardRetrieval">>): string {
+> & Partial<Pick<ManagerTurnInput, "role" | "cardRetrieval" | "closing">>): string {
   const { persona, publishedCards, product } = input;
   const role = input.role ?? DEFAULT_ROLE_CARD;
   const macro = (text: string) =>
@@ -73,7 +81,9 @@ ${cardsSection}
 
 卡里的参考话术是真实优秀通话的原话:学它的腔调和口语节奏,内容按本局情况自己组织。
 
-现在结合随消息提供的完整对话历史,按上述规则输出本轮话术。`;
+现在结合随消息提供的完整对话历史,按上述规则输出本轮话术。${
+    input.closing === "customer-left" ? `\n\n${customerLeftClosingSection()}` : ""
+  }`;
 }
 
 /**

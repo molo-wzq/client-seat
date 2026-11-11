@@ -2,6 +2,7 @@ import {
   assembleAnalystSystemPrompt,
   assembleManagerMetaPrompt,
   assembleManagerSystemPrompt,
+  customerLeftClosingSection,
 } from "./prompts";
 import { errorMessage, maskModelSecrets } from "./model-errors";
 import type { ToolCallShape, ToolCompletionShape } from "./failover-model-adapter";
@@ -117,16 +118,19 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
    * 1. 话术调用(流式纯文本)——首字即可上屏,推理模型的思考 token 不占用户等待;
    * 2. 元数据调用(json_object)——裁判提取 signal/goal/usedCardId/shouldEnd 等。
    * 元数据失败只降级(丢高亮/自动收口),不丢整轮对话。
+   * closing 为 customer-left 时只做第 1 步:要一句告别,不请裁判决定收口。
    */
   async generateManagerTurn(
     input: ManagerTurnInput,
     onReplyDelta?: (delta: string) => void,
   ): Promise<ManagerTurnOutput> {
     const role = input.role ?? DEFAULT_ROLE_CARD;
+    const farewellOnly = input.closing === "customer-left";
     const messages: Array<{ role: string; content: string }> = [
       { role: "system", content: assembleManagerSystemPrompt(input) },
       // 语体示范轮(p13 实验,默认关):随角色卡携带,只学口吻,不进历史不落库。
-      ...(tuningEnabled(PROMPT_TUNING_ENV.styleDemo) ? roleDemoMessages(role, MAX_MANAGER_TURNS) : []),
+      // 离场只要一句告别,不把推销示范轮塞进去。
+      ...(!farewellOnly && tuningEnabled(PROMPT_TUNING_ENV.styleDemo) ? roleDemoMessages(role, MAX_MANAGER_TURNS) : []),
     ];
     for (const turn of input.history) {
       messages.push({
@@ -137,7 +141,10 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     messages.push({ role: "user", content: sanitizeCustomerText(input.customerText) });
     // 尾部语体短提醒(p13 实验):越靠近生成点权重越高,只回声本局角色的既有规则。
     // p15 起默认开:靠近生成点的短提醒在 2.6 pro 对照中 9/9(关时 7/9),置 0 可关。
-    if (!tuningDisabled(PROMPT_TUNING_ENV.tailReminder)) {
+    // 离场换成告别要求,避免尾部提醒把模型又推去提问。
+    if (farewellOnly) {
+      messages.push({ role: "system", content: customerLeftClosingSection() });
+    } else if (!tuningDisabled(PROMPT_TUNING_ENV.tailReminder)) {
       messages.push({ role: "system", content: roleTailReminder(role, MAX_MANAGER_TURNS) });
     }
 
@@ -147,6 +154,8 @@ export class OpenAICompatibleModelAdapter implements CopywritingPort, DialoguePo
     // 思考通道原文沉淀给复盘(p14):超长截断,空则不携带;不进下一轮输入。
     const managerReasoning = reasoning.trim() ? reasoning.trim().slice(0, 8000) : undefined;
     const withReasoning = managerReasoning ? { reasoning: managerReasoning } : {};
+
+    if (farewellOnly) return { reply, ...withReasoning };
 
     const meta = await this.extractManagerMeta(input, reply).catch((error) => {
       // 降级而非失败:话术已经生成且播给用户,此时抛错会回滚整轮;

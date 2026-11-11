@@ -14,14 +14,15 @@ function fixture() {
 }
 
 describe('设计修复：意图、事实与可信对照', () => {
-  it('明确离场无需等待模型、自然流式收口且不附赠授权', async () => {
-    const { core, generateManagerTurn } = fixture();
+  it('明确离场由代码收口；模型没说出告别时用固定句，不附赠授权', async () => {
+    const { core } = fixture();
     const call = await core.quickStart();
     const delta = vi.fn();
     const ended = await core.sendCustomerTurnStream(call.id, '别再打电话了，我现在要挂了。', delta);
     expect(ended.status).toBe('ended');
-    expect(generateManagerTurn).not.toHaveBeenCalled();
+    expect(ended.turns[1].text).toBe('好的，先不打扰您了。有需要可以通过银行官方渠道联系我们，再见。');
     expect(delta).toHaveBeenCalledWith(ended.turns[1].text);
+    expect(ended.endReason).toContain('明确离场');
     expect(ended.outcomeSummary).not.toMatch(/已报名|同意微信/);
   });
   it('开局冻结画像、策略、来源；本局和同客重试不被后来发布影响', async () => {

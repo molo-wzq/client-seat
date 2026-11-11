@@ -269,6 +269,21 @@ describe("当前意图与离场边界", () => {
     expect(prompt).toContain("客户明确表示挂断");
     expect(prompt).toContain('引用、假设、否定');
     expect(prompt).toContain("礼貌收口挂断");
+    expect(prompt).not.toContain("客户明确离场");
+  });
+
+  it("客户已经离场时只追加一句告别要求，平时不出现", () => {
+    const base = {
+      persona: { id: "p-test", name: "测试画像", visible: P03_VISIBLE },
+      publishedCards: SEED_CARDS,
+      product: SEED_PRODUCT_CARD,
+    };
+    const prompt = assembleManagerSystemPrompt({ ...base, closing: "customer-left" });
+    expect(prompt).toContain("只说一句告别");
+    expect(prompt).toContain("那您先去跳舞，回头微信上把活动发您，再见");
+    expect(prompt).toContain("不要介绍产品");
+    expect(prompt).toContain("不要报先前对话里没有出现过的数字");
+    expect(assembleManagerSystemPrompt(base)).not.toContain("客户明确离场");
   });
 
   it("裁判按当前本人意图或实际授权判断，不统计历史拒绝次数", () => {
