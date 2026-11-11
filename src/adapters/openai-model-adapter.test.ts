@@ -233,6 +233,44 @@ describe("两段式生成(票 29)", () => {
     expect(deltas.join("")).toBe("好嘞,那就先这样,再见。");
     expect(out.reply).toBe("好嘞,那就先这样,再见。");
   });
+
+  it("客户离场只生成一句告别,请求带上完整对话,不再请裁判决定收口", async () => {
+    const bodies: Array<Record<string, unknown>> = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string | URL, init?: RequestInit): Promise<StubResponse> => {
+        bodies.push(JSON.parse((init?.body as string) ?? "{}") as Record<string, unknown>);
+        return {
+          ok: true,
+          status: 200,
+          text: async () => "",
+          json: async () => ({}),
+          body: streamFromText(sseBody([{ content: "那您先去跳舞，再见。" }])),
+        };
+      }),
+    );
+    const out = await adapter.generateManagerTurn({
+      ...managerInput("别再打电话了，我去跳舞"),
+      history: [
+        { number: 1, speaker: "customer", text: "喂" },
+        { number: 2, speaker: "manager", text: "您好，方便说两句吗？" },
+      ],
+      closing: "customer-left",
+    });
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0]?.stream).toBe(true);
+    expect(bodies[0]?.response_format).toBeUndefined();
+    const messages = bodies[0]?.messages as Array<{ role: string; content: string }>;
+    const transcript = messages.map((message) => message.content).join("\n");
+    expect(transcript).toContain("那您先去跳舞，回头微信上把活动发您，再见");
+    expect(transcript).toContain("喂");
+    expect(transcript).toContain("您好，方便说两句吗？");
+    expect(transcript).toContain("别再打电话了，我去跳舞");
+    expect(messages.at(-1)?.content).toContain("只说一句告别");
+    expect(transcript).not.toContain("本轮提醒:");
+    expect(out.reply).toBe("那您先去跳舞，再见。");
+    expect(out.shouldEnd).toBeUndefined();
+  });
 });
 
 describe("p13 手册借鉴:参数分层与消息组装", () => {

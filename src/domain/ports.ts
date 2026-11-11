@@ -47,6 +47,11 @@ export interface ManagerTurnInput {
   /** 本轮客户发言之前的全部轮次。 */
   history: ConversationTurn[];
   customerText: string;
+  /**
+   * 客户已经明确离场时,只向模型要一句告别。
+   * 通话是否结束仍由调用方决定,不采用模型返回的 shouldEnd。
+   */
+  closing?: "customer-left";
 }
 
 export interface ManagerTurnOutput {

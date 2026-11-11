@@ -126,7 +126,7 @@ export function SetupAct({
           >
             {seated ? (
               <>
-                <span className="seat-label">客户席 · 已入座</span>
+                <span className="seat-label">你来当客户 · 已入座</span>
                 <div className="seated-client">
                   <PersonaAvatar personaId={seated.id} name={seated.name} />
                   <div className="seated-copy">
@@ -162,7 +162,7 @@ export function SetupAct({
             ) : (
               <>
                 <span className="seat-label">等待客户入座</span>
-                <h3>客户席</h3>
+                <h3>你来当客户</h3>
                 <p className="hint">把一位生客拖到这里,或从名册点击入座</p>
               </>
             )}

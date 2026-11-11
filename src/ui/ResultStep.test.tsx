@@ -90,7 +90,7 @@ describe("桌宠复盘插槽(工单 06)", () => {
 
   it("收到 ready 复盘:插槽显示一句话,展开可见轮次与策略卡", async () => {
     const user = userEvent.setup();
-    render(<ResultStep result={result()} onRestart={() => {}} hiddenChoices={{}} petReview={REVIEW} />);
+    render(<ResultStep result={result()} onRestart={() => {}} petReview={REVIEW} />);
 
     expect(screen.getByRole("heading", { name: "桌宠复盘" })).toBeInTheDocument();
     expect(screen.getByText(REVIEW.text)).toBeInTheDocument();

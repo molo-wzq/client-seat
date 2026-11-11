@@ -82,7 +82,7 @@ export class FakeModelAdapter implements CopywritingPort, DialoguePort {
   private async scriptTurn(input: ManagerTurnInput): Promise<ManagerTurnOutput> {
     const { customerText, history, persona } = input;
 
-    if (customerIntent(customerText) === 'leave') {
+    if (input.closing === "customer-left" || customerIntent(customerText) === 'leave') {
       return {
         reply: '好的，先不打扰您了。有需要可以通过银行官方渠道联系我们，再见。',
         recognizedSignal: '客户明确离场', currentGoal: '体面收口', shouldEnd: true,
