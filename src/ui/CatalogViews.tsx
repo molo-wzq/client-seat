@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { Conversation, Material, Persona, StrategyCard } from "../domain/types";
 import type { ProductCore } from "../domain/product-core";
 import type { RoleCard } from "../domain/role-card";
@@ -267,6 +267,22 @@ export function HistoryView({
  * 在线浏览 14 章专业研报，支持一键下载完整 HTML/PDF 文件。
  */
 export function ResearchReportView() {
+  const [reportInfo, setReportInfo] = useState<{ title: string; period: string }>({
+    title: "周度投研战略报告 (2026年第45周·立冬策略版)",
+    period: "2026-11-02 ~ 2026-11-06 (执行期: 2026-11-09 ~ 11-13)",
+  });
+
+  useEffect(() => {
+    fetch("/api/research/current")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data?.title) {
+          setReportInfo({ title: data.title, period: data.period || "" });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
   function downloadFullReport() {
     window.open("/api/research/download", "_blank");
   }
@@ -275,28 +291,35 @@ export function ResearchReportView() {
     <section className="act" aria-labelledby="research-title">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div>
-          <span className="act-kicker">分行投研周报</span>
-          <h2 id="research-title">周度投研分析报告 (2026年第42周)</h2>
-          <p className="hint">覆盖宏观仪表盘、A股全景、行业轮动、机构估值、精选公募池与下周展望。</p>
+          <span className="act-kicker">酒馆投研案牍</span>
+          <h2 id="research-title">{reportInfo.title}</h2>
+          <p className="hint">
+            {reportInfo.period ? `研判执行周期：${reportInfo.period} · ` : ""}
+            覆盖宏观仪表盘、A股全景、行业轮动、机构估值、精选公募池与下周展望。
+          </p>
         </div>
         <button
           type="button"
           onClick={downloadFullReport}
           style={{
-            background: "#d4af37",
-            color: "#1c261e",
+            background: "linear-gradient(135deg, #b89355, #8c6a34)",
+            color: "#fff8ec",
             fontWeight: "bold",
-            padding: "8px 16px",
+            padding: "8px 18px",
             borderRadius: "6px",
-            border: "none",
+            border: "1px solid #e7c27d",
+            boxShadow: "0 2px 6px rgba(0,0,0,0.2)",
             cursor: "pointer",
+            display: "inline-flex",
+            alignItems: "center",
+            gap: "6px",
           }}
         >
           📥 下载完整周报 (HTML)
         </button>
       </div>
 
-      <div style={{ marginTop: "16px", border: "1px solid var(--line)", borderRadius: "8px", overflow: "hidden", background: "#fff", height: "780px" }}>
+      <div style={{ marginTop: "16px", border: "2px solid #b89355", borderRadius: "8px", overflow: "hidden", background: "#1b140e", height: "820px", boxShadow: "0 8px 24px rgba(0,0,0,0.3)" }}>
         <iframe
           src="/reports/weekly-report.html"
           title="周度投研分析报告全文"

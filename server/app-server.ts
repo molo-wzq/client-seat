@@ -200,7 +200,8 @@ export function createRequestListener(deps: {
         res.end("未找到当期周报文件");
         return;
       }
-      const filename = "weekly-investment-report-2026-10-23.html";
+      const current = loadCurrentResearchReport(process.cwd());
+      const filename = `weekly-investment-report-${current.id || "current"}.html`;
       res.writeHead(200, {
         "Content-Type": "text/html; charset=utf-8",
         "Content-Disposition": `attachment; filename="${filename}"`,
